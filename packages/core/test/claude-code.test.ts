@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseClaudeCodeFile } from '../src/parsers/claude-code.js';
 import { ParsedSessionSchema } from '../src/schema.js';
@@ -142,6 +145,41 @@ describe('parseClaudeCodeFile', () => {
       expect(messy.transcript.filter((e) => e.kind === 'reasoning').map((e) => 'text' in e && e.text)).toEqual([
         'The query runs on every keystroke; a cache keyed by query string should help.',
       ]);
+    });
+  });
+
+  describe('sessions that move around', () => {
+    const long = parseClaudeCodeFile(claude.long)!;
+
+    it('keeps the launch cwd even after the session changes directory', () => {
+      expect(long.cwd).toBe(`${REPO}/packages/api`);
+      expect(parseClaudeCodeFile(claude.other)!.cwd).toBe('/work/acme-webapp-legacy');
+    });
+
+    it('records every branch and version in the order they appeared', () => {
+      expect(long.gitBranch).toBe('main');
+      expect(long.gitBranches).toEqual(['main', 'feature/PROJ-160-audit-log']);
+      expect(long.agentVersions).toEqual(['2.1.296', '2.1.300']);
+    });
+  });
+
+  describe('damaged or empty files', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'digest-claude-'));
+    const write = (name: string, text: string) => {
+      const file = join(tmp, name);
+      writeFileSync(file, text);
+      return file;
+    };
+
+    it('ignores a half-written last line from a session still in progress', () => {
+      const lines = readFileSync(claude.basic, 'utf8').trimEnd();
+      const file = write('partial.jsonl', `${lines}\n{"type":"assistant","message":{"con`);
+      expect(parseClaudeCodeFile(file)?.turnCount).toBe(1);
+    });
+
+    it('returns null for a file with no conversation in it', () => {
+      const file = write('empty.jsonl', '{"type":"ai-title","aiTitle":"x","sessionId":"s"}\n');
+      expect(parseClaudeCodeFile(file)).toBeNull();
     });
   });
 
