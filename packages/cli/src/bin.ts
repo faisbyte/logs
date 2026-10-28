@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 import { runCli } from './cli.js';
+import { loadDotEnv } from './dotenv.js';
+
+// The digest checkout's own .env (gitignored), e.g. ANTHROPIC_API_KEY; never a target repo's .env.
+loadDotEnv(fileURLToPath(new URL('../../../.env', import.meta.url)), process.env);
 
 async function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stderr });

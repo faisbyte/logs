@@ -225,3 +225,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - corrupt cache entries count as misses
 - **Alternatives:** Key on the source file's hash (misses redaction-config changes); cache in the OS temp directory.
 - **Why:** Keying on exactly what the model sees means a summary is reused only when an identical request would be sent. `.digest/` is already self-ignoring (D9), so drafts never reach git, and nothing is uploaded in Phase 3.
+
+## D26. The API key comes from the environment or the digest checkout's own .env
+
+- **Date:** 2026-10-28
+- **Decision:** `ANTHROPIC_API_KEY` is read from the environment. If it isn't set there, the `digest` binary (and vitest, for the opt-in live tests) fills it from the `.env` file in the digest checkout's root. Variables already set in the shell win, empty values are skipped, and values are never printed. `.env` is gitignored; `.env.example` is committed.
+- **Alternatives:** Read the target repo's `.env`; a dedicated `~/.config/digest` file; environment only.
+- **Why:** The owner asked for a `.env` file to hold the key. A target repo's `.env` belongs to that project, and silently picking up its credentials would be surprising. Skipping empty values means the blank placeholder can't shadow other credential sources.
