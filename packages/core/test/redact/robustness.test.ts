@@ -21,7 +21,7 @@ describe('failing closed', () => {
       throw new Error('detector bug');
     });
     const { session, counts } = redactSession(sessionWith('anything'));
-    expect(counts).toEqual({ unscannable: 18 });
+    expect(counts).toEqual({ unscannable: 23 });
     expect(JSON.stringify(session)).not.toContain('anything');
   });
 });

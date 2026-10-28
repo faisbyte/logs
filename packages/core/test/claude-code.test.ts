@@ -200,6 +200,20 @@ describe('parseClaudeCodeFile', () => {
       expect(messy.toolCallCount).toBe(11);
     });
 
+    it('records each subagent compactly: type, task, final message, files and tool count', () => {
+      expect(messy.subagents).toEqual([
+        {
+          agentType: 'general-purpose',
+          description: 'Rewrite search query for trigram index',
+          prompt: 'Rewrite src/search/query.ts to use similarity() with the pg_trgm index.',
+          finalText: 'Rewrote the query to use similarity() ordering with a 0.3 threshold.',
+          filesTouched: [`${REPO}/src/search/query.ts`, `${REPO}/src/search/ranking.ts`],
+          toolCallCount: 3,
+        },
+      ]);
+      expect(parseClaudeCodeFile(claude.basic)!.subagents).toEqual([]);
+    });
+
     it('keeps subagent prompts and messages out of the parent transcript', () => {
       const texts = messy.transcript.filter((e) => 'text' in e).map((e) => ('text' in e ? e.text : ''));
       expect(texts).not.toContain('Rewrite src/search/query.ts to use similarity() with the pg_trgm index.');

@@ -87,8 +87,9 @@ export function listCommand(options: { repo?: string; json?: boolean; all?: bool
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
   if (options.json) {
-    const listed = sessions.map(({ transcript: _transcript, ...s }) => ({
+    const listed = sessions.map(({ transcript: _transcript, subagents, ...s }) => ({
       ...s,
+      subagentCount: subagents.length,
       filesTouched: s.filesTouched.map((p) => repoRelative(repoRoot, p)),
     }));
     ctx.stdout(JSON.stringify(listed, null, 2) + '\n');

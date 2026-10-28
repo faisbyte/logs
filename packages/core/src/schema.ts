@@ -30,6 +30,17 @@ export const TranscriptEntrySchema = z.discriminatedUnion('kind', [
 export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
 export type ToolEntry = Extract<TranscriptEntry, { kind: 'tool' }>;
 
+/** A Claude Code subagent, kept compact: what it was asked, what it reported, what it changed. */
+export const SubagentSchema = z.object({
+  agentType: z.string().nullable(),
+  description: z.string().nullable(),
+  prompt: z.string().nullable(),
+  finalText: z.string().nullable(),
+  filesTouched: z.array(z.string()),
+  toolCallCount: count,
+});
+export type Subagent = z.infer<typeof SubagentSchema>;
+
 export const ParsedSessionSchema = z
   .object({
     agent: AgentSchema,
@@ -51,6 +62,7 @@ export const ParsedSessionSchema = z
     toolCallCount: count,
     filesTouched: z.array(z.string()),
     commitShas: z.array(z.string()),
+    subagents: z.array(SubagentSchema),
     transcript: z.array(TranscriptEntrySchema),
   })
   .refine((s) => Date.parse(s.endedAt) >= Date.parse(s.startedAt), {

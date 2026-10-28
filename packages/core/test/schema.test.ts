@@ -18,6 +18,7 @@ function validSession(): ParsedSession {
     toolCallCount: 1,
     filesTouched: ['/work/app/src/login.ts'],
     commitShas: [],
+    subagents: [{ agentType: 'Explore', description: 'Find callers', prompt: 'Find callers of login()', finalText: 'Two callers.', filesTouched: [], toolCallCount: 2 }],
     transcript: [
       { kind: 'user', timestamp: '2026-03-02T09:00:00.000Z', text: 'Add rate limiting' },
       { kind: 'reasoning', timestamp: '2026-03-02T09:00:01.000Z', text: 'Look at the route first' },
