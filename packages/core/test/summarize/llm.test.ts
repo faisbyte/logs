@@ -36,6 +36,11 @@ describe('FakeLlmClient', () => {
     expect(usage.inputTokens).toBeGreaterThanOrEqual(400);
   });
 
+  it('can script a stop reason, such as a refusal', async () => {
+    const llm = new FakeLlmClient([{ text: '', stopReason: 'refusal' }]);
+    expect((await llm.complete(request(redactSession(parsed)))).stopReason).toBe('refusal');
+  });
+
   it('fails when its script runs out', async () => {
     await expect(new FakeLlmClient([]).complete(request(redactSession(parsed)))).rejects.toThrow(/script/);
   });
