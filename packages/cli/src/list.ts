@@ -1,12 +1,8 @@
-import { relative, resolve } from 'node:path';
+import { relative } from 'node:path';
 import {
-  agentDirs,
   commitsDuring,
-  discoverSessionFiles,
-  findRepoRoot,
   fingerprintFile,
   isInRepo,
-  loadSessions,
   readState,
   sessionKey,
   sessionStatus,
@@ -14,14 +10,9 @@ import {
   type SessionStatus,
 } from '@digest/core';
 import type { CliContext } from './cli.js';
+import { NOT_IN_REPO, repoSessions, resolveRepoRoot } from './sessions.js';
 
 type ListedSession = ParsedSession & { status: SessionStatus };
-
-function resolveRepoRoot(repoOption: string | undefined, cwd: string): string | null {
-  if (!repoOption) return findRepoRoot(cwd);
-  const path = resolve(cwd, repoOption);
-  return findRepoRoot(path) ?? path;
-}
 
 function formatStarted(iso: string, timeZone: string | undefined): string {
   const parts = Object.fromEntries(
@@ -78,14 +69,13 @@ const repoRelative = (repoRoot: string, path: string) => (isInRepo({ cwd: path }
 export function listCommand(options: { repo?: string; json?: boolean }, ctx: CliContext): number {
   const repoRoot = resolveRepoRoot(options.repo, ctx.cwd);
   if (!repoRoot) {
-    ctx.stderr('digest list: not inside a git repository. Run it from your repo, or pass --repo <path>.\n');
+    ctx.stderr(`digest list: ${NOT_IN_REPO}\n`);
     return 1;
   }
 
-  const dirs = agentDirs(ctx.env, ctx.homeDir);
   const state = readState(repoRoot);
-  const sessions: ListedSession[] = loadSessions(discoverSessionFiles(dirs))
-    .filter((s) => isInRepo(s, repoRoot))
+  const { dirs, sessions: inRepo } = repoSessions(repoRoot, ctx);
+  const sessions: ListedSession[] = inRepo
     .map((s) => ({
       ...s,
       commitShas: commitsDuring(repoRoot, s),
