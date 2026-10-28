@@ -99,4 +99,72 @@ describe('redactText', () => {
       expect(redactText(text).text).toBe(text);
     });
   });
+
+  describe('env_secret', () => {
+    it('redacts values of secret-named keys and keeps the key', () => {
+      expect(redactText('DB_PASSWORD=s3cr3t-value').text).toBe('DB_PASSWORD=[REDACTED:env_secret]');
+      expect(redactText('{"client_secret": "abc-123-def"}').text).toBe('{"client_secret": "[REDACTED:env_secret]"}');
+      expect(redactText('  api_key: k9-abcdef').text).toBe('  api_key: [REDACTED:env_secret]');
+    });
+
+    it('redacts the credential after a Bearer or Basic scheme', () => {
+      expect(redactText('-H "Authorization: Bearer opaque-tok3n"').text).toBe('-H "Authorization: Bearer [REDACTED:env_secret]"');
+    });
+
+    it('leaves ordinary settings alone', () => {
+      const env = 'NODE_ENV=production\nPORT=3000\nTZ=UTC pnpm test';
+      expect(redactText(env).text).toBe(env);
+    });
+
+    it('does not treat numbers, variable references or type names as secrets', () => {
+      const text = '"max_tokens": 1024, TOKEN=$GITHUB_TOKEN, SECRET=${SECRET}, password: string;';
+      expect(redactText(text).text).toBe(text);
+    });
+
+    it('ignores secret-ish words in the middle of prose', () => {
+      const text = 'The request failed with Invalid token: expired after an hour.';
+      expect(redactText(text).text).toBe(text);
+    });
+  });
+
+  describe('connection_string', () => {
+    it('redacts the credentials and keeps scheme, host and database', () => {
+      expect(redactText('postgres://app:pa55word@db.internal:5432/app').text).toBe('postgres://[REDACTED:connection_string]@db.internal:5432/app');
+    });
+
+    it('handles an empty user name', () => {
+      expect(redactText('redis://:pa55word@cache:6379').text).toBe('redis://[REDACTED:connection_string]@cache:6379');
+    });
+
+    it('leaves URLs without a password alone', () => {
+      const text = 'ssh://git@github.com/acme/webapp.git and https://example.com/a:b';
+      expect(redactText(text).text).toBe(text);
+    });
+  });
+
+  describe('overlapping matches', () => {
+    const token = `ghp_${base62(36)}`;
+
+    it('produces one placeholder of the most specific type', () => {
+      const secret = pick('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', 40);
+      expect(redactText(`AWS_SECRET_ACCESS_KEY=${secret}`)).toEqual({ text: 'AWS_SECRET_ACCESS_KEY=[REDACTED:aws_secret]', counts: { aws_secret: 1 } });
+      expect(redactText(`GITHUB_TOKEN=${token}`)).toEqual({ text: 'GITHUB_TOKEN=[REDACTED:github_token]', counts: { github_token: 1 } });
+    });
+
+    it('merges partially overlapping matches into one clean placeholder', () => {
+      expect(redactText(`https://x-access-token:${token}@github.com/acme/webapp.git`)).toEqual({
+        text: 'https://[REDACTED:github_token]@github.com/acme/webapp.git',
+        counts: { github_token: 1 },
+      });
+    });
+
+    it('keeps separate secrets separate', () => {
+      expect(redactText(`${awsKey} ${awsKey}`).text).toBe('[REDACTED:aws_key] [REDACTED:aws_key]');
+    });
+
+    it('is idempotent', () => {
+      const once = redactText(`GITHUB_TOKEN=${token} DB_PASSWORD=hunter2`).text;
+      expect(redactText(once).text).toBe(once);
+    });
+  });
 });
