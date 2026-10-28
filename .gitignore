@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.DS_Store
+
+# Local digest state (processed-session tracker, later caches). Never commit.
+.digest/
+
+# Raw session data must never be committed. Fixtures in fixtures/ are hand-written.
+local-sessions/
+*.raw.jsonl
