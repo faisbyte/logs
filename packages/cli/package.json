@@ -1,0 +1,16 @@
+{
+  "name": "@digest/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "digest": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@digest/core": "workspace:*",
+    "commander": "^15.0.0"
+  }
+}
