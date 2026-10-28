@@ -214,6 +214,16 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] Delivery: Slack incoming webhook and email (Resend, Postmark or SMTP).
 - [ ] Store sent digests and let stakeholders view past ones in the dashboard.
 - [ ] Add a "developer preview" step: developers can see the digest before it's sent (configurable).
+- [ ] On-demand team report: a manager can generate one document covering all developers'
+      approved AI work on a repo for any sprint or date range, not just on the schedule.
+      Available from the dashboard and as `digest report --from --to` (or `--sprint`).
+- [ ] Export the report as Markdown and PDF.
+- [ ] The report states its coverage, e.g. "Based on 23 approved session summaries from
+      4 developers." Whether it also shows how many sessions are still unreviewed is a
+      decision to log in DECISIONS.md.
+- [ ] Per-developer breakdown: off by default (see the "no judgement of individual
+      developers" rule). If enabled, it's a repo-level setting that every developer on
+      that repo can see is on.
 
 **Done when:** a real sprint's worth of summaries produces a digest that a non-technical person can understand. Test this with an actual PO or SM.
 

@@ -194,3 +194,12 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   Chunks pack whole turns up to the token budget, estimated at 2.5 chars per token. A turn is split by line only if it alone exceeds the budget.
 - **Alternatives:** Send tool outputs truncated; include reasoning text; split at fixed character offsets.
 - **Why:** This follows the owner's spec (prompts, assistant text, tool names, file paths). The rejected and failed markers carry the evidence for abandoned approaches at a few tokens each. Turn boundaries keep each prompt next to its consequences. The 2.5 chars-per-token figure comes from Anthropic's "1M tokens ≈ 2.5M characters" note for the current tokenizer, so it errs high, which only makes chunks smaller and cost estimates higher. Subagents get one line because their work is already reflected in the parent's tool calls and files.
+
+## D23. The LLM sits behind an interface; every request carries its RedactedSession
+
+- **Date:** 2026-10-28
+- **Decision:** `LlmClient.complete(LlmRequest)` is the only way to call a model. Each request carries `source: RedactedSession`, and every implementation's first line is `guardRequest()`, which calls `assertRedactedSession()` and throws. There are two implementations:
+  - `FakeLlmClient`, scripted, used by all unit tests and the fake-pipeline eval
+  - `AnthropicLlmClient`, the real API, used only by the CLI and by opt-in tests behind environment variables
+- **Alternatives:** A guard only at `summarizeSession()`; brand the prompt string instead of carrying the session.
+- **Why:** The owner asked for a hard check at every LLM and network entry point. Carrying the session means the check runs inside the client, so a future caller that builds requests some other way still can't skip it. The fake keeps tests free, deterministic and offline.
