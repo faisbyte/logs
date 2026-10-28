@@ -163,7 +163,11 @@ Keep only the text after `## My request for Codex:` when that header is present.
 ### Tools
 
 - 0.45: `shell` with arguments `{command: ["bash", "-lc", "<script>"], workdir}`, and `update_plan` with arguments `{plan: [{step, status}]}`.
-- File edits normally arrive through `apply_patch` (inside a `shell` script, or as its own tool in newer versions), with patch headers `*** Update File: <path>`, `*** Add File: <path>`, `*** Delete File: <path>`. **Not seen on this machine:** the one session with tool calls was read-only. Fixtures model it from the documented patch format.
+- File edits normally arrive through `apply_patch`, with patch headers `*** Update File: <path>`, `*** Add File: <path>`, `*** Delete File: <path>`. There are two carriers:
+  - a heredoc inside a `shell` script: `apply_patch <<'PATCH' … PATCH`
+  - in newer versions, its own item: `response_item/custom_tool_call` `{name: "apply_patch", input: "<patch text>", call_id, status}`, answered by `custom_tool_call_output` `{call_id, output}`
+
+  **Neither was seen on this machine:** the one session with tool calls was read-only. Fixtures model both from the upstream format, and they're the only fixture shapes not observed locally.
 - Tool output size: median about 1.4 KB, max about 9 KB.
 
 ### Short and empty sessions
