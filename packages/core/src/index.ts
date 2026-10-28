@@ -19,3 +19,4 @@ export { SessionSummarySchema, type SessionSummary } from './summarize/schema.js
 export { DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettings } from './summarize/settings.js';
 export { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary } from './summarize/store.js';
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';
+export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
