@@ -21,14 +21,27 @@ export const RedactionConfigSchema = z
   // Strict: a misspelt key would otherwise silently redact less than intended.
   .strict();
 
-export const DigestConfigSchema = z.object({ redaction: RedactionConfigSchema.default({}) });
+export const SummarizeConfigSchema = z
+  .object({
+    /** Anthropic model ID; defaults to the fast, cheap model (DECISIONS.md D21). */
+    model: z.string().min(1).optional(),
+    effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+    /** Estimated input tokens per chunk; long sessions are split into chunks this size. */
+    chunkTokens: z.number().int().min(1_000).max(500_000).optional(),
+  })
+  .strict();
+
+export const DigestConfigSchema = z.object({
+  redaction: RedactionConfigSchema.default({}),
+  summarize: SummarizeConfigSchema.default({}),
+});
 export type DigestConfig = z.infer<typeof DigestConfigSchema>;
 
 const CONFIG_FILE = join('.digest', 'config.json');
 
 export function readConfig(repoRoot: string): DigestConfig {
   const file = join(repoRoot, CONFIG_FILE);
-  if (!existsSync(file)) return { redaction: {} };
+  if (!existsSync(file)) return { redaction: {}, summarize: {} };
   try {
     return DigestConfigSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
   } catch (err) {
