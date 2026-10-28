@@ -89,6 +89,16 @@ const connectionContexts = (pw: string) => [
   `The staging DB is at postgresql://report:${pw}@10.0.0.5/reports if you need it.`,
 ];
 
+// Unknown vendors: no prefix and no secret-sounding key name, so only entropy can catch them.
+const vendorToken = base62(40);
+const stripeLike = `rk_live_${base62(24)}`;
+const unknownContexts = (v: string) => [
+  `the vendor gave us ${v} for the staging webhook`,
+  JSON.stringify({ integrations: [{ name: 'billing', value: v }] }),
+  `curl -s -H "X-Vendor-Signature: ${v}" https://hooks.example.com/ingest`,
+  `VENDOR_CONFIG=${v}`,
+];
+
 export const corpus: CorpusEntry[] = [
   { type: 'aws_key', secret: awsDocExample, contexts: embed(awsDocExample, 'AWS_ACCESS_KEY_ID') },
   { type: 'aws_key', secret: awsGenerated, contexts: [...embed(awsGenerated, 'AWS_ACCESS_KEY_ID'), `aws configure set aws_access_key_id ${awsGenerated}`] },
@@ -108,6 +118,8 @@ export const corpus: CorpusEntry[] = [
   { type: 'private_key', secret: keyBody(pgpKey), contexts: [pgpKey] },
   { type: 'env_secret', secret: envValue, contexts: envContexts(envValue) },
   { type: 'connection_string', secret: dbPassword, contexts: connectionContexts(dbPassword) },
+  { type: 'high_entropy', secret: vendorToken, contexts: unknownContexts(vendorToken) },
+  { type: 'high_entropy', secret: stripeLike, contexts: unknownContexts(stripeLike) },
   // Truncated tool output: BEGIN without END.
   { type: 'private_key', secret: keyBody(rsaKey).split('\n')[0]!, contexts: [rsaKey.split('\n').slice(0, 3).join('\n')] },
 ];
