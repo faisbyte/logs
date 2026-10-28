@@ -4,7 +4,7 @@ Reads the session files your AI coding agents (Claude Code, Codex CLI) already w
 It turns them into plain-language, ticket-level digests for POs, scrum masters and managers, and into a short shared context log for the team's agents.
 Developers approve every summary before it's shared, and raw transcripts stay on the machine.
 
-**Status:** Phase 2: redaction.
+**Status:** Phase 3: per-session summarisation.
 
 ## Requirements
 
@@ -35,10 +35,11 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `digest list` | Show this repo's Claude Code and Codex sessions: time, turns, tools, files, commits, branch, status |
 | `digest list --json` | Same sessions as JSON (no transcript content beyond the title) |
 | `digest redact <sessionId>` | Redact a session and print counts per placeholder type (never the values); honours `.digest/config.json` |
+| `digest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation) |
 | `digest --version` | Print the CLI version |
 
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
-Nothing is written or sent anywhere. `.digest/` (local state) is gitignored.
+Summarising sends redacted, condensed session text to the Anthropic API using your own `ANTHROPIC_API_KEY`; nothing else leaves the machine, and `.digest/` (local state) is gitignored.
 
 ## Layout
 
