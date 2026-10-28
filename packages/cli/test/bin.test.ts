@@ -11,6 +11,15 @@ describe('built digest binary', () => {
     expect(out).toBe('0.1.0\n');
   });
 
+  it('lists fixture sessions using the built core package', () => {
+    const fixtures = fileURLToPath(new URL('../../../fixtures/', import.meta.url));
+    const out = execFileSync(process.execPath, [bin, 'list', '--repo', '/work/acme-webapp'], {
+      encoding: 'utf8',
+      env: { ...process.env, CLAUDE_CONFIG_DIR: `${fixtures}claude-code`, CODEX_HOME: `${fixtures}codex` },
+    });
+    expect(out.trimEnd().split('\n').at(-1)).toBe('7 sessions for /work/acme-webapp (3 Claude Code, 4 Codex)');
+  });
+
   it('starts with a node shebang so package managers can link it', () => {
     expect(readFileSync(bin, 'utf8').split('\n')[0]).toBe('#!/usr/bin/env node');
   });
