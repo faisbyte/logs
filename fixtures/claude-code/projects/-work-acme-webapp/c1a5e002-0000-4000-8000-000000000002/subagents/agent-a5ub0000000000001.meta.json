@@ -1,0 +1,11 @@
+{
+  "agentType": "general-purpose",
+  "description": "Rewrite search query for trigram index",
+  "toolUseId": "toolu_fx00020005",
+  "spawnDepth": 1,
+  "finished": true,
+  "isBuiltIn": true,
+  "launchedWithDefaults": true,
+  "requestNonInteractive": false,
+  "requestShape": "default"
+}
