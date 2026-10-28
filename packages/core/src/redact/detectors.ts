@@ -1,3 +1,4 @@
+import { highEntropyDetector } from './entropy.js';
 import type { Detector, PlaceholderType } from './types.js';
 
 interface RegexOptions {
@@ -55,4 +56,5 @@ export const DETECTORS: Detector[] = [
   // key: value at the start of a line (YAML, header dumps) or inside a quoted header (curl -H "...").
   envSecret(`^[ \\t-]*${SECRET_KEY}:[ \\t]+${SCHEME}([^\\s"',;{}()\\[\\]]{1,512})`, 'im'),
   envSecret(`["']${SECRET_KEY}:[ \\t]*${SCHEME}([^\\s"',;{}()\\[\\]]{1,512})`),
+  highEntropyDetector,
 ];
