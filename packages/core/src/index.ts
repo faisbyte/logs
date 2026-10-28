@@ -9,3 +9,4 @@ export * from './state.js';
 export { readConfig, type DigestConfig, type Matcher } from './config.js';
 export { createRedactor, redactText, type RedactedText } from './redact/text.js';
 export type { PlaceholderType, RedactionCounts, RedactOptions } from './redact/types.js';
+export { isRedactedSession, redactSession, type DeepReadonly, type RedactedSession } from './redact/session.js';
