@@ -1,9 +1,16 @@
 import { readFileSync } from 'node:fs';
-import type { ParsedSession, TranscriptEntry } from '../schema.js';
+import type { ParsedSession, ToolEntry, TranscriptEntry } from '../schema.js';
 
 interface ContentBlock {
   type: string;
   text?: string;
+  thinking?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+  tool_use_id?: string;
+  content?: string | ContentBlock[];
+  is_error?: boolean;
 }
 
 interface ClaudeEvent {
@@ -24,6 +31,7 @@ interface ClaudeEvent {
 const INJECTED_TAG =
   /^\s*<(command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat|task-notification|bash-input|bash-stdout|bash-stderr|system-reminder|ide_opened_file|ide_selection|ide_diagnostics)>/;
 const INTERRUPTION = /^\[Request interrupted by user/;
+const REJECTION = /^The user doesn't want to proceed with this tool use/;
 
 const distinct = (values: (string | undefined)[]) => [...new Set(values.filter((v): v is string => !!v))];
 
@@ -44,6 +52,31 @@ function userEntry(event: ClaudeEvent): TranscriptEntry | null {
   return { kind: 'user', timestamp, text: typed.join('\n') };
 }
 
+function summariseInput(name: string, input: Record<string, unknown>): string {
+  const str = (key: string) => (typeof input[key] === 'string' ? (input[key] as string) : undefined);
+  switch (name) {
+    case 'Bash':
+      return str('command') ?? '';
+    case 'Agent':
+    case 'Task':
+      return `${str('subagent_type') ?? 'agent'}: ${str('description') ?? ''}`;
+    default:
+      return str('file_path') ?? str('notebook_path') ?? JSON.stringify(input);
+  }
+}
+
+function referencedPaths(input: Record<string, unknown>): string[] {
+  return [input.file_path, input.notebook_path].filter((p): p is string => typeof p === 'string');
+}
+
+function resultText(content: string | ContentBlock[] | undefined): string {
+  if (typeof content === 'string') return content;
+  return (content ?? [])
+    .map((b) => (b.type === 'text' ? b.text : b.type === 'image' ? '[image]' : undefined))
+    .filter((t): t is string => t !== undefined)
+    .join('\n');
+}
+
 export function parseClaudeCodeFile(path: string): ParsedSession | null {
   const events = readFileSync(path, 'utf8')
     .split('\n')
@@ -55,10 +88,44 @@ export function parseClaudeCodeFile(path: string): ParsedSession | null {
   if (!cwd || !sessionId) return null;
 
   const transcript: TranscriptEntry[] = [];
+  const toolsById = new Map<string, ToolEntry>();
   for (const event of events) {
-    if (event.type !== 'user') continue;
-    const entry = userEntry(event);
-    if (entry) transcript.push(entry);
+    const timestamp = event.timestamp!;
+    const blocks = Array.isArray(event.message?.content) ? event.message.content : [];
+
+    if (event.type === 'assistant') {
+      for (const block of blocks) {
+        if (block.type === 'text' && block.text?.trim()) transcript.push({ kind: 'assistant', timestamp, text: block.text });
+        if (block.type === 'thinking' && block.thinking?.trim()) transcript.push({ kind: 'reasoning', timestamp, text: block.thinking });
+        if (block.type === 'tool_use' && block.id && block.name) {
+          const input = block.input ?? {};
+          const entry: ToolEntry = {
+            kind: 'tool',
+            timestamp,
+            callId: block.id,
+            name: block.name,
+            input: summariseInput(block.name, input),
+            filePaths: referencedPaths(input),
+            output: null,
+            outputTruncated: false,
+            status: 'unknown',
+          };
+          toolsById.set(block.id, entry);
+          transcript.push(entry);
+        }
+      }
+    }
+
+    if (event.type === 'user') {
+      for (const block of blocks) {
+        const entry = block.type === 'tool_result' && block.tool_use_id ? toolsById.get(block.tool_use_id) : undefined;
+        if (!entry) continue;
+        entry.output = resultText(block.content);
+        entry.status = !block.is_error ? 'ok' : REJECTION.test(entry.output) ? 'rejected' : 'error';
+      }
+      const entry = userEntry(event);
+      if (entry) transcript.push(entry);
+    }
   }
 
   const times = events.map((e) => e.timestamp).filter((t): t is string => !!t).sort();
@@ -78,7 +145,7 @@ export function parseClaudeCodeFile(path: string): ParsedSession | null {
     endedAt: times.at(-1)!,
     models: distinct(events.filter((e) => e.type === 'assistant').map((e) => e.message?.model)),
     turnCount: transcript.filter((e) => e.kind === 'user').length,
-    toolCallCount: 0,
+    toolCallCount: toolsById.size,
     filesTouched: [],
     commitShas: [],
     transcript,
