@@ -247,3 +247,15 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Investigation:** In the two multi-day real sessions (`d94236d8`, `1e399842`), v1 described only the last task. The cause was neither compaction (neither has a `compact_boundary`) nor condensation (every turn from every day was sent, in one chunk, with the first day making up about 75% of the text). With one request, the model anchored on the final task, helped by the singular "goal" field and by nothing in the input marking the break between periods.
 - **Alternatives:** Prompt changes only; split by calendar day.
 - **Why:** A prompt-only fix leaves coverage to a low-effort model that had already ignored most of the input. Splitting into parts makes every period get its own summary, which the merge must cover. Idle gaps work regardless of time zone, unlike calendar days. The cost is one extra request per additional period plus the merge.
+
+## D29. filesTouched is repo-relative, in-repo only, with a commit fallback
+
+- **Date:** 2026-10-28
+- **Decision:** Before redaction, `prepareSessionForRepo()` rewrites `filesTouched` (and each subagent's files):
+  - paths inside the repo become relative to the **repo root**, not the session's cwd
+  - `.claude/worktrees/<name>/…` maps back to the repo path it copies
+  - paths outside the repo are dropped: temp and scratchpad dirs, `~/.claude/`, other repos, and the repo's own `.git/` and `.digest/`
+
+  It also fills `commitShas` from git (D6). When the transcript yields no in-repo files but commits were made during the session, `filesTouched` falls back to the files those commits changed.
+- **Alternatives:** Keep paths relative to the cwd; keep outside paths but mark them.
+- **Why:** Stakeholders and teammates care about the project's files, not scratch files or agent memory. The real `thrift` session listed one file per worktree copy, and Bash-only sessions listed nothing at all; the commit fallback covers the second case (the Phase 1 gap).

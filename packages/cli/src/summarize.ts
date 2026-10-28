@@ -6,6 +6,7 @@ import {
   fingerprintFile,
   isEmptySession,
   markProcessed,
+  prepareSessionForRepo,
   PROMPT_VERSION,
   readCachedSummary,
   readConfig,
@@ -54,7 +55,8 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
 
   const idLength = shortIdLength(selected.map((s) => s.sourceSessionId));
   const plan = selected.map((session) => {
-    const redacted = redactSession(session, config.redaction);
+    // Repo-relative files and commits come from the parsed session and git, before redaction (DECISIONS.md D29).
+    const redacted = redactSession(prepareSessionForRepo(session, repoRoot), config.redaction);
     const key = cacheKey({ sessionId: session.sourceSessionId, contentHash: contentHash(redacted, settings.chunkTokens), promptVersion: PROMPT_VERSION, model: settings.model });
     const cached = readCachedSummary(repoRoot, key) !== null;
     return { session, redacted, cached, estimate: cached ? null : estimateSummaryCost(redacted, settings), id: session.sourceSessionId.slice(0, idLength) };
