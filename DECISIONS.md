@@ -119,3 +119,14 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - **Validation:** the `redaction` section is strict (unknown keys are an error), and regexes are compile-checked when the file loads.
 - **Alternatives:** Treat `/…/` strings as regexes; make allow override deny.
 - **Why:** Deny entries are often paths (a home directory), which would collide with a `/…/` convention. Strictness and deny-wins both fail closed: a typo or a conflicting entry never redacts less. Known cost: a pathological regex in the config can be slow, because JavaScript regexes can't be time-limited. The config is the developer's own and stays local.
+
+## D16. Redaction can't be skipped: a branded, frozen RedactedSession
+
+- **Date:** 2026-10-28
+- **Decision:** `redactSession()` is the only way to get a `RedactedSession`. It's a class with a private `#brand` field, and its module exports the class as a **type only**, so other code can't construct one. Its `session` is `DeepReadonly` and deep-frozen at runtime, and `isRedactedSession()` checks the brand at runtime. **Rule for Phases 3 and 5:** every function that sends session-derived data off the machine (LLM calls, uploads) takes a `RedactedSession`, never a `ParsedSession`.
+- **Alternatives:** A phantom brand type (`ParsedSession & { [brand]: true }`); a runtime-only check.
+- **Why:**
+  - A phantom brand survives `{...redacted, title: raw}`, which would let unredacted text back in. A `#private` field doesn't survive spreading, and TypeScript treats classes with private fields nominally.
+  - Freezing stops redacted text being swapped back in place.
+  - `packages/core/test/redact/types.test.ts` compiles snippets with the real `tsc` and pins the exact error for each misuse: a raw session, a look-alike, a spread copy, mutation, and direct construction. A mutation check confirmed it fails when the brand is removed.
+  - **Known limit:** an `as unknown as RedactedSession` cast still compiles. `isRedactedSession()` catches it at runtime, so egress code should call it too.
