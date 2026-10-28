@@ -68,6 +68,27 @@ const pkcs8Key = pem(pk(''));
 const pgpKey = pem(`PGP ${pk('')} BLOCK`);
 const keyBody = (block: string) => block.split('\n').slice(1, -1).join('\n');
 
+const password = () => `Tr0ub4dor-${base62(10)}`;
+const envValue = password();
+const envContexts = (v: string) => [
+  `NODE_ENV=production\nDB_PASSWORD=${v}\nPORT=3000`,
+  `export STRIPE_SECRET_KEY="${v}"`,
+  JSON.stringify({ oauth: { client_id: 'web', client_secret: v } }),
+  `database:\n  host: db.internal\n  password: ${v}\n`,
+  `node scripts/seed.js --api-key=${v} --verbose`,
+  `GET /export?token=${v}&page=2`,
+  `curl -H "Authorization: Bearer ${v}" https://api.example.com`,
+  `Can you set PASSWORD=${v} in the shell before running it?`,
+];
+const dbPassword = password();
+const connectionContexts = (pw: string) => [
+  `DATABASE_URL=postgres://app:${pw}@db.internal:5432/app`,
+  `mongosh "mongodb+srv://admin:${pw}@cluster0.example.mongodb.net/test?retryWrites=true"`,
+  `redis-cli -u redis://:${pw}@cache:6379/0`,
+  JSON.stringify({ datasource: { url: `mysql://root:${pw}@localhost/shop` } }),
+  `The staging DB is at postgresql://report:${pw}@10.0.0.5/reports if you need it.`,
+];
+
 export const corpus: CorpusEntry[] = [
   { type: 'aws_key', secret: awsDocExample, contexts: embed(awsDocExample, 'AWS_ACCESS_KEY_ID') },
   { type: 'aws_key', secret: awsGenerated, contexts: [...embed(awsGenerated, 'AWS_ACCESS_KEY_ID'), `aws configure set aws_access_key_id ${awsGenerated}`] },
@@ -85,6 +106,8 @@ export const corpus: CorpusEntry[] = [
   // Service-account JSON stores the PEM with escaped newlines.
   { type: 'private_key', secret: keyBody(pkcs8Key).split('\n')[0]!, contexts: [JSON.stringify({ type: 'service_account', private_key: pkcs8Key, client_email: 'bot@acme.iam' })] },
   { type: 'private_key', secret: keyBody(pgpKey), contexts: [pgpKey] },
+  { type: 'env_secret', secret: envValue, contexts: envContexts(envValue) },
+  { type: 'connection_string', secret: dbPassword, contexts: connectionContexts(dbPassword) },
   // Truncated tool output: BEGIN without END.
   { type: 'private_key', secret: keyBody(rsaKey).split('\n')[0]!, contexts: [rsaKey.split('\n').slice(0, 3).join('\n')] },
 ];
