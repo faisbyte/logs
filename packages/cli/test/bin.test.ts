@@ -17,7 +17,7 @@ describe('built digest binary', () => {
       encoding: 'utf8',
       env: { ...process.env, CLAUDE_CONFIG_DIR: `${fixtures}claude-code`, CODEX_HOME: `${fixtures}codex` },
     });
-    expect(out.trimEnd().split('\n').at(-1)).toBe('7 sessions for /work/acme-webapp (3 Claude Code, 4 Codex)');
+    expect(out.trimEnd().split('\n').at(-1)).toBe('6 sessions for /work/acme-webapp (3 Claude Code, 3 Codex); 1 empty session hidden, --all shows it');
   });
 
   it('starts with a node shebang so package managers can link it', () => {

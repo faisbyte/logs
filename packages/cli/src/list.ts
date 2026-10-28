@@ -2,6 +2,7 @@ import { relative } from 'node:path';
 import {
   commitsDuring,
   fingerprintFile,
+  isEmptySession,
   isInRepo,
   readState,
   sessionKey,
@@ -66,7 +67,7 @@ function table(sessions: ListedSession[], timeZone: string | undefined): string 
 
 const repoRelative = (repoRoot: string, path: string) => (isInRepo({ cwd: path }, repoRoot) ? relative(repoRoot, path) : path);
 
-export function listCommand(options: { repo?: string; json?: boolean }, ctx: CliContext): number {
+export function listCommand(options: { repo?: string; json?: boolean; all?: boolean }, ctx: CliContext): number {
   const repoRoot = resolveRepoRoot(options.repo, ctx.cwd);
   if (!repoRoot) {
     ctx.stderr(`digest list: ${NOT_IN_REPO}\n`);
@@ -75,7 +76,9 @@ export function listCommand(options: { repo?: string; json?: boolean }, ctx: Cli
 
   const state = readState(repoRoot);
   const { dirs, sessions: inRepo } = repoSessions(repoRoot, ctx);
-  const sessions: ListedSession[] = inRepo
+  const shown = options.all ? inRepo : inRepo.filter((s) => !isEmptySession(s));
+  const hidden = inRepo.length - shown.length;
+  const sessions: ListedSession[] = shown
     .map((s) => ({
       ...s,
       commitShas: commitsDuring(repoRoot, s),
@@ -92,13 +95,18 @@ export function listCommand(options: { repo?: string; json?: boolean }, ctx: Cli
     return 0;
   }
 
+  const hiddenNote = hidden ? `${hidden} empty session${hidden === 1 ? '' : 's'} hidden, --all shows ${hidden === 1 ? 'it' : 'them'}` : '';
+  if (sessions.length === 0 && hidden) {
+    ctx.stdout(`No non-empty sessions for ${repoRoot}; ${hiddenNote}\n`);
+    return 0;
+  }
   if (sessions.length === 0) {
     ctx.stdout(`No Claude Code or Codex sessions found for ${repoRoot}.\nLooked in:\n  ${dirs.claudeProjectsDir}\n  ${dirs.codexSessionsDir}\n`);
     return 0;
   }
 
   const claude = sessions.filter((s) => s.agent === 'claude-code').length;
-  const footer = `${sessions.length} session${sessions.length === 1 ? '' : 's'} for ${repoRoot} (${claude} Claude Code, ${sessions.length - claude} Codex)`;
+  const footer = `${sessions.length} session${sessions.length === 1 ? '' : 's'} for ${repoRoot} (${claude} Claude Code, ${sessions.length - claude} Codex)${hiddenNote ? `; ${hiddenNote}` : ''}`;
   ctx.stdout(`${table(sessions, ctx.timeZone)}\n\n${footer}\n`);
   return 0;
 }
