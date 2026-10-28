@@ -80,10 +80,16 @@ function resultText(content: string | ContentBlock[] | undefined): string {
 }
 
 function readEvents(path: string): ClaudeEvent[] {
-  return readFileSync(path, 'utf8')
-    .split('\n')
-    .filter((line) => line.trim())
-    .map((line) => JSON.parse(line) as ClaudeEvent);
+  const events: ClaudeEvent[] = [];
+  for (const line of readFileSync(path, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      events.push(JSON.parse(line) as ClaudeEvent);
+    } catch {
+      // A live session can end in a half-written line; skip anything unparseable.
+    }
+  }
+  return events;
 }
 
 function parseEvents(events: ClaudeEvent[]): { transcript: TranscriptEntry[]; tools: ToolEntry[] } {
