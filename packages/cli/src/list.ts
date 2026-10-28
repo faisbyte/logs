@@ -11,7 +11,7 @@ import {
   type SessionStatus,
 } from '@digest/core';
 import type { CliContext } from './cli.js';
-import { NOT_IN_REPO, repoSessions, resolveRepoRoot } from './sessions.js';
+import { NOT_IN_REPO, repoSessions, resolveRepoRoot, shortIdLength } from './sessions.js';
 
 type ListedSession = ParsedSession & { status: SessionStatus };
 
@@ -35,14 +35,6 @@ function titleOf(session: ParsedSession): string {
   const firstPrompt = session.transcript.find((e) => e.kind === 'user');
   const text = (session.title ?? (firstPrompt && 'text' in firstPrompt ? firstPrompt.text : '-')).replace(/\s+/g, ' ').trim();
   return text.length > 60 ? `${text.slice(0, 59)}…` : text;
-}
-
-/** Shortest prefix (at least 8 chars) that tells every listed session apart, like git short SHAs. */
-function shortIdLength(ids: string[]): number {
-  const unique = new Set(ids).size;
-  let n = 8;
-  while (new Set(ids.map((id) => id.slice(0, n))).size < unique) n++;
-  return n;
 }
 
 function table(sessions: ListedSession[], timeZone: string | undefined): string {

@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import type { LlmClient } from '@digest/core';
 import { Command, CommanderError } from 'commander';
 import { listCommand } from './list.js';
 import { redactCommand } from './redact.js';
+import { summarizeCommand } from './summarize.js';
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -12,9 +14,14 @@ export interface CliIo {
   homeDir?: string;
   /** IANA zone for displayed times; defaults to the system zone. */
   timeZone?: string;
+  /** Model client for summarize; defaults to the Anthropic API with ANTHROPIC_API_KEY. */
+  llm?: LlmClient;
+  /** Asks a yes/no question; absent when there is no terminal to ask in. */
+  confirm?: (question: string) => Promise<boolean>;
 }
 
-export type CliContext = Required<Omit<CliIo, 'timeZone'>> & Pick<CliIo, 'timeZone'>;
+type Optional = 'timeZone' | 'llm' | 'confirm';
+export type CliContext = Required<Omit<CliIo, Optional>> & Pick<CliIo, Optional>;
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
   version: string;
@@ -24,9 +31,9 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), ...io };
   let exitCode = 0;
   // Runs a command, turning an expected failure (bad state or config file) into a message and exit code 1.
-  const guarded = (name: string, command: () => number) => {
+  const guarded = async (name: string, command: () => number | Promise<number>) => {
     try {
-      exitCode = command();
+      exitCode = await command();
     } catch (err) {
       io.stderr(`digest ${name}: ${(err as Error).message}\n`);
       exitCode = 1;
@@ -54,6 +61,18 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .description('Redact a session and print how many values of each type were replaced (never the values)')
     .option('--repo <path>', 'repo the session belongs to (default: the git repo containing the current directory)')
     .action((sessionId: string, options: { repo?: string }) => guarded('redact', () => redactCommand(sessionId, options, ctx)));
+
+  program
+    .command('summarize')
+    .argument('[sessionId]', 'session id or a unique prefix of it (see digest list)')
+    .description('Summarise sessions into local drafts; sends redacted, condensed session text to the Anthropic API with your key')
+    .option('--all', 'summarise every non-empty session for the repo')
+    .option('--estimate', 'print how many sessions would be sent and the estimated cost, then stop')
+    .option('--yes', 'skip the confirmation before sending more than one session')
+    .option('--repo <path>', 'repo the sessions belong to (default: the git repo containing the current directory)')
+    .action((sessionId: string | undefined, options: { all?: boolean; estimate?: boolean; yes?: boolean; repo?: string }) =>
+      guarded('summarize', () => summarizeCommand(sessionId, options, ctx)),
+    );
 
   try {
     await program.parseAsync(argv, { from: 'user' });

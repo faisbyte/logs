@@ -20,3 +20,4 @@ export { DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettin
 export { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary } from './summarize/store.js';
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';
 export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
+export { estimateSummaryCost, type CostEstimate } from './summarize/estimate.js';
