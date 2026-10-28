@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LlmSummarySchema, NarrativeSchema } from './schema.js';
 
 // Bump on any change to the text below or to the schema: it is part of the summary cache key.
-export const PROMPT_VERSION = 'summarize-v1';
+export const PROMPT_VERSION = 'summarize-v2';
 
 // PROJECT_PLAN.md Section 6.1, verbatim apart from {schema}.
 const SECTION_6_1 = `You are summarising one AI coding session for a team log.
@@ -20,7 +20,8 @@ Rules:
 - "aiInvolvement": light = Q&A/explanations, moderate = AI wrote parts, heavy = AI wrote most of the change.`;
 
 const NOTES = `Notes on the input and the remaining fields:
-- Transcript lines: "USER:" is the developer, "ASSISTANT:" is the coding agent, "TOOL <name> <paths>" is a tool call ("(rejected by user)" and "(failed)" mark calls that did not go through), "[user interrupted]" means the developer stopped the agent. Tool output is not included. Placeholders like [REDACTED:...] hide secrets; never repeat them.
+- Transcript lines: "USER:" is the developer, "ASSISTANT:" is the coding agent, "TOOL <name> <paths>" is a tool call, and "TOOL Bash: <command> (exit N)" is a shell command with its exit status (0 means it succeeded). "(rejected by user)" and "(failed)" mark calls that did not go through, and "[user interrupted]" means the developer stopped the agent. Tool output is not included. Placeholders like [REDACTED:...] hide secrets; never repeat them.
+- A value or setting chosen with a reason (a threshold, limit, timeout, version, library or config value) is a decision, not a follow-up.
 - "goal": one sentence on what the developer set out to do.
 - "outcome": "completed" if the goal was met, "partial" if only some of it was done or work was left unfinished, "abandoned" if the task or approach was dropped.
 - "reversedDecisions": long sessions arrive in parts. When decisions from earlier parts are listed with ids and this part reverses or abandons one, give its id and the reason here and leave it out of every other field. Otherwise return an empty list.`;

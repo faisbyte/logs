@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { parseClaudeCodeFile } from '../../src/parsers/claude-code.js';
 import { redactSession } from '../../src/redact/session.js';
 import { FakeLlmClient } from '../../src/summarize/fake-llm.js';
+import { PROMPT_VERSION } from '../../src/summarize/prompt.js';
 import { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary } from '../../src/summarize/store.js';
 import { summarizeSession } from '../../src/summarize/summarize.js';
 import { claude } from '../fixtures.js';
@@ -93,7 +94,7 @@ describe('summarizeCached', () => {
     await summarizeCached(repo, redacted, llm, settings, now);
     const lines = readFileSync(join(repo, '.digest/usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ sessionId: 'c1a5e001-0000-4000-8000-000000000001', model: 'claude-haiku-5-5', promptVersion: 'summarize-v1', requests: 1 });
+    expect(lines[0]).toMatchObject({ sessionId: 'c1a5e001-0000-4000-8000-000000000001', model: 'claude-haiku-5-5', promptVersion: PROMPT_VERSION, requests: 1 });
     expect(lines[0].inputTokens).toBeGreaterThan(0);
     expect(lines[0].costUsd).toBeGreaterThan(0);
   });

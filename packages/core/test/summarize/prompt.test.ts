@@ -3,7 +3,7 @@ import { chunkMessage, PROMPT_VERSION, systemPrompt } from '../../src/summarize/
 
 describe('summariser prompt', () => {
   it('is versioned', () => {
-    expect(PROMPT_VERSION).toBe('summarize-v1');
+    expect(PROMPT_VERSION).toBe('summarize-v2');
   });
 
   it('contains the Section 6.1 prompt from PROJECT_PLAN.md verbatim, with the schema filled in', () => {
@@ -22,6 +22,8 @@ describe('summariser prompt', () => {
       expect(prompt).toContain(line);
     }
     expect(prompt).not.toContain('{schema}');
+    // v2: a value chosen with a reason is a decision.
+    expect(prompt).toContain('A value or setting chosen with a reason (a threshold, limit, timeout, version, library or config value) is a decision, not a follow-up.');
     expect(prompt).toContain('"reversedDecisions"');
     expect(prompt).toContain('"additionalProperties": false');
   });
