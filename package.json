@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -b packages/cli",
+    "build": "tsc -b packages/core packages/cli",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest"
   },
