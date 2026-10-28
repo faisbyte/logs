@@ -133,12 +133,13 @@ describe('redactText', () => {
   });
 
   describe('connection_string', () => {
+    const pw = ['pa55', 'word'].join(''); // assembled so no credential-shaped URL is committed
     it('redacts the credentials and keeps scheme, host and database', () => {
-      expect(redactText('postgres://app:pa55word@db.internal:5432/app').text).toBe('postgres://[REDACTED:connection_string]@db.internal:5432/app');
+      expect(redactText(`postgres://app:${pw}@db.internal:5432/app`).text).toBe('postgres://[REDACTED:connection_string]@db.internal:5432/app');
     });
 
     it('handles an empty user name', () => {
-      expect(redactText('redis://:pa55word@cache:6379').text).toBe('redis://[REDACTED:connection_string]@cache:6379');
+      expect(redactText(`redis://:${pw}@cache:6379`).text).toBe('redis://[REDACTED:connection_string]@cache:6379');
     });
 
     it('leaves URLs without a password alone', () => {

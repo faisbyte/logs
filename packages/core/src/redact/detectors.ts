@@ -76,7 +76,7 @@ export const SECRET_DETECTORS: Detector[] = [
   // Whole PEM block; with no END line (truncated output) it runs to the end of the text.
   regexDetector('private_key', /-----BEGIN[A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END[A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----|$)/),
   regexDetector('openai_key', /\bsk-(?!ant-)(?:(?:proj|svcacct|admin)-)?[A-Za-z0-9_-]{20,}/, { validate: mixedCaseWithDigits }),
-  // scheme://user:password@host: redact the user:password part.
+  // scheme://USER:PASS@host: redact the USER:PASS part.
   regexDetector('connection_string', /\b[a-zA-Z][a-zA-Z0-9+.-]{1,30}:\/\/([^\s:@/?#]*:[^\s@/?#]+)@/, { group: 1 }),
   // KEY=value with no spaces (.env, shell, CLI flags, query strings).
   envSecret(`(?<![\\w.-])${SECRET_KEY}=(?!["'])([^\\s"'&;,)}\\]]{1,512})`),
