@@ -28,6 +28,8 @@ export const RedactionConfigSchema = z
     allow: z.array(MatcherSchema).optional(),
     deny: z.array(MatcherSchema).optional(),
     pii: z.object({ email: z.boolean().optional(), phone: z.boolean().optional() }).strict().optional(),
+    /** `false` keeps the home directory and username in session text (on by default). */
+    home: z.literal(false).optional(),
   })
   // Strict: a misspelt key would otherwise silently redact less than intended.
   .strict();

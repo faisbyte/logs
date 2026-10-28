@@ -154,3 +154,15 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** A session with no assistant text, reasoning or tool calls (including subagent calls) is empty. `digest list` hides empty sessions unless `--all` is passed and says how many were hidden. Later phases never summarise them.
 - **Alternatives:** Collapse each Codex `exec` rollout into the `vscode` rollout started in the same second with the same cwd.
 - **Why:** Chosen by the project owner. Simple, with no reliance on undocumented extension behaviour, and it also covers sessions abandoned at the first prompt in either agent. Known cost: a prompt that got no answer (an API error, say) is hidden too, and `--all` is the escape hatch.
+
+## D19. The home directory becomes `~` and the username is redacted, by default
+
+- **Date:** 2026-10-28
+- **Decision:** Before the detectors run, every string has the following replaced:
+  - the home path (`/Users/<you>`, on path boundaries) → `~`
+  - its encoded form in Claude project directory names (`-Users-<you>`) → `~`
+  - the bare username, bounded by non-alphanumerics → `[REDACTED:username]`
+
+  Generic usernames (`root`, `runner`, `ubuntu`, `dev`, …) aren't replaced as bare words. The defaults come from `os.homedir()` and `os.userInfo()`, and `redaction.home: false` in `.digest/config.json` turns all of this off.
+- **Alternatives:** Replace only the literal home path; leave the username to the deny list.
+- **Why:** The owner asked that usernames never leave the machine. The home path alone isn't enough, because the username also appears in encoded project directories (`sourcePath`), hostnames (`<you>-MacBook-Pro`), `ls -l` owner columns and hyphen-joined names. On the developer's 15 real sessions, 3,148 home and 305 username replacements left zero occurrences in any case. Generic names identify nobody, and replacing them would mangle words like "runner".
