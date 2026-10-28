@@ -183,3 +183,14 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** The default model is `claude-haiku-5-5`, run at effort `low`, with input split into chunks of about 60K tokens. All three are overridable in `.digest/config.json` → `summarize` (`model`, `effort`, `chunkTokens`). Cost estimates use a pricing table checked against Anthropic's live models and pricing pages on 2026-10-28.
 - **Alternatives:** `claude-sonnet-5-5` ($2 / $10 per MTok) by default; no chunking, relying on the 1M context window.
 - **Why:** The plan asks for a fast model for per-session summaries. Haiku 5.5 is Anthropic's fastest, cheapest current model: $0.10 / $0.50 per MTok, but $0.50 / $2.50 once a single prompt passes 100K tokens. Chunks of about 60K tokens (by a conservative 2.5 chars-per-token estimate) keep every request on the cheaper rate card and keep each summary focused. Haiku 5.5 has adaptive thinking on by default, so effort is the cost lever. It doesn't accept `temperature` or prefill, so JSON comes from structured outputs.
+
+## D22. What the summariser sees: a condensed transcript, chunked by turns
+
+- **Date:** 2026-10-28
+- **Decision:** `condenseSession(RedactedSession)` produces two parts:
+  - **Metadata header**, sent with every chunk: agent, branch, dates, counts, and files changed relative to the cwd. Subagents appear here, condensed harder: type, description, a final report capped at 300 chars, and files.
+  - **Turns:** `USER:` prompts (capped at 4,000 chars), `ASSISTANT:` text (capped at 2,000 chars), and `TOOL <name> <paths>` lines, all with head-and-tail truncation. Rejected and failed tools and interruptions are marked, and consecutive identical tool lines collapse to `×N`. Reasoning and tool outputs are left out.
+
+  Chunks pack whole turns up to the token budget, estimated at 2.5 chars per token. A turn is split by line only if it alone exceeds the budget.
+- **Alternatives:** Send tool outputs truncated; include reasoning text; split at fixed character offsets.
+- **Why:** This follows the owner's spec (prompts, assistant text, tool names, file paths). The rejected and failed markers carry the evidence for abandoned approaches at a few tokens each. Turn boundaries keep each prompt next to its consequences. The 2.5 chars-per-token figure comes from Anthropic's "1M tokens ≈ 2.5M characters" note for the current tokenizer, so it errs high, which only makes chunks smaller and cost estimates higher. Subagents get one line because their work is already reflected in the parent's tool calls and files.
