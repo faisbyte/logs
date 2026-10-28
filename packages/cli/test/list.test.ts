@@ -91,6 +91,14 @@ describe('digest list', () => {
     });
   });
 
+  it('keeps transcript and subagent text out of --json, reporting only a subagent count', async () => {
+    const sessions = JSON.parse((await run(['list', '--json', '--repo', '/work/acme-webapp'])).stdout);
+    const messy = sessions.find((s: { sourceSessionId: string }) => s.sourceSessionId.startsWith('c1a5e002'));
+    expect(messy).not.toHaveProperty('transcript');
+    expect(messy).not.toHaveProperty('subagents');
+    expect(messy.subagentCount).toBe(1);
+  });
+
   it('says empty sessions were hidden when they are all there is', async () => {
     const codexHome = tempDir('digest-onlyempty-');
     mkdirSync(join(codexHome, 'sessions/2026/03/07'), { recursive: true });

@@ -36,8 +36,9 @@ describe('parseCodexFile', () => {
       expect(session.endedAt).toBe(JSON.parse(readFileSync(codex.basic, 'utf8').trimEnd().split('\n').at(-1)!).timestamp);
     });
 
-    it('has no title and leaves commit SHAs for the git step', () => {
+    it('has no title or subagents and leaves commit SHAs for the git step', () => {
       expect(session.title).toBeNull();
+      expect(session.subagents).toEqual([]);
       expect(session.commitShas).toEqual([]);
     });
   });

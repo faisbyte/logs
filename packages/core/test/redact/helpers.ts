@@ -29,6 +29,7 @@ export function sessionWith(text: string): ParsedSession {
     models: [text],
     filesTouched: [text],
     commitShas: [text],
+    subagents: [{ agentType: text, description: text, prompt: text, finalText: text, filesTouched: [text], toolCallCount: 1 }],
     transcript: [
       { kind: 'user', timestamp: base.startedAt, text },
       { kind: 'assistant', timestamp: base.startedAt, text },

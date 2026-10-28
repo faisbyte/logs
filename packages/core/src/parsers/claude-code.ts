@@ -1,6 +1,6 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ParsedSession, ToolEntry, TranscriptEntry } from '../schema.js';
+import type { ParsedSession, Subagent, ToolEntry, TranscriptEntry } from '../schema.js';
 import { distinct, readJsonl } from './jsonl.js';
 
 interface ContentBlock {
@@ -122,13 +122,38 @@ function parseEvents(events: ClaudeEvent[]): { transcript: TranscriptEntry[]; to
   return { transcript, tools: [...toolsById.values()] };
 }
 
-/** Subagent transcripts live next to the main file: <session>/subagents/agent-*.jsonl. */
-function subagentTools(path: string): ToolEntry[] {
+const editedFiles = (tools: ToolEntry[]) => distinct(tools.filter((t) => EDIT_TOOLS.has(t.name) && t.status === 'ok').flatMap((t) => t.filePaths)).sort();
+
+function readMeta(path: string): { agentType?: string; description?: string } {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as { agentType?: string; description?: string };
+  } catch {
+    return {};
+  }
+}
+
+/** Subagent transcripts live next to the main file: <session>/subagents/agent-*.jsonl (+ .meta.json). */
+function parseSubagents(path: string): { subagents: Subagent[]; tools: ToolEntry[] } {
   const dir = join(path.replace(/\.jsonl$/, ''), 'subagents');
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+  if (!existsSync(dir)) return { subagents: [], tools: [] };
+  const parsed = readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
-    .flatMap((f) => parseEvents(readJsonl<ClaudeEvent>(join(dir, f))).tools);
+    .sort()
+    .map((f) => {
+      const { transcript, tools } = parseEvents(readJsonl<ClaudeEvent>(join(dir, f)));
+      const meta = readMeta(join(dir, f.replace(/\.jsonl$/, '.meta.json')));
+      const texts = (kind: 'user' | 'assistant') => transcript.filter((e) => e.kind === kind).map((e) => ('text' in e ? e.text : ''));
+      const subagent: Subagent = {
+        agentType: meta.agentType ?? null,
+        description: meta.description ?? null,
+        prompt: texts('user')[0] ?? null,
+        finalText: texts('assistant').at(-1) ?? null,
+        filesTouched: editedFiles(tools),
+        toolCallCount: tools.length,
+      };
+      return { subagent, tools };
+    });
+  return { subagents: parsed.map((p) => p.subagent), tools: parsed.flatMap((p) => p.tools) };
 }
 
 export function parseClaudeCodeFile(path: string): ParsedSession | null {
@@ -139,9 +164,9 @@ export function parseClaudeCodeFile(path: string): ParsedSession | null {
   if (!cwd || !sessionId) return null;
 
   const { transcript, tools } = parseEvents(events);
-  const allTools = [...tools, ...subagentTools(path)];
-  const edits = allTools.filter((t) => EDIT_TOOLS.has(t.name) && t.status === 'ok');
-  const filesTouched = distinct(edits.flatMap((t) => t.filePaths)).sort();
+  const { subagents, tools: subagentTools } = parseSubagents(path);
+  const allTools = [...tools, ...subagentTools];
+  const filesTouched = editedFiles(allTools);
 
   const times = events.map((e) => e.timestamp).filter((t): t is string => !!t).sort();
   const branches = distinct(events.map((e) => e.gitBranch));
@@ -163,6 +188,7 @@ export function parseClaudeCodeFile(path: string): ParsedSession | null {
     toolCallCount: allTools.length,
     filesTouched,
     commitShas: [],
+    subagents,
     transcript,
   };
 }

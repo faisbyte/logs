@@ -147,6 +147,7 @@ export function parseCodexFile(path: string): ParsedSession | null {
     toolCallCount: tools.length,
     filesTouched: distinct(edits.flatMap((t) => t.filePaths)).sort(),
     commitShas: [],
+    subagents: [],
     transcript,
   };
 }

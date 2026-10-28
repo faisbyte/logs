@@ -13,7 +13,7 @@ describe('redactSession', () => {
     JSON.stringify(session, (_k, v) => (typeof v === 'string' && strings.push(v), v));
     expect(JSON.stringify(session)).not.toContain(token);
     const free = strings.filter((s) => s.includes('see '));
-    expect(free).toHaveLength(18);
+    expect(free).toHaveLength(23);
     expect(free.every((s) => s === 'see [REDACTED:github_token] now')).toBe(true);
   });
 
@@ -32,12 +32,12 @@ describe('redactSession', () => {
   });
 
   it('counts replacements across the whole session', () => {
-    expect(redactSession(sessionWith(`see ${token} now`)).counts).toEqual({ github_token: 18 });
+    expect(redactSession(sessionWith(`see ${token} now`)).counts).toEqual({ github_token: 23 });
   });
 
   it('applies options everywhere', () => {
     const { session, counts } = redactSession(sessionWith('Project Falcon'), { deny: ['Project Falcon'] });
-    expect(counts).toEqual({ deny_list: 18 });
+    expect(counts).toEqual({ deny_list: 23 });
     expect(JSON.stringify(session)).not.toContain('Falcon');
   });
 
