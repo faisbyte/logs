@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ParsedSession, ToolEntry, TranscriptEntry } from '../schema.js';
+import { distinct, readJsonl } from './jsonl.js';
 
 interface ContentBlock {
   type: string;
@@ -34,8 +35,6 @@ const INJECTED_TAG =
 const INTERRUPTION = /^\[Request interrupted by user/;
 const REJECTION = /^The user doesn't want to proceed with this tool use/;
 const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-
-const distinct = (values: (string | undefined)[]) => [...new Set(values.filter((v): v is string => !!v))];
 
 function userEntry(event: ClaudeEvent): TranscriptEntry | null {
   if (event.isMeta || event.isCompactSummary) return null;
@@ -77,19 +76,6 @@ function resultText(content: string | ContentBlock[] | undefined): string {
     .map((b) => (b.type === 'text' ? b.text : b.type === 'image' ? '[image]' : undefined))
     .filter((t): t is string => t !== undefined)
     .join('\n');
-}
-
-function readEvents(path: string): ClaudeEvent[] {
-  const events: ClaudeEvent[] = [];
-  for (const line of readFileSync(path, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      events.push(JSON.parse(line) as ClaudeEvent);
-    } catch {
-      // A live session can end in a half-written line; skip anything unparseable.
-    }
-  }
-  return events;
 }
 
 function parseEvents(events: ClaudeEvent[]): { transcript: TranscriptEntry[]; tools: ToolEntry[] } {
@@ -142,11 +128,11 @@ function subagentTools(path: string): ToolEntry[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
-    .flatMap((f) => parseEvents(readEvents(join(dir, f))).tools);
+    .flatMap((f) => parseEvents(readJsonl<ClaudeEvent>(join(dir, f))).tools);
 }
 
 export function parseClaudeCodeFile(path: string): ParsedSession | null {
-  const events = readEvents(path);
+  const events = readJsonl<ClaudeEvent>(path);
 
   const cwd = events.find((e) => e.cwd)?.cwd;
   const sessionId = events.find((e) => e.sessionId)?.sessionId;
