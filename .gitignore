@@ -10,3 +10,6 @@ coverage/
 # Raw session data must never be committed. Fixtures in fixtures/ are hand-written.
 local-sessions/
 *.raw.jsonl
+
+# Temporary type-check projects created by tests
+packages/*/.typecheck-*/
