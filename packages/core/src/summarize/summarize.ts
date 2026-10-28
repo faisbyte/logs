@@ -125,8 +125,8 @@ export async function summarizeSession(redacted: RedactedSession, llm: LlmClient
   const s = redacted.session;
   if (isEmptySession(s as Parameters<typeof isEmptySession>[0])) throw new SummarizeError(`Session ${s.sourceSessionId} is empty; nothing to summarise.`);
 
-  const { metadata, turns } = condenseSession(redacted);
-  const chunks = chunkTurns(turns, options.chunkTokens);
+  const { metadata, turns, segmentStarts } = condenseSession(redacted);
+  const chunks = chunkTurns(turns, options.chunkTokens, segmentStarts);
   const usages: LlmUsage[] = [];
   const system = systemPrompt();
 
