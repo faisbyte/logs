@@ -1,0 +1,16 @@
+{
+  "fixture": "claude.messy",
+  "goal": "Make search faster.",
+  "outcome": "partial",
+  "whatWasDone": "The agent first added a Redis cache in front of the search query, but the developer rejected it because ops won't run another service. It removed the cache, wrote a Postgres trigram index migration, and a subagent rewrote the search query to order results by similarity() with a 0.3 threshold. Tests still fail on ranking, so the developer asked for a TODO and will pair on the migration.",
+  "decisions": [
+    { "decision": "Use a Postgres trigram (pg_trgm) index for search", "reason": "It speeds up search without running another service.", "mustMention": ["trigram|pg_trgm"] },
+    { "decision": "Order search results by similarity() with a 0.3 threshold", "reason": "Ranks results using the trigram index.", "mustMention": ["similarity|0\\.3|threshold"] }
+  ],
+  "rejectedApproaches": [
+    { "approach": "A Redis cache in front of the search query", "reason": "Ops won't run another service.", "mustMention": ["redis|cache"] }
+  ],
+  "risksOrFollowUps": ["The trigram migration is unfinished; the developer plans to pair on it.", "The search ranking test fails: exact matches are not ranked first."],
+  "aiInvolvement": "heavy",
+  "mustNotMention": ["websocket", "elasticsearch", "memcached", "polling"]
+}

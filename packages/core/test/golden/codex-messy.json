@@ -1,0 +1,15 @@
+{
+  "fixture": "codex.messy",
+  "goal": "Add live updates to the dashboard.",
+  "outcome": "partial",
+  "whatWasDone": "The agent started a websocket module, but installing the ws package failed and the developer stopped it because the proxy blocks websockets. It switched to polling every 10 seconds, removed the websocket module and wired polling into the dashboard. One dashboard test still fails because it expects a socket connection.",
+  "decisions": [
+    { "decision": "Poll for updates every 10 seconds", "reason": "The proxy blocks websockets.", "mustMention": ["poll"] }
+  ],
+  "rejectedApproaches": [
+    { "approach": "Live updates over websockets with the ws package", "reason": "The proxy blocks websockets.", "mustMention": ["websocket|\\bws\\b"] }
+  ],
+  "risksOrFollowUps": ["A dashboard test still expects a socket connection and fails."],
+  "aiInvolvement": "heavy",
+  "mustNotMention": ["redis", "\\bsse\\b|server-sent", "graphql"]
+}
