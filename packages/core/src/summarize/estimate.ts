@@ -3,10 +3,10 @@ import { chunkTurns, condenseSession, estimateTokens } from './condense.js';
 import { chunkMessage, mergeSystemPrompt, systemPrompt } from './prompt.js';
 import { estimateCostUsd, type SummarizeSettings } from './settings.js';
 
-// Calibrated on the Phase 3 real run (DECISIONS.md D22): the 2.5 chars/token figure under-counted input by up
-// to 32% (worst on small sessions, where the JSON schema in the prompt dominates), and one reply used 2,349
-// output tokens. Both margins keep every observed request at least 5% under its estimate.
-export const INPUT_SAFETY_MARGIN = 1.4;
+// Calibrated on the real runs (DECISIONS.md D22): the 2.5 chars/token figure under-counted input by up to 46%
+// (v2 shell-command lines tokenize densely; small sessions are dominated by the JSON schema), and one reply used
+// 2,349 output tokens. Both margins keep every observed request at least 5% under its estimate.
+export const INPUT_SAFETY_MARGIN = 1.6;
 export const OUTPUT_TOKENS_PER_CALL = 3_000;
 const MERGE_INPUT_TOKENS_PER_PART = 250;
 

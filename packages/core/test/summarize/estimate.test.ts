@@ -39,6 +39,10 @@ const observed = [
   { session: '1e399842', rawInput: 27_669, input: 29_412, requests: 1, output: 760 },
   { session: '0199ec34', rawInput: 2_610, input: 3_445, requests: 1, output: 320 },
   { session: '1740fae9 chunked', rawInput: 53_987, input: 61_909, requests: 5, output: 10_280 },
+  // v2 (shell commands in the transcript tokenize more densely than prose):
+  { session: '70aeaa9c v2', rawInput: 27_144, input: 39_502, requests: 4, output: 4_574 },
+  { session: '74ef5e02 v2', rawInput: 11_825, input: 16_089, requests: 4, output: 2_209 },
+  { session: 'ad86b19b v2', rawInput: 53_202, input: 67_702, requests: 5, output: 5_911 },
 ];
 
 describe('estimate safety margin', () => {
