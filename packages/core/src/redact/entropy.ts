@@ -13,6 +13,8 @@ const SAFE_SHAPES = [
   /\b(?:toolu|srvtoolu|msg|req|call|resp|rs|fc|file|batch|chatcmpl|run|thread|asst|step)_[A-Za-z0-9]+/g, // API object ids
   /-----BEGIN (?:[A-Z0-9]+ ){0,3}(?:PUBLIC KEY|CERTIFICATE(?: REQUEST)?)-----[\s\S]*?-----END [A-Z0-9 ]{0,60}-----/g, // public PEM blocks
   /\b(?:ssh-(?:rsa|dss|ed25519)|ecdsa-sha2-nistp\d{3}|sk-ssh-ed25519@openssh\.com) AAAA[A-Za-z0-9+/]+={0,3}/g, // SSH public keys
+  /\d{8}T(?:\d{2,6}(?:\.\d+)?Z?)?/g, // compact ISO 8601 dates and times in file names
+  /ABCDEFGHIJKLMNOPQRSTUVWXYZ|abcdefghijklmnopqrstuvwxyz/g, // alphabet constants
 ];
 
 function shannon(s: string): number {
@@ -23,15 +25,19 @@ function shannon(s: string): number {
   return h;
 }
 
-/** Share of characters inside dictionary-like runs (`get`, `User`, `Factor`): high for identifiers, low for random text. */
-const wordiness = (s: string) => (s.match(/[A-Z]?[a-z]{3,}/g) ?? []).join('').length / s.length;
+/**
+ * Share of alphanumerics inside dictionary-like runs (`User`, `factor`, `HTML`): high for identifiers
+ * and names, low for random text. Separators don't count, so `a__b-c` names score like `aBC`.
+ */
+const wordiness = (s: string) =>
+  (s.match(/[A-Z]?[a-z]{3,}|[A-Z]{4,}/g) ?? []).join('').length / (s.match(/[A-Za-z0-9]/g) ?? []).length;
 
 export function looksRandom(token: string): boolean {
   const s = token.replace(/=+$/, '');
   if (s.length < MIN_LENGTH) return false;
   if (!/[A-Z]/.test(s) || !/[a-z]/.test(s) || !/[0-9]/.test(s)) return false;
   if (/^[0-9a-f_-]+$/i.test(s)) return false; // hex: git SHAs and content hashes
-  if (wordiness(s) >= 0.6) return false;
+  if (wordiness(s) >= 0.62) return false;
   // Random base62 of length n has entropy close to log2(min(n, 64)); allow the gap seen at its 99.5th percentile.
   const ceiling = Math.log2(Math.min(s.length, 64));
   return ceiling - shannon(s) <= 0.5 + 0.01 * Math.min(s.length, 64);
