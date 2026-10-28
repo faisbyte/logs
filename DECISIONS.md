@@ -64,3 +64,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** `.digest/state.json` records sessions marked processed, each with a fingerprint, so a session that grows after processing shows as "changed". `digest list` only reads it and shows new / changed / processed.
 - **Alternatives:** `digest list` records every session it sees and flags what's new since the last run.
 - **Why:** Keeps "processed" meaning one thing, and avoids a list command with side effects. Until summarisation lands (Phase 3), every session shows as "new". (Chosen by the project owner.)
+
+## D10. Tool-output truncation is a separate step with head-and-tail limits
+
+- **Date:** 2026-10-28
+- **Decision:** Parsers keep full tool output. `truncateToolOutputs()` runs before anything consumes content (redaction, summarisation). It drops `Read` output (file dumps) entirely, keeps the first and last 1,000 of any output over 2,000 chars with a "[… N chars truncated …]" marker, and caps tool input summaries at 500 chars. Prompts, assistant text, reasoning, tool names and file paths are never truncated.
+- **Alternatives:** Truncate inside the parsers; keep the head only.
+- **Why:** Keeping parsing and condensing apart lets later phases tune the limits without re-parsing. The tail of command output usually holds the error or test summary, and real outputs reach 525 KB.
