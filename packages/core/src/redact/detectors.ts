@@ -31,5 +31,8 @@ export const DETECTORS: Detector[] = [
   regexDetector('aws_secret', /(?:aws_?secret_?access_?key|SecretAccessKey)["']?\s*[:=]\s*["']?([A-Za-z0-9/+]{40})(?![A-Za-z0-9/+])/i, { group: 1 }),
   regexDetector('github_token', /\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b/),
   regexDetector('anthropic_key', /\bsk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_-]{20,}/),
+  regexDetector('jwt', /\beyJ[\w-]{8,}\.eyJ[\w-]{8,}\.[\w-]*/),
+  // Whole PEM block; with no END line (truncated output) it runs to the end of the text.
+  regexDetector('private_key', /-----BEGIN[A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END[A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----|$)/),
   regexDetector('openai_key', /\bsk-(?!ant-)(?:(?:proj|svcacct|admin)-)?[A-Za-z0-9_-]{20,}/, { validate: mixedCaseWithDigits }),
 ];

@@ -54,6 +54,20 @@ const anthropicKey = `sk-ant-api03-${base64url(93)}AA`;
 const openaiProject = `sk-proj-${base64url(64)}`;
 const openaiLegacy = `sk-${base62(48)}`;
 
+const b64url = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+export const jwt = () => `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url({ sub: `user-${base62(6)}`, iat: 1767225600 })}.${base64url(43)}`;
+const jwtToken = jwt();
+
+// PEM armour assembled from fragments; the body is random base64, not a real key.
+export const pem = (label: string, lines = 6) =>
+  [`-----BEGIN ${label}-----`, ...Array.from({ length: lines }, () => base64(64)), `-----END ${label}-----`].join('\n');
+const pk = (kind: string) => `${kind}PRIVATE ${'KEY'}`;
+const rsaKey = pem(pk('RSA '));
+const opensshKey = pem(pk('OPENSSH '));
+const pkcs8Key = pem(pk(''));
+const pgpKey = pem(`PGP ${pk('')} BLOCK`);
+const keyBody = (block: string) => block.split('\n').slice(1, -1).join('\n');
+
 export const corpus: CorpusEntry[] = [
   { type: 'aws_key', secret: awsDocExample, contexts: embed(awsDocExample, 'AWS_ACCESS_KEY_ID') },
   { type: 'aws_key', secret: awsGenerated, contexts: [...embed(awsGenerated, 'AWS_ACCESS_KEY_ID'), `aws configure set aws_access_key_id ${awsGenerated}`] },
@@ -65,4 +79,12 @@ export const corpus: CorpusEntry[] = [
   { type: 'anthropic_key', secret: anthropicKey, contexts: embed(anthropicKey, 'ANTHROPIC_API_KEY') },
   { type: 'openai_key', secret: openaiProject, contexts: embed(openaiProject, 'OPENAI_API_KEY') },
   { type: 'openai_key', secret: openaiLegacy, contexts: embed(openaiLegacy, 'OPENAI_API_KEY') },
+  { type: 'jwt', secret: jwtToken, contexts: [...embed(jwtToken, 'SESSION_JWT'), `Authorization: Bearer ${jwtToken}`] },
+  { type: 'private_key', secret: keyBody(rsaKey), contexts: [`Here is the deploy key:\n${rsaKey}\nkeep it safe`, `cat ~/.ssh/id_rsa\n${rsaKey}`] },
+  { type: 'private_key', secret: keyBody(opensshKey), contexts: [opensshKey] },
+  // Service-account JSON stores the PEM with escaped newlines.
+  { type: 'private_key', secret: keyBody(pkcs8Key).split('\n')[0]!, contexts: [JSON.stringify({ type: 'service_account', private_key: pkcs8Key, client_email: 'bot@acme.iam' })] },
+  { type: 'private_key', secret: keyBody(pgpKey), contexts: [pgpKey] },
+  // Truncated tool output: BEGIN without END.
+  { type: 'private_key', secret: keyBody(rsaKey).split('\n')[0]!, contexts: [rsaKey.split('\n').slice(0, 3).join('\n')] },
 ];

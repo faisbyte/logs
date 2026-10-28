@@ -1,4 +1,4 @@
-export type PlaceholderType = 'aws_key' | 'aws_secret' | 'github_token' | 'anthropic_key' | 'openai_key';
+export type PlaceholderType = 'aws_key' | 'aws_secret' | 'github_token' | 'anthropic_key' | 'openai_key' | 'jwt' | 'private_key';
 
 export type RedactionCounts = Partial<Record<PlaceholderType, number>>;
 
