@@ -114,6 +114,13 @@ describe('parseClaudeCodeFile', () => {
       expect(write).toMatchObject({ input: `${REPO}/src/middleware/rateLimit.ts` });
     });
 
+    it('records Bash exit codes: 0 on success, N from "Exit code N" on failure, none when rejected', () => {
+      expect(basic.transcript.filter((e) => e.kind === 'tool' && e.name === 'Bash').map((e) => e.kind === 'tool' && e.exitCode)).toEqual([0, 0, 0]);
+      expect(tool('Bash', 'cd /tmp && pnpm --dir /work/acme-webapp test')).toMatchObject({ exitCode: 1 });
+      expect(tool('Bash', 'pnpm add redis')).toMatchObject({ exitCode: null });
+      expect(tool('Agent', 'general-purpose: Rewrite search query for trigram index')).toMatchObject({ exitCode: null });
+    });
+
     it('marks rejected and failed tool calls', () => {
       expect(tool('Bash', 'pnpm add redis')).toMatchObject({ status: 'rejected' });
       expect(tool('Bash', 'cd /tmp && pnpm --dir /work/acme-webapp test')).toMatchObject({ status: 'error' });

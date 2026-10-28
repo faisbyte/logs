@@ -19,6 +19,7 @@ function sessionWithTool(tool: Partial<ToolEntry>): ParsedSession {
     output: 'ok',
     outputTruncated: false,
     status: 'ok',
+    exitCode: null,
     ...tool,
   };
   return { ...base, transcript: [entry] };

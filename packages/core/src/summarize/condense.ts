@@ -8,6 +8,13 @@ const MAX_PROMPT_CHARS = 4_000;
 const MAX_REPLY_CHARS = 2_000;
 const MAX_SUBAGENT_CHARS = 300;
 const MAX_FILES_LISTED = 50;
+const MAX_COMMAND_CHARS = 120;
+const SHELL_TOOLS = new Set(['Bash', 'shell']);
+
+function commandLine(input: string): string {
+  const first = input.split('\n')[0]!.trim();
+  return first.length > MAX_COMMAND_CHARS ? `${first.slice(0, MAX_COMMAND_CHARS)}…` : first;
+}
 
 export interface CondensedSession {
   /** Session facts and subagents; sent with every chunk. */
@@ -37,8 +44,11 @@ function entryLine(entry: DeepReadonly<TranscriptEntry>, rel: (p: string) => str
     case 'interruption':
       return '[user interrupted]';
     case 'tool': {
+      const status =
+        entry.status === 'rejected' ? ' (rejected by user)' : entry.exitCode !== null && SHELL_TOOLS.has(entry.name) ? ` (exit ${entry.exitCode})` : entry.status === 'error' ? ' (failed)' : '';
+      // Shell calls show the command's first line (already redacted), so the summariser can see tests, installs and commits.
+      if (SHELL_TOOLS.has(entry.name)) return `TOOL ${entry.name}: ${commandLine(entry.input)}${status}`;
       const paths = entry.filePaths.map(rel).join(', ');
-      const status = entry.status === 'rejected' ? ' (rejected by user)' : entry.status === 'error' ? ' (failed)' : '';
       return `TOOL ${entry.name}${paths ? ` ${paths}` : ''}${status}`;
     }
     case 'reasoning':
