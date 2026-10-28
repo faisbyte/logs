@@ -5,3 +5,4 @@ export { isInRepo } from './repo.js';
 export { truncateToolOutputs, type TruncateLimits } from './truncate.js';
 export { agentDirs, discoverSessionFiles, loadSessions, type AgentDirs, type SessionFile } from './discover.js';
 export { commitsDuring, findRepoRoot } from './git.js';
+export * from './state.js';
