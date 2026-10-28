@@ -214,3 +214,14 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   One final call, with its own strict schema, writes the whole-session narrative (goal, outcome, what was done, AI involvement) from the part summaries. A session that fits in one chunk makes exactly one call.
 - **Alternatives:** Summarise chunks independently and let one LLM merge call reconcile everything; a rolling summary that rewrites itself each part.
 - **Why:** The owner's test case, a decision made early and reversed later, has to end up as a rejected approach. Leaving that to a free-text merge can't be checked; tracking IDs makes it deterministic and testable with the fake model. Parts run sequentially, which costs latency, but they can't see later decisions otherwise.
+
+## D25. Summary cache and drafts live in .digest/, keyed by what produced them
+
+- **Date:** 2026-10-28
+- **Decision:** The cache key is `sha256(sessionId, contentHash, promptVersion, model)`. `contentHash` hashes the condensed, redacted text plus the chunk size, so it changes when the session grows, when redaction settings change, or when chunking changes. Bumping `PROMPT_VERSION` or switching model also invalidates. Files:
+  - cache entries: `.digest/cache/summaries/<key>.json`
+  - latest draft per session: `.digest/summaries/<agent>-<id>.json`, status `draft`
+  - usage log: each generated summary appends one line to `.digest/usage.jsonl` (input and output tokens, request count, estimated cost); cache hits don't
+  - corrupt cache entries count as misses
+- **Alternatives:** Key on the source file's hash (misses redaction-config changes); cache in the OS temp directory.
+- **Why:** Keying on exactly what the model sees means a summary is reused only when an identical request would be sent. `.digest/` is already self-ignoring (D9), so drafts never reach git, and nothing is uploaded in Phase 3.

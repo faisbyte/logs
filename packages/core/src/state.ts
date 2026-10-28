@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { ensureDigestDir } from './digest-dir.js';
 import type { Agent } from './schema.js';
 
 // Tracks sessions already processed, per repo, in .digest/state.json (DECISIONS.md D9).
@@ -38,10 +39,7 @@ export function readState(repoRoot: string): DigestState {
 }
 
 export function writeState(repoRoot: string, state: DigestState): void {
-  const dir = join(repoRoot, '.digest');
-  mkdirSync(dir, { recursive: true });
-  // Self-ignoring directory: stays out of git without editing the repo's own .gitignore.
-  writeFileSync(join(dir, '.gitignore'), '*\n');
+  ensureDigestDir(repoRoot);
   writeFileSync(join(repoRoot, STATE_FILE), JSON.stringify(DigestStateSchema.parse(state), null, 2) + '\n');
 }
 
