@@ -20,8 +20,17 @@ export const LlmSummarySchema = z.strictObject({
 });
 export type LlmSummary = z.infer<typeof LlmSummarySchema>;
 
+/** The narrative fields, merged by one final call for sessions summarised in parts. */
+export const NarrativeSchema = z.strictObject({
+  goal: LlmSummarySchema.shape.goal,
+  outcome: LlmSummarySchema.shape.outcome,
+  whatWasDone: LlmSummarySchema.shape.whatWasDone,
+  aiInvolvement: LlmSummarySchema.shape.aiInvolvement,
+});
+export type Narrative = z.infer<typeof NarrativeSchema>;
+
 /** Checks a schema can't express: no code blocks and no redaction placeholders anywhere. */
-export function postCheck(summary: LlmSummary): string[] {
+export function postCheck(summary: object): string[] {
   const issues: string[] = [];
   const visit = (value: unknown, path: string) => {
     if (typeof value === 'string') {

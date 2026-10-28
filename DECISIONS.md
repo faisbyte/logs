@@ -203,3 +203,14 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - `AnthropicLlmClient`, the real API, used only by the CLI and by opt-in tests behind environment variables
 - **Alternatives:** A guard only at `summarizeSession()`; brand the prompt string instead of carrying the session.
 - **Why:** The owner asked for a hard check at every LLM and network entry point. Carrying the session means the check runs inside the client, so a future caller that builds requests some other way still can't skip it. The fake keeps tests free, deterministic and offline.
+
+## D24. Long sessions: sequential parts, decisions tracked by id, lists merged in code
+
+- **Date:** 2026-10-28
+- **Decision:** Chunks are summarised in order. Each part's prompt lists the still-open decisions from earlier parts as `D1`, `D2`, …, and a part reports a reversal by ID in `reversedDecisions` (with the reason). The lists are then merged deterministically:
+  - reversed decisions move to `rejectedApproaches` with the reversal reason
+  - other decisions, rejected approaches and follow-ups are concatenated and de-duplicated
+
+  One final call, with its own strict schema, writes the whole-session narrative (goal, outcome, what was done, AI involvement) from the part summaries. A session that fits in one chunk makes exactly one call.
+- **Alternatives:** Summarise chunks independently and let one LLM merge call reconcile everything; a rolling summary that rewrites itself each part.
+- **Why:** The owner's test case, a decision made early and reversed later, has to end up as a rejected approach. Leaving that to a free-text merge can't be checked; tracking IDs makes it deterministic and testable with the fake model. Parts run sequentially, which costs latency, but they can't see later decisions otherwise.
