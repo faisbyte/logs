@@ -92,6 +92,19 @@ describe('digest list', () => {
     expect(stdout).toContain(join(FIXTURES, 'claude-code', 'projects'));
   });
 
+  it('lengthens short session ids until they are unique, like git short SHAs', async () => {
+    // Codex ids are time-based (UUIDv7), so sessions started together share long prefixes.
+    const codexHome = tempDir('digest-codex-');
+    const day = join(codexHome, 'sessions/2026/03/02');
+    mkdirSync(day, { recursive: true });
+    const original = readFileSync(join(FIXTURES, 'codex/sessions/2026/03/02/rollout-2026-03-02T21-00-00-019c0001-0000-7000-8000-000000000001.jsonl'), 'utf8');
+    for (const id of ['019c0001-aaaa-7000-8000-000000000001', '019c0001-bbbb-7000-8000-000000000001']) {
+      writeFileSync(join(day, `rollout-2026-03-02T21-00-00-${id}.jsonl`), original.replaceAll('019c0001-0000-7000-8000-000000000001', id));
+    }
+    const { stdout } = await run(['list', '--repo', '/work/acme-webapp'], { env: { CLAUDE_CONFIG_DIR: tempDir('digest-noclaude-'), CODEX_HOME: codexHome } });
+    expect(rows(stdout).map((r) => r.split(/\s{2,}/)[2]).sort()).toEqual(['019c0001-a', '019c0001-b']);
+  });
+
   it('reports an unreadable state file instead of crashing', async () => {
     const repo = tempDir('digest-badstate-');
     mkdirSync(join(repo, '.digest'));

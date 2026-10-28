@@ -45,12 +45,21 @@ function titleOf(session: ParsedSession): string {
   return text.length > 60 ? `${text.slice(0, 59)}…` : text;
 }
 
+/** Shortest prefix (at least 8 chars) that tells every listed session apart, like git short SHAs. */
+function shortIdLength(ids: string[]): number {
+  const unique = new Set(ids).size;
+  let n = 8;
+  while (new Set(ids.map((id) => id.slice(0, n))).size < unique) n++;
+  return n;
+}
+
 function table(sessions: ListedSession[], timeZone: string | undefined): string {
+  const idLength = shortIdLength(sessions.map((s) => s.sourceSessionId));
   const header = ['STARTED', 'AGENT', 'SESSION', 'DURATION', 'TURNS', 'TOOLS', 'FILES', 'COMMITS', 'STATUS', 'BRANCH', 'TITLE'];
   const rows = sessions.map((s) => [
     formatStarted(s.startedAt, timeZone),
     s.agent,
-    s.sourceSessionId.slice(0, 8),
+    s.sourceSessionId.slice(0, idLength),
     formatDuration(s.startedAt, s.endedAt),
     String(s.turnCount),
     String(s.toolCallCount),
