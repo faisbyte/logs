@@ -11,7 +11,7 @@ import {
   type SessionStatus,
 } from '@digest/core';
 import type { CliContext } from './cli.js';
-import { NOT_IN_REPO, repoSessions, resolveRepoRoot, shortIdLength } from './sessions.js';
+import { repoSessions, resolveRepoRoot, shortIdLength } from './sessions.js';
 
 type ListedSession = ParsedSession & { status: SessionStatus };
 
@@ -60,11 +60,12 @@ function table(sessions: ListedSession[], timeZone: string | undefined): string 
 const repoRelative = (repoRoot: string, path: string) => (isInRepo({ cwd: path }, repoRoot) ? relative(repoRoot, path) : path);
 
 export function listCommand(options: { repo?: string; json?: boolean; all?: boolean }, ctx: CliContext): number {
-  const repoRoot = resolveRepoRoot(options.repo, ctx.cwd);
-  if (!repoRoot) {
-    ctx.stderr(`digest list: ${NOT_IN_REPO}\n`);
+  const resolved = resolveRepoRoot(options.repo, ctx);
+  if ('error' in resolved) {
+    ctx.stderr(`digest list: ${resolved.error}\n`);
     return 1;
   }
+  const repoRoot = resolved.root;
 
   const state = readState(repoRoot);
   const { dirs, sessions: inRepo } = repoSessions(repoRoot, ctx);

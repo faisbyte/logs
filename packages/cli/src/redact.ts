@@ -1,14 +1,15 @@
 import { readConfig, redactSession, type RedactionCounts } from '@digest/core';
 import type { CliContext } from './cli.js';
-import { findSession, NOT_IN_REPO, repoSessions, resolveRepoRoot } from './sessions.js';
+import { findSession, repoSessions, resolveRepoRoot } from './sessions.js';
 
 /** Redacts one session's full transcript and prints how many values of each type were replaced. Never the values. */
 export function redactCommand(sessionId: string, options: { repo?: string }, ctx: CliContext): number {
-  const repoRoot = resolveRepoRoot(options.repo, ctx.cwd);
-  if (!repoRoot) {
-    ctx.stderr(`digest redact: ${NOT_IN_REPO}\n`);
+  const resolved = resolveRepoRoot(options.repo, ctx);
+  if ('error' in resolved) {
+    ctx.stderr(`digest redact: ${resolved.error}\n`);
     return 1;
   }
+  const repoRoot = resolved.root;
 
   const config = readConfig(repoRoot);
   const found = findSession(repoSessions(repoRoot, ctx).sessions, sessionId, repoRoot);

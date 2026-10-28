@@ -259,3 +259,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   It also fills `commitShas` from git (D6). When the transcript yields no in-repo files but commits were made during the session, `filesTouched` falls back to the files those commits changed.
 - **Alternatives:** Keep paths relative to the cwd; keep outside paths but mark them.
 - **Why:** Stakeholders and teammates care about the project's files, not scratch files or agent memory. The real `thrift` session listed one file per worktree copy, and Bash-only sessions listed nothing at all; the commit fallback covers the second case (the Phase 1 gap).
+
+## D30. Writes only go to a valid repo; nothing outside it is created
+
+- **Date:** 2026-10-28
+- **Decision:** Commands that write (`summarize`, and the Phase 4 review commands) require a repo path that exists, is inside a git repo, and whose root isn't the home directory. Otherwise they stop with `skipped: … drafts need a valid repo`. `ensureDigestDir()` refuses to create a missing repo root. Read-only commands (`list`, `redact`) still accept a non-git path, but also refuse the home directory.
+- **Alternatives:** Fall back to the raw path, as before; allow the home directory with a warning.
+- **Why:** The Phase 3 run recreated a deleted project folder (`~/Documents/GitHub/pretian-takehome`), because `mkdir -p` built the missing root, and wrote `~/.digest/` because the home directory is a git repo on this machine. A home-directory "repo" holds every project, so per-repo state there is meaningless. Both stray folders were deleted at the owner's request.

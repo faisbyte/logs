@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +14,7 @@ const tempDir = (prefix: string) => realpathSync(mkdtempSync(join(tmpdir(), pref
 /** Copies every fixture session, rewriting /work/acme-webapp to a temp repo the CLI can write .digest/ into. */
 function fixtureRepo() {
   const repo = tempDir('digest-sum-repo-');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
   const home = tempDir('digest-sum-agents-');
   cpSync(join(FIXTURES, 'claude-code'), join(home, 'claude'), { recursive: true });
   cpSync(join(FIXTURES, 'codex'), join(home, 'codex'), { recursive: true });
@@ -151,6 +153,24 @@ describe('digest summarize', () => {
     expect((await run(['summarize', 'ffffffff', '--repo', repo], env, { llm })).stderr).toContain('No session matching');
     expect((await run(['summarize', '--repo', repo], env, { llm })).stderr).toContain('session id or --all');
     expect(llm.requests).toEqual([]);
+  });
+
+  it('skips a repo that does not exist, without creating it', async () => {
+    const { env } = fixtureRepo();
+    const gone = join(tmpdir(), `digest-gone-${Date.now()}`);
+    const { exitCode, stderr } = await run(['summarize', 'c1a5e001', '--repo', gone], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain(`skipped: ${gone} does not exist`);
+    expect(existsSync(gone)).toBe(false);
+  });
+
+  it('skips a directory that is not in a git repo, and the home directory', async () => {
+    const { repo, env } = fixtureRepo();
+    const plain = tempDir('digest-plain-');
+    expect((await run(['summarize', '--all', '--repo', plain], env, { llm: new FakeLlmClient(reply) })).stderr).toContain('is not inside a git repository');
+    const asHome = await run(['summarize', '--all', '--repo', repo], env, { llm: new FakeLlmClient(reply), homeDir: repo });
+    expect(asHome.stderr).toContain('home directory');
+    expect(existsSync(join(plain, '.digest'))).toBe(false);
   });
 
   it('honours the model and redaction settings in .digest/config.json', async () => {
