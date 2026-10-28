@@ -36,3 +36,4 @@ Run the CLI from the repo root with `node packages/cli/dist/bin.js <command>`.
 
 - [PROJECT_PLAN.md](PROJECT_PLAN.md): goals, architecture, phases
 - [DECISIONS.md](DECISIONS.md): architectural decisions and why they were made
+- [docs/formats.md](docs/formats.md): Claude Code and Codex session file formats, as observed
