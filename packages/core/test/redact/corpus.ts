@@ -99,6 +99,14 @@ const unknownContexts = (v: string) => [
   `VENDOR_CONFIG=${v}`,
 ];
 
+const email = `${pick('abcdefghijklmnopqrstuvwxyz', 6)}.${pick('abcdefghijklmnopqrstuvwxyz', 5)}@example.org`;
+const phone = `+61 4${pick('0123456789', 2)} ${pick('0123456789', 3)} ${pick('0123456789', 3)}`;
+const piiContexts = (v: string) => [
+  `Can you email ${v} once the deploy is done?`,
+  JSON.stringify({ customer: { name: 'Test User', contact: v } }),
+  `curl -d 'contact=${v}' https://crm.example.com/leads`,
+];
+
 export const corpus: CorpusEntry[] = [
   { type: 'aws_key', secret: awsDocExample, contexts: embed(awsDocExample, 'AWS_ACCESS_KEY_ID') },
   { type: 'aws_key', secret: awsGenerated, contexts: [...embed(awsGenerated, 'AWS_ACCESS_KEY_ID'), `aws configure set aws_access_key_id ${awsGenerated}`] },
@@ -120,6 +128,8 @@ export const corpus: CorpusEntry[] = [
   { type: 'connection_string', secret: dbPassword, contexts: connectionContexts(dbPassword) },
   { type: 'high_entropy', secret: vendorToken, contexts: unknownContexts(vendorToken) },
   { type: 'high_entropy', secret: stripeLike, contexts: unknownContexts(stripeLike) },
+  { type: 'email', secret: email, contexts: [...piiContexts(email), `git config user.email "${email}"`] },
+  { type: 'phone', secret: phone, contexts: piiContexts(phone) },
   // Truncated tool output: BEGIN without END.
   { type: 'private_key', secret: keyBody(rsaKey).split('\n')[0]!, contexts: [rsaKey.split('\n').slice(0, 3).join('\n')] },
 ];

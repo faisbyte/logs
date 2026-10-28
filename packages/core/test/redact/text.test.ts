@@ -121,6 +121,11 @@ describe('redactText', () => {
       expect(redactText(text).text).toBe(text);
     });
 
+    it('does not mistake Author or Authored keys for auth', () => {
+      const text = 'Author: Jane\nCo-Authored-By: Dev Bot\nauthored: yes';
+      expect(redactText(text, { pii: { email: false } }).text).toBe(text);
+    });
+
     it('ignores secret-ish words in the middle of prose', () => {
       const text = 'The request failed with Invalid token: expired after an hour.';
       expect(redactText(text).text).toBe(text);

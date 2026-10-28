@@ -99,3 +99,12 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - On 20,000 random tokens per length, the 0.62 cut misses about 2–3% at 20 chars and under 1% at 32+. Identifiers and names score 0.63–0.94. The entropy band sits at the random 99.5th percentile by length.
   - Calibrated on the developer's 15 real sessions: false-positive tests for every shape found came first, and hits dropped from 121 to about 21, most of which look like real tokens.
   - **Known costs:** pure-hex secrets and all-lowercase random tokens are never flagged by entropy, though they're still caught when assigned to a secret-named key (D12). A few separator-joined names with 3-letter words are still flagged.
+
+## D14. PII redaction (emails and phone numbers) is on by default
+
+- **Date:** 2026-10-28
+- **Decision:** Emails and phone numbers are redacted unless turned off with `.digest/config.json` → `redaction.pii.email` / `redaction.pii.phone` set to `false`.
+  - **Phones:** formatted numbers only: `+international`, `(area) code`, national numbers with a leading `0`, and US `NNN-NNN-NNNN`, with 8–15 digits.
+  - **Emails:** SSH remotes (`git@github.com:org/repo`) and URL user info (`ssh://git@host`, `https://user:token@host`) aren't treated as emails.
+- **Alternatives:** Off by default (opt in), as the plan's "optional" wording allows.
+- **Why:** Summaries go to managers, and the narrative never needs a colleague's or customer's address, so redacting costs little and fails safe. On the developer's 15 real sessions, 84 of 91 email hits were `noreply`/`example.*` addresses (commit trailers, test data). Phone detection fired once, on what looks like a real number, and never on dates, versions, IPs or IDs. Opt-out keeps it available for teams that want names and contacts in digests.

@@ -1,5 +1,5 @@
-import { DETECTORS } from './detectors.js';
-import { placeholder, PRIORITY, type RedactionCounts, type Span } from './types.js';
+import { detectorsFor } from './detectors.js';
+import { placeholder, PRIORITY, type RedactionCounts, type RedactOptions, type Span } from './types.js';
 
 export interface RedactedText {
   text: string;
@@ -23,10 +23,10 @@ function merge(spans: Span[]): Span[] {
 
 const EXISTING_PLACEHOLDER = /\[REDACTED:[a-z_]+\]/g;
 
-export function redactText(text: string): RedactedText {
+export function redactText(text: string, options: RedactOptions = {}): RedactedText {
   // Detectors see existing placeholders as blanks, so redacting twice changes nothing.
   const scanned = text.replace(EXISTING_PLACEHOLDER, (p) => ' '.repeat(p.length));
-  const spans = merge(DETECTORS.flatMap((d) => d.find(scanned).map((s) => ({ ...s, type: d.type }))));
+  const spans = merge(detectorsFor(options).flatMap((d) => d.find(scanned).map((s) => ({ ...s, type: d.type }))));
 
   const counts: RedactionCounts = {};
   let out = '';
