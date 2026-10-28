@@ -9,8 +9,8 @@ interface RegexOptions {
   group?: number;
   /** Skip the regex entirely unless the text contains this substring (cheap guard for costly patterns). */
   requires?: string;
-  /** Extra check on the redacted text (and the text before it); rejects look-alikes a regex alone can't. */
-  validate?: (value: string, before: string) => boolean;
+  /** Extra check on the redacted text and its surroundings; rejects look-alikes a regex alone can't. */
+  validate?: (value: string, before: string, after: string) => boolean;
 }
 
 function regexDetector(type: PlaceholderType, regex: RegExp, { group = 0, requires, validate }: RegexOptions = {}): Detector {
@@ -23,7 +23,8 @@ function regexDetector(type: PlaceholderType, regex: RegExp, { group = 0, requir
       return [...text.matchAll(pattern)].flatMap((m) => {
         const range = m.indices?.[group];
         if (!range || range[1] <= range[0]) return [];
-        if (validate && !validate(text.slice(range[0], range[1]), text.slice(Math.max(0, range[0] - 200), range[0]))) return [];
+        const [start, end] = range;
+        if (validate && !validate(text.slice(start, end), text.slice(Math.max(0, start - 200), start), text.slice(end, end + 2))) return [];
         return [{ start: range[0], end: range[1] }];
       });
     },
@@ -35,10 +36,20 @@ const mixedCaseWithDigits = (s: string) => /[A-Z]/.test(s) && /[a-z]/.test(s) &&
 // Key names that suggest a secret value (DECISIONS.md D12): *SECRET*, *TOKEN*, *PASSWORD*, *API_KEY*, ...
 const SECRET_KEY =
   '[\\w.-]{0,64}(?:secret|token|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|auth(?![a-z])|authorization|credentials?|session[_-]?key|signing[_-]?key|encryption[_-]?key|dsn)[\\w.-]{0,64}';
-// Values that are references, types or placeholders rather than secrets.
+// Values that are references, types, booleans or placeholders rather than secrets.
 const NOT_A_SECRET =
-  /^(?:\$\{?[\w.]+\}?|%\w+%|\{\{.*\}\}|<[^>]*>|(?:process\.)?env\.\w+|os\.environ.*|true|false|null|none|nil|undefined|string|number|boolean|bool|str|int|any|unknown|object|\d+(?:\.\d+)?|\*+|x+)$/i;
-const looksSecret = (value: string) => !NOT_A_SECRET.test(value);
+  /^(?:\$\{?[\w.]+\}?|\$\{\{.*\}\}|\$\(.*\)|%\w+%|\{\{.*\}\}|<[^>]*>|(?:process\.)?env\.\w+|os\.environ.*|true|false|yes|no|on|off|enabled|disabled|null|none|nil|undefined|string|number|boolean|bool|str|int|any|unknown|object|\d+(?:\.\d+)?|\*+|x+)$/i;
+// config.apiKey, settings.SECRET_KEY: a property reference, not a value.
+const DOTTED_REFERENCE = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/;
+const IDENTIFIER = /^[A-Za-z_$][\w$.]*$/;
+function looksSecret(value: string, _before: string, after: string): boolean {
+  if (NOT_A_SECRET.test(value) || DOTTED_REFERENCE.test(value)) return false;
+  // The value regex stops at "(", "{" and "[", so look at what follows: getToken(), $(cmd), ${{ x }}, process.env["X"].
+  if (IDENTIFIER.test(value.replace(/\($/, '')) && (value.endsWith('(') || after.startsWith('('))) return false;
+  if (/^\$[({]/.test(value) || (value === '$' && /^[{(]/.test(after))) return false; // $(cmd), ${VAR}, ${{ x }}
+  if (/^(?:process\.env|import\.meta\.env|os\.environ|ENV)$/.test(value) && after.startsWith('[')) return false;
+  return true;
+}
 const SCHEME = '(?:(?:Bearer|Basic|Token)[ \\t]+)?';
 const envSecret = (pattern: string, flags = 'i') => regexDetector('env_secret', new RegExp(pattern, flags), { group: 1, validate: looksSecret });
 

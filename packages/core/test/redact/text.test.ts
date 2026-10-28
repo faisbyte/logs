@@ -126,6 +126,22 @@ describe('redactText', () => {
       expect(redactText(text, { pii: { email: false } }).text).toBe(text);
     });
 
+    // Shapes found among real env_secret hits (rebuilt, not copied).
+    it.each([
+      ['a function call', 'TOKEN=getToken()\n  token: getToken(),\n  api_key: os.getenv("API_KEY")'],
+      ['a dotted reference', '  apiKey: config.apiKey,\nSECRET=settings.SECRET_KEY'],
+      ['boolean-like words', 'ENABLE_AUTH=yes\nauth: off\n  token_required: enabled\nAPI_KEY_ROTATION=no'],
+      ['a GitHub Actions secret reference', '  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}'],
+      ['a shell command substitution', 'export TOKEN="$(cat ~/.token)"\nAPI_KEY=$(pass show api)'],
+      ['an env lookup with brackets', '  apiKey: process.env["API_KEY"]'],
+    ])('does not treat %s as a secret', (_label, text) => {
+      expect(redactText(text, { pii: { email: false } }).text).toBe(text);
+    });
+
+    it('still redacts bare words and identifiers, which could be weak passwords', () => {
+      expect(redactText('DB_PASSWORD=hunter_two\n  password: letmein').counts).toEqual({ env_secret: 2 });
+    });
+
     it('ignores secret-ish words in the middle of prose', () => {
       const text = 'The request failed with Invalid token: expired after an hour.';
       expect(redactText(text).text).toBe(text);

@@ -85,6 +85,13 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** `KEY=value`, `"key": "value"`, `key: value` (at line start or inside a quoted header) and `Authorization: Bearer …` are redacted only when the key name contains `secret`, `token`, `password`/`passwd`/`pwd`, `api_key`, `access_key`, `private_key`, `auth`, `credential`, `session_key`, `signing_key`, `encryption_key` or `dsn`. Values that are numbers, booleans, type names, variable references (`$X`, `${X}`, `process.env.X`) or placeholders (`<…>`, `***`) are kept. Unquoted `key: value` in the middle of prose isn't matched.
 - **Alternatives:** Redact every `KEY=value`.
 - **Why:** The convention used by gitleaks and detect-secrets. Redacting every assignment would wipe `NODE_ENV=production`, `TZ=UTC`, `PORT=3000` and similar from commands that summaries need. Unnamed secrets are still caught by the provider patterns and the entropy detector. Known cost: some code false positives, for example `token: getToken()` at line start.
+- **Update (2026-10-28):** Values that are clearly not secrets are now also kept:
+  - function calls (`getToken()`, `os.getenv("X")`)
+  - dotted references (`config.apiKey`)
+  - `yes`/`no`/`on`/`off`/`enabled`/`disabled`
+  - `${{ secrets.X }}`, `$(cmd)` and `process.env["X"]`
+
+  The check looks at the text right after the value, because the value pattern stops at `(`. Bare words and identifiers (`letmein`, `hunter_two`) are still redacted, because they could be weak passwords and over-redaction is preferred when unsure.
 
 ## D13. Entropy detection scores structure, not just entropy
 
