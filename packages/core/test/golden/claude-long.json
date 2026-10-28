@@ -1,0 +1,13 @@
+{
+  "fixture": "claude.long",
+  "goal": "Add audit logging to the admin actions.",
+  "outcome": "completed",
+  "whatWasDone": "Working through each admin area (users, roles, billing, settings, exports, invites, sessions, webhooks, teams and reports), the agent added audit logging to the admin endpoints and audit tests for several areas, committing as it went. It also updated a notebook about audit volume.",
+  "decisions": [
+    { "decision": "Add audit logging to every admin endpoint, area by area", "reason": "Every admin action should write an audit entry.", "mustMention": ["audit"] }
+  ],
+  "rejectedApproaches": [],
+  "risksOrFollowUps": [],
+  "aiInvolvement": "heavy",
+  "mustNotMention": ["redis", "websocket", "trigram"]
+}

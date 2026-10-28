@@ -1,0 +1,11 @@
+{
+  "fixture": "codex.basic",
+  "goal": "Add a unit test for the login rate limiter.",
+  "outcome": "completed",
+  "whatWasDone": "Read the rate-limit middleware and added test/rateLimit.test.ts covering the limit, the window reset and per-IP isolation. All three tests pass.",
+  "decisions": [],
+  "rejectedApproaches": [],
+  "risksOrFollowUps": [],
+  "aiInvolvement": "heavy",
+  "mustNotMention": ["redis", "websocket"]
+}

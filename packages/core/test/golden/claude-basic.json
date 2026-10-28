@@ -1,0 +1,13 @@
+{
+  "fixture": "claude.basic",
+  "goal": "Rate limit the login endpoint to 5 attempts per minute per IP.",
+  "outcome": "completed",
+  "whatWasDone": "Added a small in-memory sliding-window rate limiter middleware and applied it to the login route with a limit of 5 attempts per minute per IP. Tests passed and the change was committed.",
+  "decisions": [
+    { "decision": "Write an in-memory sliding-window limiter instead of adding a package", "reason": "There is no existing dependency and only a single API instance.", "mustMention": ["in-memory|in memory|sliding"] }
+  ],
+  "rejectedApproaches": [],
+  "risksOrFollowUps": ["The in-memory limiter will not hold across multiple API instances."],
+  "aiInvolvement": "heavy",
+  "mustNotMention": ["redis", "jwt", "websocket"]
+}
