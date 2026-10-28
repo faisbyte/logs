@@ -46,7 +46,7 @@ function unwrapOutput(output: string): { text: string; exitCode: number | null }
 }
 
 function toolCall(payload: Record<string, unknown>, cwd: string): Omit<ToolEntry, 'kind' | 'timestamp' | 'callId'> {
-  const base = { output: null, outputTruncated: false, status: 'unknown' as const };
+  const base = { output: null, outputTruncated: false, status: 'unknown' as const, exitCode: null };
   const name = str(payload.name) ?? 'unknown';
   const patchCall = (patch: string, workdir: string) => {
     const paths = patchPaths(patch);
@@ -122,6 +122,7 @@ export function parseCodexFile(path: string): ParsedSession | null {
       if (!entry) continue;
       const { text, exitCode } = unwrapOutput(str(payload.output) ?? '');
       entry.output = text;
+      entry.exitCode = exitCode;
       entry.status = exitCode === null || exitCode === 0 ? 'ok' : 'error';
     }
   }

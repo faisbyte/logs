@@ -24,6 +24,8 @@ export const TranscriptEntrySchema = z.discriminatedUnion('kind', [
     output: z.string().nullable(),
     outputTruncated: z.boolean(),
     status: ToolStatusSchema,
+    /** Shell commands only: the exit status when the agent recorded it. */
+    exitCode: z.number().int().nullable(),
   }),
   z.object({ kind: z.literal('interruption'), timestamp }),
 ]);

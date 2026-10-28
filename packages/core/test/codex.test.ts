@@ -94,7 +94,9 @@ describe('parseCodexFile', () => {
 
     it('unwraps shell output and maps a non-zero exit code to an error', () => {
       const add = messy.transcript.find((e) => e.kind === 'tool' && e.input === 'pnpm add ws');
-      expect(add).toMatchObject({ status: 'error', output: expect.stringContaining('ERR_PNPM_FETCH_403') });
+      expect(add).toMatchObject({ status: 'error', exitCode: 1, output: expect.stringContaining('ERR_PNPM_FETCH_403') });
+      expect(basic.transcript.find((e) => e.kind === 'tool' && e.name === 'shell')).toMatchObject({ exitCode: 0 });
+      expect(messy.transcript.find((e) => e.kind === 'tool' && e.name === 'apply_patch')).toMatchObject({ exitCode: 0 });
     });
 
     it('treats an apply_patch heredoc inside shell as an apply_patch call, without the patch body', () => {

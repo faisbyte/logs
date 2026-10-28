@@ -101,6 +101,7 @@ function parseEvents(events: ClaudeEvent[]): { transcript: TranscriptEntry[]; to
             output: null,
             outputTruncated: false,
             status: 'unknown',
+            exitCode: null,
           };
           toolsById.set(block.id, entry);
           transcript.push(entry);
@@ -114,6 +115,10 @@ function parseEvents(events: ClaudeEvent[]): { transcript: TranscriptEntry[]; to
         if (!entry) continue;
         entry.output = resultText(block.content);
         entry.status = !block.is_error ? 'ok' : REJECTION.test(entry.output) ? 'rejected' : 'error';
+        // Claude Code reports a failed command as "Exit code N\n..."; a successful one exited 0.
+        if (entry.name === 'Bash' && entry.status !== 'rejected') {
+          entry.exitCode = entry.status === 'ok' ? 0 : Number(/^Exit code (\d+)/.exec(entry.output)?.[1] ?? NaN) || null;
+        }
       }
       const entry = userEntry(event);
       if (entry) transcript.push(entry);

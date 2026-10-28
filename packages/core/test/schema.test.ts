@@ -32,6 +32,7 @@ function validSession(): ParsedSession {
         output: 'updated',
         outputTruncated: false,
         status: 'ok',
+        exitCode: null,
       },
       { kind: 'assistant', timestamp: '2026-03-02T09:00:03.000Z', text: 'Done' },
       { kind: 'interruption', timestamp: '2026-03-02T09:00:04.000Z' },

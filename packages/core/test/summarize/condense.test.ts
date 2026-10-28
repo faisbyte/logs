@@ -14,11 +14,12 @@ describe('condenseSession', () => {
         'USER: Add rate limiting to the login endpoint: max 5 attempts per minute per IP.',
         "ASSISTANT: I'll look at the login route first.",
         'TOOL Read src/routes/login.ts',
-        'TOOL Bash',
+        'TOOL Bash: grep -n "rate" package.json (exit 0)',
         'ASSISTANT: No existing dependency. I will write a small in-memory sliding-window limiter rather than add a package, since there is a single API instance.',
         'TOOL Write src/middleware/rateLimit.ts',
         'TOOL Edit src/routes/login.ts',
-        'TOOL Bash ×2',
+        'TOOL Bash: pnpm test (exit 0)',
+        'TOOL Bash: git add -A && git commit -q -m "PROJ-142: rate limit login endpoint" (exit 0)',
         'ASSISTANT: Done. Login is limited to 5 attempts per minute per IP using an in-memory sliding window. This will not hold across multiple instances.',
       ].join('\n'),
     ]);
@@ -27,7 +28,8 @@ describe('condenseSession', () => {
   it('marks rejected and failed tools and interruptions, and drops reasoning and tool output', () => {
     const text = condenseSession(redacted(claude.messy)).turns.join('\n');
     expect(text).toContain('TOOL Edit src/search/index.ts (rejected by user)');
-    expect(text).toContain('TOOL Bash (failed)');
+    expect(text).toContain('TOOL Bash: cd /tmp && pnpm --dir /work/acme-webapp test (exit 1)');
+    expect(text).toContain('TOOL Bash: pnpm add redis (rejected by user)');
     expect(text).toContain('[user interrupted]');
     expect(text).not.toContain('The query runs on every keystroke'); // reasoning
     expect(text).not.toContain('FAIL test/search.test.ts'); // tool output
@@ -61,8 +63,21 @@ describe('condenseSession', () => {
     expect(turn).toContain('chars omitted');
   });
 
-  it('condenses Codex sessions too', () => {
-    expect(condenseSession(redacted(codex.messy)).turns[0]).toContain('TOOL apply_patch src/live/socket.ts');
+  it('condenses Codex sessions too, with shell commands and exit codes', () => {
+    const turn = condenseSession(redacted(codex.messy)).turns[0]!;
+    expect(turn).toContain('TOOL apply_patch src/live/socket.ts');
+    expect(turn).toContain('TOOL shell: pnpm add ws (exit 1)');
+  });
+
+  it('shows only the first line of a command, truncated to about 120 characters', () => {
+    const base = parseClaudeCodeFile(claude.basic)!;
+    const command = `node -e "${'x'.repeat(300)}"\nsecond line`;
+    const tool = { kind: 'tool' as const, timestamp: base.startedAt, callId: 't', name: 'Bash', input: command, filePaths: [], output: '', outputTruncated: false, status: 'ok' as const, exitCode: 0 };
+    const [turn] = condenseSession(redactSession({ ...base, transcript: [base.transcript[0]!, tool] }, { home: false })).turns;
+    const line = turn!.split('\n')[1]!;
+    expect(line.length).toBeLessThanOrEqual('TOOL Bash: '.length + 121 + ' (exit 0)'.length);
+    expect(line).toMatch(/…\s\(exit 0\)$/);
+    expect(turn).not.toContain('second line');
   });
 
   it('refuses anything that is not a RedactedSession', () => {

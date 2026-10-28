@@ -16,6 +16,7 @@ export function sessionWith(text: string): ParsedSession {
     output: text,
     outputTruncated: false,
     status: 'ok',
+    exitCode: null,
   };
   return {
     ...base,
