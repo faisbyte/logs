@@ -163,6 +163,19 @@ describe('redactText', () => {
       });
     });
 
+    it('collapses a chain of overlaps (A overlaps B overlaps C) into one placeholder', () => {
+      const text = 'x Project Falcon-launch@acme.io y';
+      expect(redactText(text, { deny: ['Project Falcon', 'Falcon-launch'] })).toEqual({ text: 'x [REDACTED:deny_list] y', counts: { deny_list: 1 } });
+    });
+
+    it('produces one placeholder when a deny literal sits inside a detected email', () => {
+      expect(redactText('mail falcon@acme.io now', { deny: ['falcon'] })).toEqual({ text: 'mail [REDACTED:deny_list] now', counts: { deny_list: 1 } });
+    });
+
+    it('keeps matches that only touch end-to-start as two placeholders', () => {
+      expect(redactText('ABCDEF', { deny: ['ABC', 'DEF'] })).toEqual({ text: '[REDACTED:deny_list][REDACTED:deny_list]', counts: { deny_list: 2 } });
+    });
+
     it('keeps separate secrets separate', () => {
       expect(redactText(`${awsKey} ${awsKey}`).text).toBe('[REDACTED:aws_key] [REDACTED:aws_key]');
     });
