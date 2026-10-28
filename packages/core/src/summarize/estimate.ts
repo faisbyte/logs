@@ -3,8 +3,11 @@ import { chunkTurns, condenseSession, estimateTokens } from './condense.js';
 import { chunkMessage, mergeSystemPrompt, systemPrompt } from './prompt.js';
 import { estimateCostUsd, type SummarizeSettings } from './settings.js';
 
-// Output per call, including low-effort thinking; replies are a few hundred tokens of JSON.
-const OUTPUT_TOKENS_PER_CALL = 1_500;
+// Calibrated on the Phase 3 real run (DECISIONS.md D22): the 2.5 chars/token figure under-counted input by up
+// to 32% (worst on small sessions, where the JSON schema in the prompt dominates), and one reply used 2,349
+// output tokens. Both margins keep every observed request at least 5% under its estimate.
+export const INPUT_SAFETY_MARGIN = 1.4;
+export const OUTPUT_TOKENS_PER_CALL = 3_000;
 const MERGE_INPUT_TOKENS_PER_PART = 250;
 
 export interface CostEstimate {
@@ -19,11 +22,14 @@ export function estimateSummaryCost(redacted: RedactedSession, settings: Summari
   const { metadata, turns, segmentStarts } = condenseSession(redacted);
   const chunks = chunkTurns(turns, settings.chunkTokens, segmentStarts);
   const system = systemPrompt();
+  const withMargin = (tokens: number) => Math.ceil(tokens * INPUT_SAFETY_MARGIN);
   const calls = chunks.map((chunk, i) => ({
-    inputTokens: estimateTokens(system + chunkMessage({ metadata, chunk, part: i + 1, parts: chunks.length, earlierDecisions: [] })),
+    inputTokens: withMargin(estimateTokens(system + chunkMessage({ metadata, chunk, part: i + 1, parts: chunks.length, earlierDecisions: [] }))),
     outputTokens: OUTPUT_TOKENS_PER_CALL,
   }));
-  if (chunks.length > 1) calls.push({ inputTokens: estimateTokens(mergeSystemPrompt()) + chunks.length * MERGE_INPUT_TOKENS_PER_PART, outputTokens: OUTPUT_TOKENS_PER_CALL });
+  if (chunks.length > 1) {
+    calls.push({ inputTokens: withMargin(estimateTokens(mergeSystemPrompt()) + chunks.length * MERGE_INPUT_TOKENS_PER_PART), outputTokens: OUTPUT_TOKENS_PER_CALL });
+  }
   const costs = calls.map((c) => estimateCostUsd(settings.model, c));
   return {
     requests: calls.length,
