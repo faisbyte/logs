@@ -31,6 +31,15 @@ describe('compareToGolden', () => {
     expect(report.rejectedListedAsDecision).toEqual(['Redis cache']);
   });
 
+  it.each([
+    'Drop the Redis cache and use a Postgres trigram index instead.',
+    'Use a trigram index rather than a Redis cache',
+    'Replace the Redis cache with a pg_trgm index',
+    'Switch away from Redis to a trigram index',
+  ])('does not flag a decision that names the rejected approach as what it replaced: %s', (decision) => {
+    expect(compareToGolden(llmSummary({ decisions: [{ decision, reason: 'x' }] }), golden).rejectedListedAsDecision).toEqual([]);
+  });
+
   it('flags mentions of things that are not in the source', () => {
     expect(compareToGolden(llmSummary({ whatWasDone: 'Added a WebSocket feed.' }), golden).forbiddenMentions).toEqual(['websocket']);
   });

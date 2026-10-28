@@ -31,6 +31,9 @@ export interface GoldenReport {
 type Narrative = Pick<LlmSummary, 'goal' | 'whatWasDone' | 'decisions' | 'rejectedApproaches' | 'risksOrFollowUps'>;
 
 const mentions = (text: string, patterns: string[]) => patterns.every((p) => new RegExp(p, 'i').test(text));
+// "…instead of X", "Drop X and use Y": the decision names X only as what it replaced.
+const REPLACES = /\b(instead of|rather than|in place of|replac\w*|drop\w*|remov\w*|switch\w* (?:away )?from|abandon\w*|no longer)\b/i;
+const adopts = (decision: string, patterns: string[]) => mentions(decision, patterns) && !REPLACES.test(decision);
 
 export function compareToGolden(summary: Narrative, golden: Golden): GoldenReport {
   const decisions = summary.decisions.map((d) => `${d.decision} ${d.reason}`).join('\n');
@@ -39,7 +42,7 @@ export function compareToGolden(summary: Narrative, golden: Golden): GoldenRepor
   return {
     missingDecisions: golden.decisions.filter((d) => !mentions(decisions, d.mustMention)).map((d) => d.decision),
     missingRejectedApproaches: golden.rejectedApproaches.filter((r) => !mentions(rejected, r.mustMention)).map((r) => r.approach),
-    rejectedListedAsDecision: golden.rejectedApproaches.filter((r) => summary.decisions.some((d) => mentions(d.decision, r.mustMention))).map((r) => r.approach),
+    rejectedListedAsDecision: golden.rejectedApproaches.filter((r) => summary.decisions.some((d) => adopts(d.decision, r.mustMention))).map((r) => r.approach),
     forbiddenMentions: golden.mustNotMention.filter((w) => new RegExp(w, 'i').test(everything)),
   };
 }
