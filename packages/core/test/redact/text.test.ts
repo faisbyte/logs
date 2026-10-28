@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { redactText } from '../../src/redact/text.js';
-import { pick } from './corpus.js';
+import { base62, base64url, pick } from './corpus.js';
 
 const awsKey = `AKIA${pick('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567', 16)}`;
 
@@ -20,6 +20,49 @@ describe('redactText', () => {
 
     it('does not match AKIA inside a longer word', () => {
       const text = `XAKIA${awsKey.slice(4)}Y`;
+      expect(redactText(text).text).toBe(text);
+    });
+  });
+
+  describe('aws_secret', () => {
+    const secret = pick('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', 40);
+
+    it('redacts the value in a credentials file and keeps the key name', () => {
+      expect(redactText(`aws_secret_access_key = ${secret}`).text).toBe('aws_secret_access_key = [REDACTED:aws_secret]');
+    });
+
+    it('redacts SecretAccessKey in AWS CLI JSON output', () => {
+      expect(redactText(`"SecretAccessKey": "${secret}"`).text).toBe('"SecretAccessKey": "[REDACTED:aws_secret]"');
+    });
+  });
+
+  describe('github_token', () => {
+    it.each(['ghp', 'gho', 'ghu', 'ghs', 'ghr'])('redacts %s_ tokens', (prefix) => {
+      expect(redactText(`token ${prefix}_${base62(36)}.`).text).toBe('token [REDACTED:github_token].');
+    });
+
+    it('redacts fine-grained personal access tokens', () => {
+      expect(redactText(`github_pat_${base62(22)}_${base62(59)}`).text).toBe('[REDACTED:github_token]');
+    });
+
+    it('ignores identifiers that only share the prefix', () => {
+      expect(redactText('ghp_short and gho_away').text).toBe('ghp_short and gho_away');
+    });
+  });
+
+  describe('anthropic_key', () => {
+    it('redacts Anthropic API keys as anthropic_key, not openai_key', () => {
+      expect(redactText(`key=sk-ant-api03-${base64url(93)}AA;`).counts).toEqual({ anthropic_key: 1 });
+    });
+  });
+
+  describe('openai_key', () => {
+    it('redacts project and legacy OpenAI keys', () => {
+      expect(redactText(`sk-proj-${base64url(64)} and sk-${base62(48)}`).text).toBe('[REDACTED:openai_key] and [REDACTED:openai_key]');
+    });
+
+    it('ignores sk- prefixed words that are not random keys', () => {
+      const text = 'see sk-learn-preprocessing-pipelines-guide for details';
       expect(redactText(text).text).toBe(text);
     });
   });
