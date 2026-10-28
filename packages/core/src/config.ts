@@ -4,23 +4,10 @@ import { z } from 'zod';
 
 // .digest/config.json: per-developer settings (gitignored with the rest of .digest/).
 
-const compiles = (m: { regex: string; flags?: string | undefined }) => {
-  try {
-    new RegExp(m.regex, m.flags);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** A literal string, or `{ "regex": "...", "flags": "i" }`. */
-export const MatcherSchema = z.union([
-  z.string().min(1),
-  z
-    .object({ regex: z.string().min(1), flags: z.string().regex(/^[imsu]*$/).optional() })
-    .strict()
-    .refine(compiles, { message: 'invalid regular expression' }),
-]);
+/** Allow and deny entries are literal strings: linear to match and can't over-allow (DECISIONS.md D20). */
+export const MatcherSchema = z
+  .string({ error: 'allow and deny entries must be literal strings; regular expressions are not supported (DECISIONS.md D20)' })
+  .min(1);
 export type Matcher = z.infer<typeof MatcherSchema>;
 
 export const RedactionConfigSchema = z

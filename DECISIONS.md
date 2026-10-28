@@ -166,3 +166,13 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   Generic usernames (`root`, `runner`, `ubuntu`, `dev`, …) aren't replaced as bare words. The defaults come from `os.homedir()` and `os.userInfo()`, and `redaction.home: false` in `.digest/config.json` turns all of this off.
 - **Alternatives:** Replace only the literal home path; leave the username to the deny list.
 - **Why:** The owner asked that usernames never leave the machine. The home path alone isn't enough, because the username also appears in encoded project directories (`sourcePath`), hostnames (`<you>-MacBook-Pro`), `ls -l` owner columns and hyphen-joined names. On the developer's 15 real sessions, 3,148 home and 305 username replacements left zero occurrences in any case. Generic names identify nobody, and replacing them would mangle words like "runner".
+
+## D20. Allow and deny entries are literal strings only (supersedes the regex part of D15)
+
+- **Date:** 2026-10-28
+- **Options considered:**
+  - **A. Validate regexes at config load.** Reject patterns that fail a conservative static check (nested quantifiers, quantified groups containing alternation, backreferences, overlong patterns). This keeps simple patterns like `ACME-\d{4}`, but the check is heuristic: even group-free patterns such as `\d*\d*\d*x` backtrack polynomially, so it can't guarantee linear time.
+  - **B. Literal strings only.** Matching is `indexOf` and `Set.has`, linear by construction. Regex entries (`{ "regex": … }`) are rejected at load with a message pointing here.
+- **Decision:** B, for both `deny` and `allow`. It's clear-cut: B removes the risk entirely, while A only reduces it.
+- **Why also `allow`:** Allow regexes are tested against detected values, which can be megabytes long (private key blocks, entropy tokens), so they have the same backtracking exposure. A broad allow pattern (`"."`) would also silently keep every detected secret, which is a fail-open risk that literals can't create.
+- **Known cost:** No pattern matching. A family of values (every `ACME-1234` ticket id, every `@example.com` address) has to be listed one by one. If that proves painful, a linear-time engine such as RE2 would be the way back, not hand-validated JavaScript regexes.

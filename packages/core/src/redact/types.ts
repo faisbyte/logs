@@ -17,14 +17,15 @@ export const PRIORITY: readonly PlaceholderType[] = [
   'high_entropy',
 ];
 
-export type Matcher = string | { regex: string; flags?: string | undefined };
+/** A literal string (DECISIONS.md D20). */
+export type Matcher = string;
 
 export interface RedactOptions {
   /** PII detectors; both on unless turned off (DECISIONS.md D14). */
   pii?: { email?: boolean | undefined; phone?: boolean | undefined } | undefined;
-  /** Detected values to keep: exact literals, or regexes tested against the value. Never overrides `deny`. */
+  /** Detected values to keep when they equal one of these literals exactly. Never overrides `deny`. */
   allow?: Matcher[] | undefined;
-  /** Text to always redact as deny_list: every literal occurrence (case-sensitive), every regex match. */
+  /** Text to always redact as deny_list: every occurrence of each literal (case-sensitive). */
   deny?: Matcher[] | undefined;
   /** Home directory to replace with ~ (and username to redact); defaults to this machine's, `false` turns it off. */
   home?: { dir: string; username?: string | undefined } | false | undefined;

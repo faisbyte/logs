@@ -45,7 +45,7 @@ describe('odd input', () => {
   });
 
   it('is deterministic across repeated calls on one redactor', () => {
-    const redact = createRedactor({ deny: [{ regex: 'Falcon\\d+' }] });
+    const redact = createRedactor({ deny: ['Falcon42'] });
     const text = `Falcon42 GITHUB_TOKEN=ghp_${base62(36)} dev@example.org ${base62(40)}`;
     const first = redact(text);
     expect(redact(text)).toEqual(first);
