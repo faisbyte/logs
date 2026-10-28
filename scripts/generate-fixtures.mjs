@@ -231,6 +231,10 @@ const REJECTED =
   const cacheSrc = "import { createClient } from 'redis';\nexport const cache = createClient();";
   let [w] = s.respond([{ thinking: 'The query runs on every keystroke; a cache keyed by query string should help.' }, { tool: 'Write', input: { file_path: `${REPO}/src/search/cache.ts`, content: cacheSrc } }]);
   s.result(w, `File created successfully at: ${REPO}/src/search/cache.ts`, writeResult(`${REPO}/src/search/cache.ts`, cacheSrc));
+  let [wire] = s.respond([
+    { tool: 'Edit', input: { file_path: `${REPO}/src/search/index.ts`, old_string: 'runQuery(q)', new_string: 'cache.get(q) ?? runQuery(q)', replace_all: false } },
+  ]);
+  s.result(wire, REJECTED, 'User rejected tool use', { isError: true });
   let [add] = s.respond([{ tool: 'Bash', input: { command: 'pnpm add redis', description: 'Install redis client' } }]);
   s.result(add, REJECTED, 'User rejected tool use', { isError: true });
   s.prompt([{ type: 'text', text: '[Request interrupted by user for tool use]' }]);

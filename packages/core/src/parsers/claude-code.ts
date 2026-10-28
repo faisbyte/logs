@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ParsedSession, ToolEntry, TranscriptEntry } from '../schema.js';
 
 interface ContentBlock {
@@ -32,6 +33,7 @@ const INJECTED_TAG =
   /^\s*<(command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat|task-notification|bash-input|bash-stdout|bash-stderr|system-reminder|ide_opened_file|ide_selection|ide_diagnostics)>/;
 const INTERRUPTION = /^\[Request interrupted by user/;
 const REJECTION = /^The user doesn't want to proceed with this tool use/;
+const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 const distinct = (values: (string | undefined)[]) => [...new Set(values.filter((v): v is string => !!v))];
 
@@ -77,16 +79,14 @@ function resultText(content: string | ContentBlock[] | undefined): string {
     .join('\n');
 }
 
-export function parseClaudeCodeFile(path: string): ParsedSession | null {
-  const events = readFileSync(path, 'utf8')
+function readEvents(path: string): ClaudeEvent[] {
+  return readFileSync(path, 'utf8')
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line) as ClaudeEvent);
+}
 
-  const cwd = events.find((e) => e.cwd)?.cwd;
-  const sessionId = events.find((e) => e.sessionId)?.sessionId;
-  if (!cwd || !sessionId) return null;
-
+function parseEvents(events: ClaudeEvent[]): { transcript: TranscriptEntry[]; tools: ToolEntry[] } {
   const transcript: TranscriptEntry[] = [];
   const toolsById = new Map<string, ToolEntry>();
   for (const event of events) {
@@ -127,6 +127,29 @@ export function parseClaudeCodeFile(path: string): ParsedSession | null {
       if (entry) transcript.push(entry);
     }
   }
+  return { transcript, tools: [...toolsById.values()] };
+}
+
+/** Subagent transcripts live next to the main file: <session>/subagents/agent-*.jsonl. */
+function subagentTools(path: string): ToolEntry[] {
+  const dir = join(path.replace(/\.jsonl$/, ''), 'subagents');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.jsonl'))
+    .flatMap((f) => parseEvents(readEvents(join(dir, f))).tools);
+}
+
+export function parseClaudeCodeFile(path: string): ParsedSession | null {
+  const events = readEvents(path);
+
+  const cwd = events.find((e) => e.cwd)?.cwd;
+  const sessionId = events.find((e) => e.sessionId)?.sessionId;
+  if (!cwd || !sessionId) return null;
+
+  const { transcript, tools } = parseEvents(events);
+  const allTools = [...tools, ...subagentTools(path)];
+  const edits = allTools.filter((t) => EDIT_TOOLS.has(t.name) && t.status === 'ok');
+  const filesTouched = distinct(edits.flatMap((t) => t.filePaths)).sort();
 
   const times = events.map((e) => e.timestamp).filter((t): t is string => !!t).sort();
   const branches = distinct(events.map((e) => e.gitBranch));
@@ -145,8 +168,8 @@ export function parseClaudeCodeFile(path: string): ParsedSession | null {
     endedAt: times.at(-1)!,
     models: distinct(events.filter((e) => e.type === 'assistant').map((e) => e.message?.model)),
     turnCount: transcript.filter((e) => e.kind === 'user').length,
-    toolCallCount: toolsById.size,
-    filesTouched: [],
+    toolCallCount: allTools.length,
+    filesTouched,
     commitShas: [],
     transcript,
   };
