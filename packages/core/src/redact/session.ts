@@ -51,6 +51,11 @@ export type { RedactedSession };
 
 export const isRedactedSession = (value: unknown): value is RedactedSession => RedactedSession.isInstance(value);
 
+/** Hard check for every LLM and network entry point: throws, so a forced cast can't smuggle raw data out. */
+export function assertRedactedSession(value: unknown): asserts value is RedactedSession {
+  if (!isRedactedSession(value)) throw new Error('Refusing to send unredacted session data: expected a RedactedSession from redactSession().');
+}
+
 /** Redacts every string in the session: prompts, replies, tool names/inputs/outputs, paths, branches, cwd, ids. */
 export function redactSession(session: ParsedSession, options: RedactOptions = {}): RedactedSession {
   const redact = createRedactor(options);

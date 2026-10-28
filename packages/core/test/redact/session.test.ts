@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRedactedSession, redactSession } from '../../src/redact/session.js';
+import { assertRedactedSession, isRedactedSession, redactSession, type RedactedSession } from '../../src/redact/session.js';
 import { ParsedSessionSchema, type ParsedSession } from '../../src/schema.js';
 import { base62 } from './corpus.js';
 import { base, sessionWith } from './helpers.js';
@@ -68,5 +68,12 @@ describe('redactSession', () => {
     expect(isRedactedSession(base)).toBe(false);
     expect(isRedactedSession({ ...redacted })).toBe(false);
     expect(isRedactedSession({ session: base, counts: {} })).toBe(false);
+  });
+
+  it('assertRedactedSession throws on anything but a real redaction result, including forced casts', () => {
+    expect(() => assertRedactedSession(redactSession(base))).not.toThrow();
+    for (const fake of [base, { ...redactSession(base) }, { session: base, counts: {} }, null, 'text']) {
+      expect(() => assertRedactedSession(fake as unknown as RedactedSession)).toThrow(/unredacted/);
+    }
   });
 });
