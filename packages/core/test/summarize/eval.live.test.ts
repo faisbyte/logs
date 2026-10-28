@@ -15,7 +15,8 @@ import { AnthropicLlmClient } from '../../src/summarize/anthropic-llm.js';
 import { condenseSession } from '../../src/summarize/condense.js';
 import type { LlmClient } from '../../src/summarize/llm.js';
 import type { SessionSummary } from '../../src/summarize/schema.js';
-import { DEFAULT_MODEL } from '../../src/summarize/settings.js';
+import { estimateSummaryCost } from '../../src/summarize/estimate.js';
+import { DEFAULT_MODEL, estimateCostUsd } from '../../src/summarize/settings.js';
 import { summarizeSession } from '../../src/summarize/summarize.js';
 import { claude, codex } from '../fixtures.js';
 import { compareToGolden, goldens } from './compare.js';
@@ -31,6 +32,8 @@ const JUDGE_PROMPT = `You check a summary of an AI coding session against the se
 List every claim in the SUMMARY that the TRANSCRIPT does not support (invented facts, files, decisions or outcomes). Paraphrase is fine; only list claims with no basis in the transcript.
 Return ONLY JSON: {"unsupportedClaims": ["..."]}. Return an empty list if every claim is supported.`;
 
+let judgeCost = 0;
+
 async function unsupportedClaims(judge: LlmClient, source: RedactedSession, summary: SessionSummary): Promise<string[]> {
   const { metadata, turns } = condenseSession(source);
   const { goal, outcome, whatWasDone, decisions, rejectedApproaches, risksOrFollowUps } = summary;
@@ -41,6 +44,7 @@ async function unsupportedClaims(judge: LlmClient, source: RedactedSession, summ
     schema: JudgeSchema,
     maxTokens: 16_000,
   });
+  judgeCost += estimateCostUsd(judge.model, response.usage) ?? 0;
   return JudgeSchema.parse(JSON.parse(response.text)).unsupportedClaims;
 }
 
@@ -56,23 +60,24 @@ describe.skipIf(!process.env.DIGEST_EVAL || !process.env.ANTHROPIC_API_KEY)('liv
       const parsed = (parseClaudeCodeFile(files[golden.fixture]!) ?? parseCodexFile(files[golden.fixture]!))!;
       const redacted = redactSession(parsed);
       const summary = await summarizeSession(redacted, llm, { chunkTokens: 60_000 });
+      const expected = estimateSummaryCost(redacted, { model, effort: 'low', chunkTokens: 60_000 }).requests;
       const report = compareToGolden(summary, golden);
       const invented = await unsupportedClaims(judge, redacted, summary);
       cost += summary.usage.costUsd ?? 0;
       const list = (items: string[]) => (items.length ? items.join('; ') : '-');
       rows.push(
-        `| ${golden.fixture} | ${summary.outcome} (golden: ${golden.outcome}) | ${list(report.missingDecisions)} | ${list(report.missingRejectedApproaches)} | ${list(report.rejectedListedAsDecision)} | ${list([...report.forbiddenMentions, ...invented])} |`,
+        `| ${golden.fixture} | ${summary.usage.requests} (${expected}) | ${summary.outcome} (golden: ${golden.outcome}) | ${list(report.missingDecisions)} | ${list(report.missingRejectedApproaches)} | ${list(report.rejectedListedAsDecision)} | ${list([...report.forbiddenMentions, ...invented])} |`,
       );
     }
 
     const markdown = [
       `# Summary eval: ${model} (prompt and goldens as committed), ${new Date().toISOString()}`,
       '',
-      '| Fixture | Outcome | Missing decisions | Missing rejected approaches | Rejected listed as decision | Not in source |',
-      '|---|---|---|---|---|---|',
+      '| Fixture | Requests (expected) | Outcome | Missing decisions | Missing rejected approaches | Rejected listed as decision | Not in source |',
+      '|---|---|---|---|---|---|---|',
       ...rows,
       '',
-      `Summariser cost: $${cost.toFixed(4)} (judge calls not included)`,
+      `Summariser cost: $${cost.toFixed(4)}; judge cost: $${judgeCost.toFixed(4)}`,
     ].join('\n');
     writeFileSync(join(ensureDigestDir(REPO_ROOT, 'eval'), `report-${Date.now()}.md`), `${markdown}\n`);
     console.log(markdown);

@@ -78,5 +78,7 @@ describe.skipIf(!process.env.DIGEST_LIVE_TESTS || !process.env.ANTHROPIC_API_KEY
     expect(summary.status).toBe('draft');
     expect(summary.goal.length).toBeGreaterThan(0);
     expect(summary.usage.inputTokens).toBeGreaterThan(0);
+    const { inputTokens, outputTokens, requests, costUsd } = summary.usage;
+    console.log(`smoke test: ${requests} request(s), ${inputTokens} in / ${outputTokens} out tokens, $${costUsd?.toFixed(5)}`);
   }, 120_000);
 });
