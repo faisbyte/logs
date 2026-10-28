@@ -20,7 +20,7 @@ import {
   type ParsedSession,
 } from '@digest/core';
 import type { CliContext } from './cli.js';
-import { findSession, NOT_IN_REPO, repoSessions, resolveRepoRoot, shortIdLength } from './sessions.js';
+import { findSession, repoSessions, shortIdLength, writableRepoRoot } from './sessions.js';
 
 interface SummarizeOptions {
   repo?: string;
@@ -35,8 +35,9 @@ const dollars = (n: number | null) => (n === null ? 'cost unknown' : `$${n.toFix
 /** Summarises sessions into local drafts. Only redacted, condensed text is sent, with the developer's own key. */
 export async function summarizeCommand(sessionId: string | undefined, options: SummarizeOptions, ctx: CliContext): Promise<number> {
   const fail = (message: string) => (ctx.stderr(`digest summarize: ${message}\n`), 1);
-  const repoRoot = resolveRepoRoot(options.repo, ctx.cwd);
-  if (!repoRoot) return fail(NOT_IN_REPO);
+  const writable = writableRepoRoot(options.repo, ctx);
+  if ('error' in writable) return fail(writable.error);
+  const repoRoot = writable.root;
   if (!sessionId === !options.all) return fail('pass a session id or --all (see digest list).');
 
   const config = readConfig(repoRoot);

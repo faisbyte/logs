@@ -11,7 +11,7 @@ const FIXTURES = fileURLToPath(new URL('../../../fixtures/', import.meta.url));
 const fixtureEnv = { CLAUDE_CONFIG_DIR: join(FIXTURES, 'claude-code'), CODEX_HOME: join(FIXTURES, 'codex') };
 const tempDir = (prefix: string) => realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 
-async function run(argv: string[], context: { cwd?: string; env?: Record<string, string> } = {}) {
+async function run(argv: string[], context: { cwd?: string; env?: Record<string, string>; homeDir?: string } = {}) {
   let stdout = '';
   let stderr = '';
   const exitCode = await runCli(argv, {
@@ -19,7 +19,7 @@ async function run(argv: string[], context: { cwd?: string; env?: Record<string,
     stderr: (s) => (stderr += s),
     cwd: context.cwd ?? tempDir('digest-cwd-'),
     env: context.env ?? fixtureEnv,
-    homeDir: '/nonexistent-home',
+    homeDir: context.homeDir ?? '/nonexistent-home',
     timeZone: 'UTC',
   });
   return { exitCode, stdout, stderr };
@@ -106,6 +106,13 @@ describe('digest list', () => {
     writeFileSync(join(codexHome, 'sessions/2026/03/07/r.jsonl'.replace('r.jsonl', empty.split('/').at(-1)!)), readFileSync(join(FIXTURES, empty)));
     const { stdout } = await run(['list', '--repo', '/work/acme-webapp'], { env: { CLAUDE_CONFIG_DIR: tempDir('digest-noclaude-'), CODEX_HOME: codexHome } });
     expect(stdout.trimEnd()).toBe('No non-empty sessions for /work/acme-webapp; 1 empty session hidden, --all shows it');
+  });
+
+  it('refuses to treat the home directory as a repo', async () => {
+    const home = tempDir('digest-home-');
+    const { exitCode, stderr } = await run(['list', '--repo', home], { env: fixtureEnv, homeDir: home });
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('home directory');
   });
 
   it('says where it looked when no sessions match', async () => {

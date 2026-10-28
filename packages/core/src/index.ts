@@ -1,7 +1,7 @@
 export * from './schema.js';
 export { parseClaudeCodeFile } from './parsers/claude-code.js';
 export { parseCodexFile } from './parsers/codex.js';
-export { isInRepo } from './repo.js';
+export { isInRepo, validRepoRoot } from './repo.js';
 export { truncateToolOutputs, type TruncateLimits } from './truncate.js';
 export { agentDirs, discoverSessionFiles, loadSessions, type AgentDirs, type SessionFile } from './discover.js';
 export { commitsDuring, filesInCommits, findRepoRoot } from './git.js';
