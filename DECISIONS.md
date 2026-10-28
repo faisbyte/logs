@@ -176,3 +176,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** B, for both `deny` and `allow`. It's clear-cut: B removes the risk entirely, while A only reduces it.
 - **Why also `allow`:** Allow regexes are tested against detected values, which can be megabytes long (private key blocks, entropy tokens), so they have the same backtracking exposure. A broad allow pattern (`"."`) would also silently keep every detected secret, which is a fail-open risk that literals can't create.
 - **Known cost:** No pattern matching. A family of values (every `ACME-1234` ticket id, every `@example.com` address) has to be listed one by one. If that proves painful, a linear-time engine such as RE2 would be the way back, not hand-validated JavaScript regexes.
+
+## D21. Summariser model: Claude Haiku 5.5, low effort, 60K-token chunks
+
+- **Date:** 2026-10-28
+- **Decision:** The default model is `claude-haiku-5-5`, run at effort `low`, with input split into chunks of about 60K tokens. All three are overridable in `.digest/config.json` → `summarize` (`model`, `effort`, `chunkTokens`). Cost estimates use a pricing table checked against Anthropic's live models and pricing pages on 2026-10-28.
+- **Alternatives:** `claude-sonnet-5-5` ($2 / $10 per MTok) by default; no chunking, relying on the 1M context window.
+- **Why:** The plan asks for a fast model for per-session summaries. Haiku 5.5 is Anthropic's fastest, cheapest current model: $0.10 / $0.50 per MTok, but $0.50 / $2.50 once a single prompt passes 100K tokens. Chunks of about 60K tokens (by a conservative 2.5 chars-per-token estimate) keep every request on the cheaper rate card and keep each summary focused. Haiku 5.5 has adaptive thinking on by default, so effort is the cost lever. It doesn't accept `temperature` or prefill, so JSON comes from structured outputs.
