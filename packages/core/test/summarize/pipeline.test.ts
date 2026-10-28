@@ -11,6 +11,7 @@ import { SessionSummarySchema } from '../../src/summarize/schema.js';
 import { summarizeCached } from '../../src/summarize/store.js';
 import { claude, codex } from '../fixtures.js';
 import { asLlmReply, compareToGolden, goldens } from './compare.js';
+import { pickAll } from './helpers.js';
 
 const files: Record<string, string> = Object.fromEntries([
   ...Object.entries(claude).map(([k, v]) => [`claude.${k}`, v]),
@@ -48,7 +49,7 @@ describe('fake-LLM pipeline against the goldens', () => {
 
     const llm = new FakeLlmClient((request) => {
       const content = request.messages[0]!.content;
-      if (request.system.startsWith('You are merging')) return JSON.stringify({ goal: reply.goal, outcome: reply.outcome, whatWasDone: reply.whatWasDone, aiInvolvement: reply.aiInvolvement });
+      if (request.system.startsWith('You are merging')) return pickAll(request, { goal: reply.goal, whatWasDone: reply.whatWasDone, aiInvolvement: reply.aiInvolvement });
       if (/Transcript \(part 1 of/.test(content)) return JSON.stringify({ ...reply, decisions: [{ decision: 'Put a Redis cache in front of search', reason: 'Queries run per keystroke.' }], rejectedApproaches: [], risksOrFollowUps: [] });
       if (content.includes('USER: No Redis')) return JSON.stringify({ ...reply, rejectedApproaches: [], reversedDecisions: [{ id: 'D1', reason: "Ops won't run another service." }] });
       return JSON.stringify({ ...reply, decisions: [], rejectedApproaches: [], risksOrFollowUps: [] });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LlmSummarySchema, NarrativeSchema } from './schema.js';
+import { LlmSummarySchema, MergeSchema } from './schema.js';
 
 // Bump on any change to the text below or to the schema: it is part of the summary cache key.
 export const PROMPT_VERSION = 'summarize-v2';
@@ -24,6 +24,7 @@ const NOTES = `Notes on the input and the remaining fields:
 - A value or setting chosen with a reason (a threshold, limit, timeout, version, library or config value) is a decision, not a follow-up.
 - "goal": one sentence on what the developer set out to do.
 - "outcome": "completed" if the goal was met, "partial" if only some of it was done or work was left unfinished, "abandoned" if the task or approach was dropped.
+- Write about the session's work only: never mention the transcript, its parts, the metadata, summarising, or a team log.
 - "reversedDecisions": long sessions arrive in parts. When decisions from earlier parts are listed with ids and this part reverses or abandons one, give its id and the reason here and leave it out of every other field. Otherwise return an empty list.`;
 
 export function systemPrompt(): string {
@@ -46,35 +47,36 @@ export function chunkMessage({ metadata, chunk, part, parts, earlierDecisions }:
   return `${message}\n\nDecisions recorded in earlier parts:\n${listed}\nIf this part reverses or abandons any of them, list its id in "reversedDecisions" with the reason, and leave it out of "decisions".`;
 }
 
-const MERGE = `You are merging summaries of consecutive parts of one AI coding session into a single team-log entry.
-Input: each part's goal, outcome, what was done and AI involvement, in order, plus the decisions, rejected approaches and follow-ups already merged for the whole session.
+const MERGE = `You are merging summaries of consecutive parts of one AI coding session into one summary of the whole session.
+Input: each part's goal, what was done and AI involvement, in order, then numbered candidate decisions (D), rejected approaches (R) and follow-ups (F) collected from all parts.
 
 Return ONLY JSON matching this schema: {schema}
 
 Rules:
-- "goal": one sentence on what the developer set out to do across the whole session.
-- "whatWasDone": 2–5 plain sentences on what changed and why, across all parts.
-- "outcome": for the session as a whole; the last part matters most.
+- "goal": one sentence on what the developer set out to do across the whole session, not just its last part.
+- "whatWasDone": 2–5 plain sentences on what changed and why, covering every part from the earliest to the latest.
+- "decisionIds", "rejectedApproachIds", "followUpIds": choose at most 6 ids from each candidate list, keeping the most durable and important ones (what a teammate would still need to know later). When several candidates say the same thing, choose only one of them. Use only ids from the matching list.
 - "aiInvolvement": light = Q&A/explanations, moderate = AI wrote parts, heavy = AI wrote most of the change.
+- Write about the session's work only: never mention the transcript, its parts, the metadata, summarising, or a team log.
 - Don't invent anything that isn't in the part summaries. Don't include code, secrets, or redaction placeholders.`;
 
 export function mergeSystemPrompt(): string {
-  return MERGE.replace('{schema}', JSON.stringify(z.toJSONSchema(NarrativeSchema), null, 2));
+  return MERGE.replace('{schema}', JSON.stringify(z.toJSONSchema(MergeSchema), null, 2));
 }
 
 export interface MergeInput {
-  parts: { goal: string; outcome: string; whatWasDone: string; aiInvolvement: string }[];
-  decisions: { decision: string; reason: string }[];
-  rejectedApproaches: { approach: string; reason: string }[];
-  risksOrFollowUps: string[];
+  parts: { goal: string; whatWasDone: string; aiInvolvement: string }[];
+  decisions: { id: string; decision: string; reason: string }[];
+  rejectedApproaches: { id: string; approach: string; reason: string }[];
+  followUps: { id: string; text: string }[];
 }
 
-export function mergeMessage({ parts, decisions, rejectedApproaches, risksOrFollowUps }: MergeInput): string {
-  const list = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).join('\n') : '- none');
+export function mergeMessage({ parts, decisions, rejectedApproaches, followUps }: MergeInput): string {
+  const list = (items: string[]) => (items.length ? items.join('\n') : '(none)');
   return [
-    ...parts.map((p, i) => `Part ${i + 1} of ${parts.length}:\nGoal: ${p.goal}\nOutcome: ${p.outcome}\nWhat was done: ${p.whatWasDone}\nAI involvement: ${p.aiInvolvement}`),
-    `Decisions (whole session):\n${list(decisions.map((d) => `${d.decision} (${d.reason})`))}`,
-    `Rejected approaches (whole session):\n${list(rejectedApproaches.map((r) => `${r.approach} (${r.reason})`))}`,
-    `Risks and follow-ups (whole session):\n${list(risksOrFollowUps)}`,
+    ...parts.map((p, i) => `Part ${i + 1} of ${parts.length}:\nGoal: ${p.goal}\nWhat was done: ${p.whatWasDone}\nAI involvement: ${p.aiInvolvement}`),
+    `Candidate decisions:\n${list(decisions.map((d) => `${d.id}: ${d.decision} (reason: ${d.reason})`))}`,
+    `Candidate rejected approaches:\n${list(rejectedApproaches.map((r) => `${r.id}: ${r.approach} (reason: ${r.reason})`))}`,
+    `Candidate follow-ups:\n${list(followUps.map((f) => `${f.id}: ${f.text}`))}`,
   ].join('\n\n');
 }
