@@ -173,3 +173,10 @@ Keep only the text after `## My request for Codex:` when that header is present.
 ### Short and empty sessions
 
 The four 0.81 rollouts each last under 1 second and contain one user prompt and no assistant output. Each `vscode` rollout has an `exec` twin (`gpt-5.1-codex-mini`) created in the same second. They're listed as normal sessions with 0 assistant messages; whether to hide them is a later call.
+
+---
+
+## Known gaps in what the parsers extract
+
+- **Edits made through the shell aren't in `filesTouched`.** That covers `sed -i`, `cat > file`, heredocs, and `rm`. Only structured edit tools count: Claude `Write`/`Edit`/`MultiEdit`/`NotebookEdit` and Codex `apply_patch`. 2 of the 10 real Claude Code sessions edited files only through `Bash`, so they show 0 files.
+- **Newer Codex shell tool names** (for example `shell_command` or `exec_command`) haven't been seen locally. They parse as generic tool calls with their raw arguments as input.
