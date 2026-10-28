@@ -68,4 +68,66 @@ describe('parseClaudeCodeFile', () => {
       expect(long.transcript.some((e) => e.kind === 'user' && e.text.startsWith('This session is being continued'))).toBe(false);
     });
   });
+
+  describe('assistant output and tool calls', () => {
+    const basic = parseClaudeCodeFile(claude.basic)!;
+    const messy = parseClaudeCodeFile(claude.messy)!;
+    const tool = (name: string, input: string) =>
+      messy.transcript.find((e) => e.kind === 'tool' && e.name === name && e.input === input);
+
+    it('keeps the conversation in order, with one-line tool summaries', () => {
+      const lines = basic.transcript.map((e) =>
+        e.kind === 'tool' ? `${e.name}(${e.input}) ${e.status}` : `${e.kind}: ${'text' in e ? e.text : ''}`,
+      );
+      expect(lines).toEqual([
+        'user: Add rate limiting to the login endpoint: max 5 attempts per minute per IP.',
+        "assistant: I'll look at the login route first.",
+        `Read(${REPO}/src/routes/login.ts) ok`,
+        'Bash(grep -n "rate" package.json) ok',
+        'assistant: No existing dependency. I will write a small in-memory sliding-window limiter rather than add a package, since there is a single API instance.',
+        `Write(${REPO}/src/middleware/rateLimit.ts) ok`,
+        `Edit(${REPO}/src/routes/login.ts) ok`,
+        'Bash(pnpm test) ok',
+        'Bash(git add -A && git commit -q -m "PROJ-142: rate limit login endpoint") ok',
+        'assistant: Done. Login is limited to 5 attempts per minute per IP using an in-memory sliding window. This will not hold across multiple instances.',
+      ]);
+    });
+
+    it('counts tool calls', () => {
+      expect(basic.toolCallCount).toBe(6);
+    });
+
+    it('captures tool output text and the paths a call refers to', () => {
+      const read = basic.transcript.find((e) => e.kind === 'tool' && e.name === 'Read');
+      expect(read).toMatchObject({
+        filePaths: [`${REPO}/src/routes/login.ts`],
+        output: expect.stringContaining("login.post('/login', handler);"),
+        outputTruncated: false,
+      });
+    });
+
+    it('never puts written file contents into the tool input', () => {
+      const write = basic.transcript.find((e) => e.kind === 'tool' && e.name === 'Write');
+      expect(write).toMatchObject({ input: `${REPO}/src/middleware/rateLimit.ts` });
+    });
+
+    it('marks rejected and failed tool calls', () => {
+      expect(tool('Bash', 'pnpm add redis')).toMatchObject({ status: 'rejected' });
+      expect(tool('Bash', 'cd /tmp && pnpm --dir /work/acme-webapp test')).toMatchObject({ status: 'error' });
+    });
+
+    it('summarises subagent calls by type and description, with their text result', () => {
+      expect(tool('Agent', 'general-purpose: Rewrite search query for trigram index')).toMatchObject({
+        status: 'ok',
+        output: 'Rewrote the query to use similarity() ordering with a 0.3 threshold.',
+      });
+    });
+
+    it('keeps non-empty reasoning and drops signature-only thinking', () => {
+      expect(basic.transcript.filter((e) => e.kind === 'reasoning')).toEqual([]);
+      expect(messy.transcript.filter((e) => e.kind === 'reasoning').map((e) => 'text' in e && e.text)).toEqual([
+        'The query runs on every keystroke; a cache keyed by query string should help.',
+      ]);
+    });
+  });
 });
