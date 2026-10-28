@@ -8,7 +8,7 @@ import type { LlmRequest } from '../../src/summarize/llm.js';
 import { PROMPT_VERSION } from '../../src/summarize/prompt.js';
 import { summarizeSession } from '../../src/summarize/summarize.js';
 import { claude, codex } from '../fixtures.js';
-import { llmSummary } from './helpers.js';
+import { llmSummary, pickAll } from './helpers.js';
 
 const redacted = (file: string) => redactSession((parseClaudeCodeFile(file) ?? parseCodexFile(file))!, { home: false });
 const json = (o: object) => JSON.stringify(o);
@@ -101,14 +101,12 @@ describe('summarizeSession (long sessions in chunks)', () => {
 
   const script = (request: LlmRequest) => {
     const content = request.messages[0]!.content;
-    if (request.system.startsWith('You are merging')) {
-      return json({ goal: 'Speed up search.', outcome: 'partial', whatWasDone: 'Tried a cache, then moved to a trigram index.', aiInvolvement: 'heavy' });
-    }
+    if (request.system.startsWith('You are merging')) return pickAll(request);
     if (/Transcript \(part 1 of/.test(content)) {
       return json(llmSummary({ goal: 'Speed up search.', whatWasDone: 'Added a Redis cache.', decisions: [{ decision: 'Put a Redis cache in front of search', reason: 'The query runs on every keystroke.' }], risksOrFollowUps: [] }));
     }
     if (!content.includes('USER: No Redis')) {
-      return json(llmSummary({ goal: 'Speed up search.', whatWasDone: 'Continued the search work.', decisions: [], risksOrFollowUps: [] }));
+      return json(llmSummary({ goal: 'Speed up search.', outcome: 'partial', whatWasDone: 'Continued the search work.', decisions: [], risksOrFollowUps: [] }));
     }
     return json(
       llmSummary({
@@ -147,16 +145,14 @@ describe('summarizeSession (long sessions in chunks)', () => {
     const merge = llm.requests.at(-1)!;
     expect(merge.system).toMatch(/^You are merging/);
     expect(merge.messages[0]!.content).toContain('Removed the cache and wrote a trigram migration.');
-    expect(summary).toMatchObject({ goal: 'Speed up search.', outcome: 'partial', whatWasDone: 'Tried a cache, then moved to a trigram index.' });
+    expect(summary).toMatchObject({ goal: 'Speed up search.', whatWasDone: 'Tried a cache, then moved to a trigram index.' });
     expect(summary.risksOrFollowUps).toEqual(['The trigram migration is unfinished and a ranking test fails.']);
     expect(summary.usage.requests).toBe(llm.requests.length);
   });
 
   it('ignores reversals of ids that were never recorded', async () => {
     const llm = new FakeLlmClient((request) =>
-      request.system.startsWith('You are merging')
-        ? json({ goal: 'g', outcome: 'completed', whatWasDone: 'w', aiInvolvement: 'light' })
-        : json(llmSummary({ reversedDecisions: [{ id: 'D99', reason: 'x' }] })),
+      request.system.startsWith('You are merging') ? pickAll(request) : json(llmSummary({ reversedDecisions: [{ id: 'D99', reason: 'x' }] })),
     );
     const summary = await summarizeSession(messy, llm, { ...options, chunkTokens });
     expect(summary.rejectedApproaches).toEqual([]);
@@ -167,5 +163,71 @@ describe('summarizeSession (long sessions in chunks)', () => {
     const llm = new FakeLlmClient([json(llmSummary())]);
     await summarizeSession(messy, llm, options);
     expect(llm.requests).toHaveLength(1);
+  });
+});
+
+describe('summarizeSession (merging distills rather than concatenates)', () => {
+  const long = redacted(claude.long);
+  const chunkTokens = 1_000;
+  const many = (prefix: string, part: string) => Array.from({ length: 5 }, (_, i) => `${prefix} ${i + 1} from ${part}`);
+  const partReply = (request: LlmRequest, outcome: 'completed' | 'partial' = 'completed') => {
+    const part = /Transcript \(part (\d+) of/.exec(request.messages[0]!.content)![1]!;
+    return json(
+      llmSummary({
+        outcome,
+        whatWasDone: `Part ${part}: ${'Added audit logging to more admin endpoints and their tests. '.repeat(4)}`,
+        decisions: many('Decision', `part ${part}`).map((decision) => ({ decision, reason: 'because' })),
+        rejectedApproaches: many('Approach', `part ${part}`).map((approach) => ({ approach, reason: 'because' })),
+        risksOrFollowUps: many('Follow-up', `part ${part}`),
+      }),
+    );
+  };
+  const mergeNarrative = { goal: 'Add audit logging to admin actions.', whatWasDone: 'Added audit logging to every admin area, with tests.', aiInvolvement: 'heavy' };
+
+  it('has many parts to merge', () => {
+    expect(chunkTurns(condenseSession(long).turns, chunkTokens).length).toBeGreaterThan(5);
+  });
+
+  it('caps each list at 6 items chosen by the merge, and is about as long as a single-part summary', async () => {
+    const llm = new FakeLlmClient((request) => (request.system.startsWith('You are merging') ? pickAll(request, mergeNarrative) : partReply(request)));
+    const merged = await summarizeSession(long, llm, { ...options, chunkTokens });
+    expect(merged.decisions.length).toBeLessThanOrEqual(6);
+    expect(merged.rejectedApproaches.length).toBeLessThanOrEqual(6);
+    expect(merged.risksOrFollowUps.length).toBeLessThanOrEqual(6);
+
+    const single = JSON.parse(partReply(llm.requests[0]!));
+    const size = (s: { goal: string; whatWasDone: string; decisions: unknown[]; rejectedApproaches: unknown[]; risksOrFollowUps: unknown[] }) =>
+      JSON.stringify([s.goal, s.whatWasDone, s.decisions, s.rejectedApproaches, s.risksOrFollowUps]).length;
+    expect(size(merged)).toBeLessThan(size(single) * 1.5);
+  });
+
+  it('offers each candidate once, removing exact duplicates across parts', async () => {
+    const llm = new FakeLlmClient((request) =>
+      request.system.startsWith('You are merging') ? pickAll(request, mergeNarrative) : json(llmSummary({ risksOrFollowUps: ['Same risk everywhere'] })),
+    );
+    await summarizeSession(long, llm, { ...options, chunkTokens });
+    expect(llm.requests.at(-1)!.messages[0]!.content.match(/Same risk everywhere/g)).toHaveLength(1);
+  });
+
+  it.each([
+    ['more than 6 items', { decisionIds: ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7'], rejectedApproachIds: [], followUpIds: [] }, 'decisionIds'],
+    ['an id that was not offered', { decisionIds: [], rejectedApproachIds: ['R999'], followUpIds: [] }, 'R999 was not offered'],
+  ])('retries when the merge picks %s', async (_label, bad, expected) => {
+    let merges = 0;
+    const llm = new FakeLlmClient((request) => {
+      if (!request.system.startsWith('You are merging')) return partReply(request);
+      return ++merges === 1 ? json({ ...mergeNarrative, ...bad }) : pickAll(request, mergeNarrative);
+    });
+    await summarizeSession(long, llm, { ...options, chunkTokens });
+    expect(llm.requests.at(-1)!.messages.at(-1)!.content).toContain(expected);
+  });
+
+  it('takes the outcome from the last part, the end state of the session', async () => {
+    const parts = chunkTurns(condenseSession(long).turns, chunkTokens).length;
+    const llm = new FakeLlmClient((request) => {
+      if (request.system.startsWith('You are merging')) return pickAll(request, mergeNarrative);
+      return partReply(request, request.messages[0]!.content.includes(`(part ${parts} of`) ? 'abandoned' : 'completed');
+    });
+    expect((await summarizeSession(long, llm, { ...options, chunkTokens })).outcome).toBe('abandoned');
   });
 });

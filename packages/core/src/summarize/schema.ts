@@ -20,14 +20,18 @@ export const LlmSummarySchema = z.strictObject({
 });
 export type LlmSummary = z.infer<typeof LlmSummarySchema>;
 
-/** The narrative fields, merged by one final call for sessions summarised in parts. */
-export const NarrativeSchema = z.strictObject({
+/** Merge of a session summarised in parts: a whole-session narrative plus at most 6 candidate ids per list. */
+export const MAX_MERGED_ITEMS = 6;
+const picks = z.array(z.string()).max(MAX_MERGED_ITEMS);
+export const MergeSchema = z.strictObject({
   goal: LlmSummarySchema.shape.goal,
-  outcome: LlmSummarySchema.shape.outcome,
   whatWasDone: LlmSummarySchema.shape.whatWasDone,
   aiInvolvement: LlmSummarySchema.shape.aiInvolvement,
+  decisionIds: picks,
+  rejectedApproachIds: picks,
+  followUpIds: picks,
 });
-export type Narrative = z.infer<typeof NarrativeSchema>;
+export type Merge = z.infer<typeof MergeSchema>;
 
 /** Checks a schema can't express: no code blocks and no redaction placeholders anywhere. */
 export function postCheck(summary: object): string[] {

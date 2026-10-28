@@ -232,3 +232,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** `ANTHROPIC_API_KEY` is read from the environment. If it isn't set there, the `digest` binary (and vitest, for the opt-in live tests) fills it from the `.env` file in the digest checkout's root. Variables already set in the shell win, empty values are skipped, and values are never printed. `.env` is gitignored; `.env.example` is committed.
 - **Alternatives:** Read the target repo's `.env`; a dedicated `~/.config/digest` file; environment only.
 - **Why:** The owner asked for a `.env` file to hold the key. A target repo's `.env` belongs to that project, and silently picking up its credentials would be surprising. Skipping empty values means the blank placeholder can't shadow other credential sources.
+
+## D27. Merging parts distills by picking candidate ids (refines D24)
+
+- **Date:** 2026-10-28
+- **Decision:** For a multi-part session, the merge call receives each part's narrative plus numbered candidates: open decisions (`D…`), rejected approaches including reversed decisions (`R…`), and follow-ups (`F…`), with exact duplicates removed. It returns the whole-session goal, what was done and AI involvement, plus at most 6 ids per list, choosing one from each group of near-duplicates. Code then assembles the lists from the chosen candidates. More than 6 ids, or ids that weren't offered, fail validation and get the one retry. The outcome is taken from the last part (the session's end state). Both prompts tell the model to write about the work only, never about parts, the transcript, metadata, summarising or a team log.
+- **Alternatives:** Let the merge rewrite the lists as free text; cap lists in code by position (first or last 6).
+- **Why:** v1 concatenated every part's lists, so long sessions produced bloated summaries. Selecting by id keeps the model's judgement about what's durable and important, but it can't paraphrase a reversed decision back into "decisions" or invent items. A test checks that a merged summary stays within 1.5× the size of a single-part one.

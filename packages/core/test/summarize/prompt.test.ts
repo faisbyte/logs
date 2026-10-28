@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunkMessage, PROMPT_VERSION, systemPrompt } from '../../src/summarize/prompt.js';
+import { chunkMessage, mergeSystemPrompt, PROMPT_VERSION, systemPrompt } from '../../src/summarize/prompt.js';
 
 describe('summariser prompt', () => {
   it('is versioned', () => {
@@ -37,5 +37,20 @@ describe('summariser prompt', () => {
     const message = chunkMessage({ metadata: 'm', chunk: 'c', part: 2, parts: 2, earlierDecisions: [{ id: 'D1', decision: 'Use Redis' }] });
     expect(message).toContain('Decisions recorded in earlier parts:\nD1: Use Redis');
     expect(message).toContain('"reversedDecisions"');
+  });
+});
+
+describe('merge prompt', () => {
+  it('asks for at most 6 of the most durable items per list, one per duplicate group', () => {
+    const prompt = mergeSystemPrompt();
+    expect(prompt).toContain('at most 6');
+    expect(prompt).toContain('most durable and important');
+    expect(prompt).toContain('choose only one');
+  });
+
+  it('keeps both prompts about the work, not the process', () => {
+    for (const prompt of [systemPrompt(), mergeSystemPrompt()]) {
+      expect(prompt).toContain("Write about the session's work only: never mention the transcript, its parts, the metadata, summarising, or a team log.");
+    }
   });
 });
