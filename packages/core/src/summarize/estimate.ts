@@ -16,8 +16,8 @@ export interface CostEstimate {
 
 /** What summarising this session would send, before sending it. Errs high (see estimateTokens). */
 export function estimateSummaryCost(redacted: RedactedSession, settings: SummarizeSettings): CostEstimate {
-  const { metadata, turns } = condenseSession(redacted);
-  const chunks = chunkTurns(turns, settings.chunkTokens);
+  const { metadata, turns, segmentStarts } = condenseSession(redacted);
+  const chunks = chunkTurns(turns, settings.chunkTokens, segmentStarts);
   const system = systemPrompt();
   const calls = chunks.map((chunk, i) => ({
     inputTokens: estimateTokens(system + chunkMessage({ metadata, chunk, part: i + 1, parts: chunks.length, earlierDecisions: [] })),

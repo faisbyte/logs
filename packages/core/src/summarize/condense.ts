@@ -21,7 +21,12 @@ export interface CondensedSession {
   metadata: string;
   /** One string per turn: a user prompt and everything up to the next prompt. */
   turns: string[];
+  /** Indices of turns that start a new work period (after an idle gap); always starts with 0. */
+  segmentStarts: number[];
 }
+
+// An idle gap this long splits a session into work periods, each summarised as its own part (DECISIONS.md D28).
+const WORK_PERIOD_GAP_MS = 6 * 3_600_000;
 
 /** Conservative: the current tokenizer averages about 2.5 characters per token. */
 export const estimateTokens = (text: string) => Math.ceil(text.length / 2.5);
@@ -56,7 +61,7 @@ function entryLine(entry: DeepReadonly<TranscriptEntry>, rel: (p: string) => str
   }
 }
 
-function metadataFor(s: DeepReadonly<ParsedSession>, rel: (p: string) => string): string {
+function metadataFor(s: DeepReadonly<ParsedSession>, rel: (p: string) => string, workPeriods: number): string {
   const files = s.filesTouched.map(rel);
   const listed = files.slice(0, MAX_FILES_LISTED).join(', ') + (files.length > MAX_FILES_LISTED ? `, … and ${files.length - MAX_FILES_LISTED} more` : '');
   const otherBranches = s.gitBranches.filter((b) => b !== s.gitBranch);
@@ -64,8 +69,10 @@ function metadataFor(s: DeepReadonly<ParsedSession>, rel: (p: string) => string)
     `Agent: ${s.agent}`,
     `Branch: ${s.gitBranch ?? 'unknown'}${otherBranches.length ? ` (also: ${otherBranches.join(', ')})` : ''}`,
     `Started: ${s.startedAt}; ended: ${s.endedAt}`,
+    ...(workPeriods > 1 ? [`Work periods: ${workPeriods} (separated by gaps of 6+ hours)`] : []),
     `Prompts: ${s.turnCount}; tool calls: ${s.toolCallCount}`,
     `Files changed (${files.length}): ${listed || 'none'}`,
+    ...(s.commitShas.length ? [`Commits made during the session: ${s.commitShas.length}`] : []),
     ...s.subagents.map((a) => {
       const report = headAndTail(a.finalText ?? 'no report', MAX_SUBAGENT_CHARS);
       const changed = a.filesTouched.length ? ` Files: ${a.filesTouched.map(rel).join(', ')}` : '';
@@ -81,6 +88,7 @@ export function condenseSession(redacted: RedactedSession): CondensedSession {
   const rel = relativeTo(s.cwd);
 
   const turns: string[][] = [];
+  const spans: { first: number; last: number }[] = [];
   let repeat = { line: '', count: 0 };
   const flush = () => {
     if (repeat.count) turns.at(-1)!.push(repeat.count > 1 ? `${repeat.line} ×${repeat.count}` : repeat.line);
@@ -93,7 +101,9 @@ export function condenseSession(redacted: RedactedSession): CondensedSession {
     if (entry.kind === 'user' || turns.length === 0) {
       flush();
       turns.push([]);
+      spans.push({ first: Date.parse(entry.timestamp), last: Date.parse(entry.timestamp) });
     }
+    spans.at(-1)!.last = Math.max(spans.at(-1)!.last, Date.parse(entry.timestamp));
     if (entry.kind === 'tool' && line === repeat.line) {
       repeat.count++;
       continue;
@@ -104,22 +114,33 @@ export function condenseSession(redacted: RedactedSession): CondensedSession {
   }
   flush();
 
-  return { metadata: metadataFor(s, rel), turns: turns.map((t) => t.join('\n')) };
+  const segmentStarts = [0];
+  const texts = turns.map((t, i) => {
+    const gap = i > 0 ? spans[i]!.first - spans[i - 1]!.last : 0;
+    if (gap < WORK_PERIOD_GAP_MS) return t.join('\n');
+    segmentStarts.push(i);
+    return [`[resumed after ${Math.round(gap / 3_600_000)} hours]`, ...t].join('\n');
+  });
+  return { metadata: metadataFor(s, rel, segmentStarts.length), turns: texts, segmentStarts };
 }
 
-/** Packs whole turns into chunks of at most `budgetTokens`; a turn larger than the budget is split by line. */
-export function chunkTurns(turns: string[], budgetTokens: number): string[] {
+/**
+ * Packs whole turns into chunks of at most `budgetTokens`, never across a work-period boundary;
+ * a turn larger than the budget is split by line.
+ */
+export function chunkTurns(turns: string[], budgetTokens: number, segmentStarts: number[] = [0]): string[] {
   const maxChars = Math.floor(budgetTokens * 2.5);
-  const pieces = turns.flatMap((turn) => {
-    if (estimateTokens(turn) <= budgetTokens) return [turn];
-    return turn.split('\n').flatMap((line) => (line.length <= maxChars ? [line] : (line.match(new RegExp(`[\\s\\S]{1,${maxChars}}`, 'g')) ?? [])));
+  const starts = new Set(segmentStarts);
+  const pieces = turns.flatMap((turn, i) => {
+    const lines = estimateTokens(turn) <= budgetTokens ? [turn] : turn.split('\n').flatMap((line) => (line.length <= maxChars ? [line] : (line.match(new RegExp(`[\\s\\S]{1,${maxChars}}`, 'g')) ?? [])));
+    return lines.map((text, j) => ({ text, newPeriod: j === 0 && i > 0 && starts.has(i) }));
   });
 
   const chunks: string[] = [];
-  for (const piece of pieces) {
+  for (const { text, newPeriod } of pieces) {
     const last = chunks.at(-1);
-    if (last !== undefined && estimateTokens(`${last}\n${piece}`) <= budgetTokens) chunks[chunks.length - 1] = `${last}\n${piece}`;
-    else chunks.push(piece);
+    if (last !== undefined && !newPeriod && estimateTokens(`${last}\n${text}`) <= budgetTokens) chunks[chunks.length - 1] = `${last}\n${text}`;
+    else chunks.push(text);
   }
   return chunks;
 }
