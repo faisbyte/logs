@@ -89,6 +89,13 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 ## D13. Entropy detection scores structure, not just entropy
 
 - **Date:** 2026-10-28
-- **Decision:** Candidates are runs of `[A-Za-z0-9+/_-]` of 20+ chars. Absolute paths are split into segments. UUIDs, SRI hashes, API object IDs (`toolu_`, `msg_`, `req_`, `call_`, …), public PEM blocks and SSH public keys are blanked out first. A candidate is flagged when it has upper, lower and digit; isn't pure hex; has wordiness (share of chars in `[A-Z]?[a-z]{3,}` runs) below 0.6; and its Shannon entropy is within `0.5 + 0.01·min(n, 64)` bits of `log2(min(n, 64))`.
+- **Decision:**
+  - **Candidates:** runs of `[A-Za-z0-9+/_-]` of 20+ chars. Absolute paths are judged one segment at a time.
+  - **Blanked out first:** UUIDs, SRI hashes, API object IDs (`toolu_`, `msg_`, `req_`, `call_`, …), public PEM blocks, SSH public keys, compact ISO timestamps (`20261024T130212Z`) and alphabet constants.
+  - **Flagged when** the candidate has upper, lower and digit; isn't pure hex; has wordiness below 0.62; and its Shannon entropy is within `0.5 + 0.01·min(n, 64)` bits of `log2(min(n, 64))`. Wordiness is the share of alphanumerics in `[A-Z]?[a-z]{3,}` or `[A-Z]{4,}` runs.
 - **Alternatives:** A fixed entropy threshold (detect-secrets style, 4.5 bits for base64).
-- **Why:** At 20–30 chars, entropy alone overlaps: `getUserById2FactorAuthTokenV3` scores 4.39 bits, above the 1st percentile of random 28-char tokens (4.04). Wordiness separates them cleanly: identifiers score 0.76–0.94, random base62 stays under 0.65 at the 99.5th percentile. The entropy band sits at the random 99.5th percentile by length. Known costs: pure-hex secrets and all-lowercase random tokens are never flagged by entropy, though they're still caught when assigned to a secret-named key (D12). About 0.5–2% of random tokens of 20–24 chars fall outside the bands.
+- **Why:**
+  - At 20–30 chars, entropy alone overlaps: `getUserById2FactorAuthTokenV3` scores 4.39 bits, above the 1st percentile of random 28-char tokens (4.04). Wordiness separates them.
+  - On 20,000 random tokens per length, the 0.62 cut misses about 2–3% at 20 chars and under 1% at 32+. Identifiers and names score 0.63–0.94. The entropy band sits at the random 99.5th percentile by length.
+  - Calibrated on the developer's 15 real sessions: false-positive tests for every shape found came first, and hits dropped from 121 to about 21, most of which look like real tokens.
+  - **Known costs:** pure-hex secrets and all-lowercase random tokens are never flagged by entropy, though they're still caught when assigned to a secret-named key (D12). A few separator-joined names with 3-letter words are still flagged.

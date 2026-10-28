@@ -37,6 +37,13 @@ describe('high_entropy false positives', () => {
     ['timestamps, versions and long numbers', '2026-10-28T01:05:42.123Z v2.1.310 1767225600123'],
     ['scoped package with version', '@typescript-eslint/eslint-plugin@8.46.2'],
     ['constant names', 'MAX_RETRY_ATTEMPTS_BEFORE_CIRCUIT_BREAKER_OPENS_V2'],
+    // Shapes found in real sessions (rebuilt from words, not copied):
+    ['file names with compact ISO timestamps', 'backups/20261024T130212Z__thrift-mvp.tar and logs/20261025T090000Z__router.log'],
+    ['compact dates with a partial time', 'ls screenshots/20261024T and screenshots/20261024T13'],
+    ['alphabet constants', "const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';"],
+    ['names joined by separators', 'MonthlyInvoice__ProRataAdjustment-v2-a1b2c3-4 and Dropbox__Personal-tx-2024ab-1'],
+    ['words with an all-caps suffix', '-Group-regularexpressions-Transform-OnePass-HTML2024'],
+    ['paths relative to an env var', '$TMPDIR/project-thrift-v202610 and project-thrift-v202610/LOGS_DIR'],
   ])('leaves %s alone', (_label, text) => unchanged(text));
 });
 
