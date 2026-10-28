@@ -108,3 +108,14 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - **Emails:** SSH remotes (`git@github.com:org/repo`) and URL user info (`ssh://git@host`, `https://user:token@host`) aren't treated as emails.
 - **Alternatives:** Off by default (opt in), as the plan's "optional" wording allows.
 - **Why:** Summaries go to managers, and the narrative never needs a colleague's or customer's address, so redacting costs little and fails safe. On the developer's 15 real sessions, 84 of 91 email hits were `noreply`/`example.*` addresses (commit trailers, test data). Phone detection fired once, on what looks like a real number, and never on dates, versions, IPs or IDs. Opt-out keeps it available for teams that want names and contacts in digests.
+
+## D15. Allow and deny lists: literals as strings, regexes as objects, deny wins
+
+- **Date:** 2026-10-28
+- **Decision:** `.digest/config.json` → `redaction.allow` and `redaction.deny` take plain strings (literals) or `{ "regex": "…", "flags": "i" }`.
+  - **Deny** redacts every case-sensitive literal occurrence and every regex match as `[REDACTED:deny_list]`.
+  - **Allow** keeps a detected value only when it equals a literal or matches a regex. A value that merely *contains* an allowed literal is still redacted.
+  - **Deny always beats allow.**
+  - **Validation:** the `redaction` section is strict (unknown keys are an error), and regexes are compile-checked when the file loads.
+- **Alternatives:** Treat `/…/` strings as regexes; make allow override deny.
+- **Why:** Deny entries are often paths (a home directory), which would collide with a `/…/` convention. Strictness and deny-wins both fail closed: a typo or a conflicting entry never redacts less. Known cost: a pathological regex in the config can be slow, because JavaScript regexes can't be time-limited. The config is the developer's own and stays local.
