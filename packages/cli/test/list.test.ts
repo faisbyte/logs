@@ -33,7 +33,6 @@ describe('digest list', () => {
     expect(exitCode).toBe(0);
     expect(stdout.split('\n')[0]).toMatch(/^STARTED\s+AGENT\s+SESSION\s+DURATION\s+TURNS\s+TOOLS\s+FILES\s+COMMITS\s+STATUS\s+BRANCH\s+TITLE$/);
     expect(rows(stdout).map((r) => r.split(/\s+/)[3])).toEqual([
-      '019c0004',
       '019c0003',
       '019c0002',
       'c1a5e003',
@@ -66,15 +65,22 @@ describe('digest list', () => {
     expect(rows(stdout).find((r) => r.includes('019c0001'))).toMatch(/Add a unit test for the login rate limiter\.$/);
   });
 
-  it('ends with a count per agent', async () => {
+  it('ends with a count per agent and how many empty sessions were hidden', async () => {
     const { stdout } = await run(['list', '--repo', '/work/acme-webapp']);
+    expect(stdout.trimEnd().split('\n').at(-1)).toBe('6 sessions for /work/acme-webapp (3 Claude Code, 3 Codex); 1 empty session hidden, --all shows it');
+  });
+
+  it('shows empty sessions with --all', async () => {
+    const { stdout } = await run(['list', '--all', '--repo', '/work/acme-webapp']);
+    expect(rows(stdout).map((r) => r.split(/\s+/)[3])[0]).toBe('019c0004');
     expect(stdout.trimEnd().split('\n').at(-1)).toBe('7 sessions for /work/acme-webapp (3 Claude Code, 4 Codex)');
   });
 
   it('prints machine-readable sessions with repo-relative files for --json', async () => {
     const { stdout } = await run(['list', '--json', '--repo', '/work/acme-webapp']);
     const sessions = JSON.parse(stdout);
-    expect(sessions).toHaveLength(7);
+    expect(sessions).toHaveLength(6);
+    expect(JSON.parse((await run(['list', '--json', '--all', '--repo', '/work/acme-webapp'])).stdout)).toHaveLength(7);
     expect(sessions.find((s: { sourceSessionId: string }) => s.sourceSessionId.startsWith('c1a5e001'))).toMatchObject({
       agent: 'claude-code',
       status: 'new',
@@ -83,6 +89,15 @@ describe('digest list', () => {
       filesTouched: ['src/middleware/rateLimit.ts', 'src/routes/login.ts'],
       commitShas: [],
     });
+  });
+
+  it('says empty sessions were hidden when they are all there is', async () => {
+    const codexHome = tempDir('digest-onlyempty-');
+    mkdirSync(join(codexHome, 'sessions/2026/03/07'), { recursive: true });
+    const empty = 'codex/sessions/2026/03/07/rollout-2026-03-07T11-00-05-019c0004-0000-7000-8000-000000000004.jsonl';
+    writeFileSync(join(codexHome, 'sessions/2026/03/07/r.jsonl'.replace('r.jsonl', empty.split('/').at(-1)!)), readFileSync(join(FIXTURES, empty)));
+    const { stdout } = await run(['list', '--repo', '/work/acme-webapp'], { env: { CLAUDE_CONFIG_DIR: tempDir('digest-noclaude-'), CODEX_HOME: codexHome } });
+    expect(stdout.trimEnd()).toBe('No non-empty sessions for /work/acme-webapp; 1 empty session hidden, --all shows it');
   });
 
   it('says where it looked when no sessions match', async () => {

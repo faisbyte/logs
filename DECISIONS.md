@@ -140,3 +140,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - `robustness.test.ts` holds pathological inputs (200 KB to 1 MB) with a 1.5 s budget each.
 - **Alternatives:** Throw on detector errors; run redaction in a worker with a timeout.
 - **Why:** Throwing would push every caller to catch-and-continue, which is how unredacted text leaks. A timeout worker adds a process boundary and still has to decide what to do on timeout (it would have to be fail closed anyway). Two real patterns were catastrophic before bounding: a repeated `secret` word and dash-joined `eyJ-` both took more than 10 s on 200 KB. They now finish in under 15 ms. Known limit: user-supplied deny regexes can't be bounded this way (D15).
+
+## D18. Empty sessions are hidden by default (Codex exec twins)
+
+- **Date:** 2026-10-28
+- **Decision:** A session with no assistant text, reasoning or tool calls (including subagent calls) is empty. `digest list` hides empty sessions unless `--all` is passed and says how many were hidden. Later phases never summarise them.
+- **Alternatives:** Collapse each Codex `exec` rollout into the `vscode` rollout started in the same second with the same cwd.
+- **Why:** Chosen by the project owner. Simple, with no reliance on undocumented extension behaviour, and it also covers sessions abandoned at the first prompt in either agent. Known cost: a prompt that got no answer (an API error, say) is hidden too, and `--all` is the escape hatch.

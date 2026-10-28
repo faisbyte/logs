@@ -45,7 +45,8 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .description('Show Claude Code and Codex sessions recorded for this repo')
     .option('--repo <path>', 'repo to list sessions for (default: the git repo containing the current directory)')
     .option('--json', 'print sessions as JSON')
-    .action((options: { repo?: string; json?: boolean }) => guarded('list', () => listCommand(options, ctx)));
+    .option('--all', 'include empty sessions (a prompt with no reply or tool call)')
+    .action((options: { repo?: string; json?: boolean; all?: boolean }) => guarded('list', () => listCommand(options, ctx)));
 
   program
     .command('redact')
