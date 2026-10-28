@@ -1,4 +1,5 @@
 import { allowFilter, detectorsFor } from './detectors.js';
+import { defaultHome, homeReplacer } from './home.js';
 import { placeholder, PRIORITY, type RedactionCounts, type RedactOptions, type Span } from './types.js';
 
 export interface RedactedText {
@@ -27,6 +28,8 @@ const EXISTING_PLACEHOLDER = /\[REDACTED:[a-z_]+\]/g;
 export function createRedactor(options: RedactOptions = {}): (text: string) => RedactedText {
   const detectors = detectorsFor(options);
   const allowed = allowFilter(options.allow ?? []);
+  const home = options.home === false ? null : (options.home ?? defaultHome());
+  const replaceHome = home ? homeReplacer(home) : (text: string) => ({ text, counts: {} as RedactionCounts });
 
   return (text) => {
     try {
@@ -37,13 +40,13 @@ export function createRedactor(options: RedactOptions = {}): (text: string) => R
     }
   };
 
-  function redactWith(text: string): RedactedText {
+  function redactWith(original: string): RedactedText {
+    const { text, counts } = replaceHome(original);
     // Detectors see existing placeholders as blanks, so redacting twice changes nothing.
     const scanned = text.replace(EXISTING_PLACEHOLDER, (p) => ' '.repeat(p.length));
     const found = detectors.flatMap((d) => d.find(scanned).map((s) => ({ ...s, type: d.type })));
     const spans = merge(found.filter((s) => s.type === 'deny_list' || !allowed(text.slice(s.start, s.end))));
 
-    const counts: RedactionCounts = {};
     let out = '';
     let cursor = 0;
     for (const span of spans) {
