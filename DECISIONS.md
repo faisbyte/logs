@@ -130,3 +130,13 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - Freezing stops redacted text being swapped back in place.
   - `packages/core/test/redact/types.test.ts` compiles snippets with the real `tsc` and pins the exact error for each misuse: a raw session, a look-alike, a spread copy, mutation, and direct construction. A mutation check confirmed it fails when the brand is removed.
   - **Known limit:** an `as unknown as RedactedSession` cast still compiles. `isRedactedSession()` catches it at runtime, so egress code should call it too.
+
+## D17. Redaction fails closed and stays linear-time
+
+- **Date:** 2026-10-28
+- **Decision:**
+  - If any detector throws on a string, the whole string becomes `[REDACTED:unscannable]`, and a cyclic object in a session is replaced the same way. `redactText` and `redactSession` never throw.
+  - Every regex quantifier next to a fixed core is bounded (`{0,64}` key-name prefixes, JWT segments ≤ 8 KB). The JWT scan only runs when `.eyJ` appears. Public PEM blocks are found by a linear scanner, not a lazy regex.
+  - `robustness.test.ts` holds pathological inputs (200 KB to 1 MB) with a 1.5 s budget each.
+- **Alternatives:** Throw on detector errors; run redaction in a worker with a timeout.
+- **Why:** Throwing would push every caller to catch-and-continue, which is how unredacted text leaks. A timeout worker adds a process boundary and still has to decide what to do on timeout (it would have to be fail closed anyway). Two real patterns were catastrophic before bounding: a repeated `secret` word and dash-joined `eyJ-` both took more than 10 s on 200 KB. They now finish in under 15 ms. Known limit: user-supplied deny regexes can't be bounded this way (D15).

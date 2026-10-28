@@ -1,6 +1,6 @@
 import { AgentSchema, ToolStatusSchema, type ParsedSession } from '../schema.js';
 import { createRedactor, type RedactedText } from './text.js';
-import type { RedactionCounts, RedactOptions } from './types.js';
+import { placeholder, type RedactionCounts, type RedactOptions } from './types.js';
 
 // The only way to get a RedactedSession is redactSession() (DECISIONS.md D16). Anything that sends
 // session content off the machine (LLM calls, uploads) must take a RedactedSession, never a ParsedSession.
@@ -60,11 +60,16 @@ export function redactSession(session: ParsedSession, options: RedactOptions = {
     return result.text;
   };
 
+  const visiting = new WeakSet<object>();
   const visit = (value: unknown, key?: string): unknown => {
     if (typeof value === 'string') return key && STRUCTURAL[key]?.(value) ? value : tally(redact(value));
-    if (Array.isArray(value)) return value.map((v) => visit(v));
-    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, visit(v, k)]));
-    return value;
+    if (!value || typeof value !== 'object') return value;
+    // A cycle can't come from parsed JSON; fail closed rather than recurse forever.
+    if (visiting.has(value)) return tally({ text: placeholder('unscannable'), counts: { unscannable: 1 } });
+    visiting.add(value);
+    const out = Array.isArray(value) ? value.map((v) => visit(v)) : Object.fromEntries(Object.entries(value).map(([k, v]) => [k, visit(v, k)]));
+    visiting.delete(value);
+    return out;
   };
 
   return new RedactedSession(visit(session) as ParsedSession, counts);
