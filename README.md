@@ -20,6 +20,8 @@ pnpm build   # compile packages to dist/
 pnpm test    # build, then run all tests
 ```
 
+For `digest summarize`, put your Anthropic API key in `.env` (`cp .env.example .env`; gitignored) or export `ANTHROPIC_API_KEY`.
+
 To run `digest` from any repo, alias the built binary (run this in this repo's root):
 
 ```sh

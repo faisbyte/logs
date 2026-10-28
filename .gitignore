@@ -7,6 +7,11 @@ coverage/
 # Local digest state (processed-session tracker, later caches). Never commit.
 .digest/
 
+# Secrets: the real .env holds ANTHROPIC_API_KEY. Only the example is committed.
+.env
+.env.*
+!.env.example
+
 # Raw session data must never be committed. Fixtures in fixtures/ are hand-written.
 local-sessions/
 *.raw.jsonl
