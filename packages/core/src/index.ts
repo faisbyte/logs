@@ -4,7 +4,7 @@ export { parseCodexFile } from './parsers/codex.js';
 export { isInRepo } from './repo.js';
 export { truncateToolOutputs, type TruncateLimits } from './truncate.js';
 export { agentDirs, discoverSessionFiles, loadSessions, type AgentDirs, type SessionFile } from './discover.js';
-export { commitsDuring, findRepoRoot } from './git.js';
+export { commitsDuring, filesInCommits, findRepoRoot } from './git.js';
 export * from './state.js';
 export { readConfig, type DigestConfig, type Matcher } from './config.js';
 export { createRedactor, redactText, type RedactedText } from './redact/text.js';
@@ -21,3 +21,4 @@ export { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';
 export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
 export { estimateSummaryCost, type CostEstimate } from './summarize/estimate.js';
+export { prepareSessionForRepo, repoFiles } from './repo-files.js';

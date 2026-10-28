@@ -60,6 +60,15 @@ describe('digest summarize', () => {
     expect(JSON.parse(list.stdout).find((s: { sourceSessionId: string }) => s.sourceSessionId.startsWith('c1a5e001')).status).toBe('processed');
   });
 
+  it('saves files relative to the repo root, even for a session launched in a subdirectory', async () => {
+    const { repo, env } = fixtureRepo();
+    await run(['summarize', 'c1a5e003', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+    const draft = JSON.parse(readFileSync(join(repo, '.digest/summaries/claude-code-c1a5e003-0000-4000-8000-000000000003.json'), 'utf8'));
+    expect(draft.filesTouched).toContain('packages/api/src/admin/users.ts');
+    expect(draft.filesTouched).toContain('notebooks/audit-volume.ipynb');
+    expect(draft.filesTouched.every((f: string) => !f.startsWith('/'))).toBe(true);
+  });
+
   it('serves an unchanged session from the cache on the next run', async () => {
     const { repo, env } = fixtureRepo();
     const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');

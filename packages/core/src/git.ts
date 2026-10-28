@@ -44,3 +44,9 @@ export function commitsDuring(
     .sort((a, b) => a.time - b.time)
     .map((c) => c.sha);
 }
+
+/** Repo-relative paths changed by the given commits, sorted and de-duplicated. */
+export function filesInCommits(repoRoot: string, shas: readonly string[]): string[] {
+  const files = shas.flatMap((sha) => (git(repoRoot, ['diff-tree', '--no-commit-id', '--name-only', '-r', '--root', sha]) ?? '').split('\n').filter(Boolean));
+  return [...new Set(files)].sort();
+}
