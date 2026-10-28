@@ -1,4 +1,4 @@
-export type PlaceholderType = 'aws_key' | 'aws_secret' | 'github_token' | 'anthropic_key' | 'openai_key' | 'jwt' | 'private_key' | 'connection_string' | 'env_secret' | 'deny_list' | 'email' | 'phone' | 'high_entropy';
+export type PlaceholderType = 'aws_key' | 'aws_secret' | 'github_token' | 'anthropic_key' | 'openai_key' | 'jwt' | 'private_key' | 'connection_string' | 'env_secret' | 'deny_list' | 'email' | 'phone' | 'high_entropy' | 'unscannable';
 
 /** When matches overlap, the merged placeholder takes the most specific type: earliest in this list. */
 export const PRIORITY: readonly PlaceholderType[] = [

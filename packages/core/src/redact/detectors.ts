@@ -1,19 +1,25 @@
 import { highEntropyDetector } from './entropy.js';
 import type { Detector, Matcher, PlaceholderType, RedactOptions } from './types.js';
 
+// Every quantifier around a fixed core is bounded: an unbounded run on both sides of an alternation
+// backtracks quadratically on long tokens (robustness.test.ts has the inputs that proved it).
+
 interface RegexOptions {
   /** Capture group to redact (default: the whole match). */
   group?: number;
+  /** Skip the regex entirely unless the text contains this substring (cheap guard for costly patterns). */
+  requires?: string;
   /** Extra check on the redacted text (and the text before it); rejects look-alikes a regex alone can't. */
   validate?: (value: string, before: string) => boolean;
 }
 
-function regexDetector(type: PlaceholderType, regex: RegExp, { group = 0, validate }: RegexOptions = {}): Detector {
+function regexDetector(type: PlaceholderType, regex: RegExp, { group = 0, requires, validate }: RegexOptions = {}): Detector {
   const flags = regex.flags.includes('d') ? regex.flags : `${regex.flags}d`;
   const pattern = new RegExp(regex.source, flags.includes('g') ? flags : `${flags}g`);
   return {
     type,
     find(text) {
+      if (requires && !text.includes(requires)) return [];
       return [...text.matchAll(pattern)].flatMap((m) => {
         const range = m.indices?.[group];
         if (!range || range[1] <= range[0]) return [];
@@ -28,7 +34,7 @@ const mixedCaseWithDigits = (s: string) => /[A-Z]/.test(s) && /[a-z]/.test(s) &&
 
 // Key names that suggest a secret value (DECISIONS.md D12): *SECRET*, *TOKEN*, *PASSWORD*, *API_KEY*, ...
 const SECRET_KEY =
-  '[\\w.-]*(?:secret|token|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|auth(?![a-z])|authorization|credentials?|session[_-]?key|signing[_-]?key|encryption[_-]?key|dsn)[\\w.-]*';
+  '[\\w.-]{0,64}(?:secret|token|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|auth(?![a-z])|authorization|credentials?|session[_-]?key|signing[_-]?key|encryption[_-]?key|dsn)[\\w.-]{0,64}';
 // Values that are references, types or placeholders rather than secrets.
 const NOT_A_SECRET =
   /^(?:\$\{?[\w.]+\}?|%\w+%|\{\{.*\}\}|<[^>]*>|(?:process\.)?env\.\w+|os\.environ.*|true|false|null|none|nil|undefined|string|number|boolean|bool|str|int|any|unknown|object|\d+(?:\.\d+)?|\*+|x+)$/i;
@@ -42,7 +48,10 @@ const digitCount = (min: number, max: number) => (s: string) => {
 };
 
 // Not an email: an SSH remote (git@github.com:org/repo) or the user part of a URL (ssh://git@host, https://u:p@host).
-const insideUrlAuthority = (before: string) => /[a-z][a-z0-9+.-]*:\/\/[^\s/@]*$/i.test(before);
+function insideUrlAuthority(before: string): boolean {
+  const at = before.lastIndexOf('://');
+  return at > 0 && /[a-z]$/i.test(before.slice(0, at)) && !/[\s/@]/.test(before.slice(at + 3));
+}
 export const emailDetector = regexDetector(
   'email',
   /(?<![\w.+-])[\w.%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,24}\b(?!:\S)/,
@@ -63,7 +72,7 @@ export const SECRET_DETECTORS: Detector[] = [
   regexDetector('aws_secret', /(?:aws_?secret_?access_?key|SecretAccessKey)["']?\s*[:=]\s*["']?([A-Za-z0-9/+]{40})(?![A-Za-z0-9/+])/i, { group: 1 }),
   regexDetector('github_token', /\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b/),
   regexDetector('anthropic_key', /\bsk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_-]{20,}/),
-  regexDetector('jwt', /\beyJ[\w-]{8,}\.eyJ[\w-]{8,}\.[\w-]*/),
+  regexDetector('jwt', /\beyJ[\w-]{8,8192}\.eyJ[\w-]{8,8192}\.[\w-]{0,8192}/, { requires: '.eyJ' }),
   // Whole PEM block; with no END line (truncated output) it runs to the end of the text.
   regexDetector('private_key', /-----BEGIN[A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END[A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----|$)/),
   regexDetector('openai_key', /\bsk-(?!ant-)(?:(?:proj|svcacct|admin)-)?[A-Za-z0-9_-]{20,}/, { validate: mixedCaseWithDigits }),
@@ -75,7 +84,7 @@ export const SECRET_DETECTORS: Detector[] = [
   envSecret(`(?<![\\w.-])["']?${SECRET_KEY}["']?\\s*[:=]\\s*"([^"\\n]{1,512})"`),
   envSecret(`(?<![\\w.-])["']?${SECRET_KEY}["']?\\s*[:=]\\s*'([^'\\n]{1,512})'`),
   // key: value at the start of a line (YAML, header dumps) or inside a quoted header (curl -H "...").
-  envSecret(`^[ \\t-]*${SECRET_KEY}:[ \\t]+${SCHEME}([^\\s"',;{}()\\[\\]]{1,512})`, 'im'),
+  envSecret(`^[ \\t-]{0,64}${SECRET_KEY}:[ \\t]+${SCHEME}([^\\s"',;{}()\\[\\]]{1,512})`, 'im'),
   envSecret(`["']${SECRET_KEY}:[ \\t]*${SCHEME}([^\\s"',;{}()\\[\\]]{1,512})`),
   highEntropyDetector,
 ];

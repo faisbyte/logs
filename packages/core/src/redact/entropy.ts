@@ -11,11 +11,32 @@ const SAFE_SHAPES = [
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, // UUIDs (session ids)
   /\bsha(?:1|256|384|512)-[A-Za-z0-9+/]+={0,2}/g, // SRI integrity hashes in lockfiles
   /\b(?:toolu|srvtoolu|msg|req|call|resp|rs|fc|file|batch|chatcmpl|run|thread|asst|step)_[A-Za-z0-9]+/g, // API object ids
-  /-----BEGIN (?:[A-Z0-9]+ ){0,3}(?:PUBLIC KEY|CERTIFICATE(?: REQUEST)?)-----[\s\S]*?-----END [A-Z0-9 ]{0,60}-----/g, // public PEM blocks
   /\b(?:ssh-(?:rsa|dss|ed25519)|ecdsa-sha2-nistp\d{3}|sk-ssh-ed25519@openssh\.com) AAAA[A-Za-z0-9+/]+={0,3}/g, // SSH public keys
   /\d{8}T(?:\d{2,6}(?:\.\d+)?Z?)?/g, // compact ISO 8601 dates and times in file names
   /ABCDEFGHIJKLMNOPQRSTUVWXYZ|abcdefghijklmnopqrstuvwxyz/g, // alphabet constants
 ];
+
+const PUBLIC_PEM_BEGIN = /-----BEGIN (?:[A-Z0-9]+ ){0,3}(?:PUBLIC KEY|CERTIFICATE(?: REQUEST)?)-----/g;
+const PEM_END = /-----END [A-Z0-9 ]{0,60}-----/y;
+
+/** Blanks public PEM blocks. Linear: the next END marker is found once and reused across BEGIN markers. */
+function blankPublicPem(text: string): string {
+  const pieces: string[] = [];
+  let cursor = 0;
+  let nextEnd = -1;
+  for (const begin of text.matchAll(PUBLIC_PEM_BEGIN)) {
+    if (nextEnd < begin.index) nextEnd = text.indexOf('-----END ', begin.index);
+    if (nextEnd === -1) break;
+    if (nextEnd - begin.index > 16_384) continue;
+    PEM_END.lastIndex = nextEnd;
+    const end = PEM_END.exec(text);
+    if (!end || begin.index < cursor) continue;
+    const stop = nextEnd + end[0].length;
+    pieces.push(text.slice(cursor, begin.index), ' '.repeat(stop - begin.index));
+    cursor = stop;
+  }
+  return pieces.length ? pieces.join('') + text.slice(cursor) : text;
+}
 
 function shannon(s: string): number {
   const counts = new Map<string, number>();
@@ -46,7 +67,7 @@ export function looksRandom(token: string): boolean {
 export const highEntropyDetector: Detector = {
   type: 'high_entropy',
   find(text) {
-    const scanned = SAFE_SHAPES.reduce((t, shape) => t.replace(shape, (m) => ' '.repeat(m.length)), text);
+    const scanned = SAFE_SHAPES.reduce((t, shape) => t.replace(shape, (m) => ' '.repeat(m.length)), blankPublicPem(text));
     const spans: { start: number; end: number }[] = [];
     for (const m of scanned.matchAll(CANDIDATE)) {
       // Absolute paths are judged one segment at a time; other tokens (base64 with '/') as a whole.

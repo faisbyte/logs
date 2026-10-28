@@ -29,6 +29,15 @@ export function createRedactor(options: RedactOptions = {}): (text: string) => R
   const allowed = allowFilter(options.allow ?? []);
 
   return (text) => {
+    try {
+      return redactWith(text);
+    } catch {
+      // Fail closed: if any detector breaks, nothing from this string gets through.
+      return { text: placeholder('unscannable'), counts: { unscannable: 1 } };
+    }
+  };
+
+  function redactWith(text: string): RedactedText {
     // Detectors see existing placeholders as blanks, so redacting twice changes nothing.
     const scanned = text.replace(EXISTING_PLACEHOLDER, (p) => ' '.repeat(p.length));
     const found = detectors.flatMap((d) => d.find(scanned).map((s) => ({ ...s, type: d.type })));
@@ -43,7 +52,7 @@ export function createRedactor(options: RedactOptions = {}): (text: string) => R
       cursor = span.end;
     }
     return { text: out + text.slice(cursor), counts };
-  };
+  }
 }
 
 export function redactText(text: string, options: RedactOptions = {}): RedactedText {
