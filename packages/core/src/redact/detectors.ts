@@ -1,5 +1,5 @@
 import { highEntropyDetector } from './entropy.js';
-import type { Detector, PlaceholderType, RedactOptions } from './types.js';
+import type { Detector, Matcher, PlaceholderType, RedactOptions } from './types.js';
 
 interface RegexOptions {
   /** Capture group to redact (default: the whole match). */
@@ -80,8 +80,34 @@ export const SECRET_DETECTORS: Detector[] = [
   highEntropyDetector,
 ];
 
+const toRegex = (m: Matcher, extraFlags: string) =>
+  typeof m === 'string' ? null : new RegExp(m.regex, [...new Set(`${m.flags ?? ''}${extraFlags}`)].join(''));
+
+function denyDetector(deny: Matcher[]): Detector {
+  const literals = deny.filter((m): m is string => typeof m === 'string');
+  const regexes = deny.map((m) => toRegex(m, 'g')).filter((r): r is RegExp => r !== null);
+  return {
+    type: 'deny_list',
+    find(text) {
+      const spans: { start: number; end: number }[] = [];
+      for (const literal of literals) {
+        for (let at = text.indexOf(literal); at !== -1; at = text.indexOf(literal, at + literal.length)) spans.push({ start: at, end: at + literal.length });
+      }
+      for (const regex of regexes) for (const m of text.matchAll(regex)) if (m[0]) spans.push({ start: m.index, end: m.index + m[0].length });
+      return spans;
+    },
+  };
+}
+
+export function allowFilter(allow: Matcher[]): (value: string) => boolean {
+  const literals = new Set(allow.filter((m): m is string => typeof m === 'string'));
+  const regexes = allow.map((m) => toRegex(m, '')).filter((r): r is RegExp => r !== null);
+  return (value) => literals.has(value) || regexes.some((r) => r.test(value));
+}
+
 export function detectorsFor(options: RedactOptions): Detector[] {
   return [
+    ...(options.deny?.length ? [denyDetector(options.deny)] : []),
     ...SECRET_DETECTORS,
     ...(options.pii?.email === false ? [] : [emailDetector]),
     ...(options.pii?.phone === false ? [] : phoneDetectors),
