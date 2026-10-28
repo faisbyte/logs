@@ -123,11 +123,49 @@ describe('parseClaudeCodeFile', () => {
       });
     });
 
+    it('lists files changed by successful Write and Edit calls, but not reads', () => {
+      expect(basic.filesTouched).toEqual([`${REPO}/src/middleware/rateLimit.ts`, `${REPO}/src/routes/login.ts`]);
+    });
+
+    it('does not count an edit the user rejected as touched', () => {
+      expect(messy.filesTouched).not.toContain(`${REPO}/src/search/index.ts`);
+    });
+
+    it('counts MultiEdit and NotebookEdit as edits', () => {
+      const long = parseClaudeCodeFile(claude.long)!;
+      expect(long.filesTouched).toContain(`${REPO}/notebooks/audit-volume.ipynb`);
+      expect(long.filesTouched).toContain(`${REPO}/packages/api/src/admin/teams.ts`);
+    });
+
     it('keeps non-empty reasoning and drops signature-only thinking', () => {
       expect(basic.transcript.filter((e) => e.kind === 'reasoning')).toEqual([]);
       expect(messy.transcript.filter((e) => e.kind === 'reasoning').map((e) => 'text' in e && e.text)).toEqual([
         'The query runs on every keystroke; a cache keyed by query string should help.',
       ]);
+    });
+  });
+
+  describe('subagents', () => {
+    const messy = parseClaudeCodeFile(claude.messy)!;
+
+    it('adds files edited by subagents to the parent session', () => {
+      expect(messy.filesTouched).toEqual([
+        `${REPO}/db/migrations/0042_search_trgm.sql`,
+        `${REPO}/src/search/cache.ts`,
+        `${REPO}/src/search/query.ts`,
+        `${REPO}/src/search/ranking.ts`,
+      ]);
+    });
+
+    it('adds subagent tool calls to the parent count', () => {
+      // 8 calls in the main transcript + 3 made by the subagent.
+      expect(messy.toolCallCount).toBe(11);
+    });
+
+    it('keeps subagent prompts and messages out of the parent transcript', () => {
+      const texts = messy.transcript.filter((e) => 'text' in e).map((e) => ('text' in e ? e.text : ''));
+      expect(texts).not.toContain('Rewrite src/search/query.ts to use similarity() with the pg_trgm index.');
+      expect(messy.transcript.filter((e) => e.kind === 'tool')).toHaveLength(8);
     });
   });
 });
