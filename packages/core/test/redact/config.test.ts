@@ -22,10 +22,8 @@ describe('deny list', () => {
     });
   });
 
-  it('redacts regex matches', () => {
-    expect(redactText('see ACME-1234 and acme-5678', { deny: [{ regex: 'ACME-\\d{4}', flags: 'i' }] }).text).toBe(
-      'see [REDACTED:deny_list] and [REDACTED:deny_list]',
-    );
+  it('matches literals only, so a pattern-looking entry is just text', () => {
+    expect(redactText('see ACME-\\d{4} and ACME-1234', { deny: ['ACME-\\d{4}'] }).text).toBe('see [REDACTED:deny_list] and ACME-1234');
   });
 
   it('can redact a home directory out of paths', () => {
@@ -38,8 +36,8 @@ describe('allow list', () => {
     expect(redactText(`AWS_ACCESS_KEY_ID=${awsExample}`, { allow: [awsExample] }).text).toBe(`AWS_ACCESS_KEY_ID=${awsExample}`);
   });
 
-  it('keeps detected values matching a regex', () => {
-    expect(redactText('mail dev@example.com or ops@acme.io', { allow: [{ regex: '@example\\.com$' }] }).text).toBe('mail dev@example.com or [REDACTED:email]');
+  it('keeps each exactly-listed value and nothing else', () => {
+    expect(redactText('mail dev@example.com or ops@example.com', { allow: ['dev@example.com'] }).text).toBe('mail dev@example.com or [REDACTED:email]');
   });
 
   it('still redacts a value that only contains an allowed literal', () => {
@@ -57,13 +55,17 @@ describe('readConfig', () => {
   });
 
   it('reads allow, deny and pii settings', () => {
-    const repo = repoWithConfig(JSON.stringify({ redaction: { allow: ['a'], deny: [{ regex: 'b+' }], pii: { phone: false } } }));
-    expect(readConfig(repo)).toEqual({ redaction: { allow: ['a'], deny: [{ regex: 'b+' }], pii: { phone: false } } });
+    const repo = repoWithConfig(JSON.stringify({ redaction: { allow: ['a'], deny: ['b'], pii: { phone: false }, home: false } }));
+    expect(readConfig(repo)).toEqual({ redaction: { allow: ['a'], deny: ['b'], pii: { phone: false }, home: false } });
   });
 
-  it('rejects unreadable JSON, unknown redaction keys and invalid regexes, naming the file', () => {
+  it('rejects unreadable JSON and unknown redaction keys, naming the file', () => {
     expect(() => readConfig(repoWithConfig('{"redaction":'))).toThrow(/\.digest\/config\.json/);
     expect(() => readConfig(repoWithConfig('{"redaction":{"denylist":["x"]}}'))).toThrow(/\.digest\/config\.json/);
-    expect(() => readConfig(repoWithConfig('{"redaction":{"deny":[{"regex":"("}]}}'))).toThrow(/\.digest\/config\.json/);
+  });
+
+  it('rejects regex entries in allow and deny with a hint to use literals (D20)', () => {
+    expect(() => readConfig(repoWithConfig('{"redaction":{"deny":[{"regex":"ACME-\\\\d+"}]}}'))).toThrow(/literal strings/);
+    expect(() => readConfig(repoWithConfig('{"redaction":{"allow":[{"regex":"."}]}}'))).toThrow(/literal strings/);
   });
 });
