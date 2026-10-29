@@ -5,6 +5,7 @@ import { Command, CommanderError } from 'commander';
 import { initCommand } from './init.js';
 import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
+import { previewCommand, reportCommand } from './report.js';
 import { linkCommand, ticketsCommand } from './tickets.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
@@ -148,6 +149,23 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .option('--sprint <name>', 'one sprint by name instead of a date range')
     .option(...repoOption)
     .action((options: { from?: string; to?: string; sprint?: string; repo?: string }) => guarded('tickets', () => ticketsCommand(options, ctx)));
+
+  program
+    .command('report')
+    .description("Write a plain-language report of the team's shared AI work for a sprint or date range, with your own API key (cost estimate first)")
+    .option('--from <date>', 'start of a date range, e.g. 2026-03-01')
+    .option('--to <date>', 'end of the date range (not included)')
+    .option('--sprint <name>', 'one sprint by name instead of a date range')
+    .option('--yes', 'skip the confirmation before sending')
+    .option('--out <file>', 'write the Markdown to a file in the repo instead of printing it')
+    .option(...repoOption)
+    .action((options: { from?: string; to?: string; sprint?: string; yes?: boolean; out?: string; repo?: string }) => guarded('report', () => reportCommand(options, ctx)));
+
+  program
+    .command('preview')
+    .description('Show scheduled digests waiting in developer preview before they are sent')
+    .option(...repoOption)
+    .action((options: { repo?: string }) => guarded('preview', () => previewCommand(options, ctx)));
 
   try {
     await program.parseAsync(argv, { from: 'user' });
