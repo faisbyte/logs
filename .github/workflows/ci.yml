@@ -20,4 +20,11 @@ jobs:
       - run: corepack enable && corepack install
       - run: pnpm install --frozen-lockfile
       # Build, then every test. Live API tests skip themselves: no DIGEST_LIVE_TESTS, DIGEST_EVAL or API key here.
-      - run: pnpm test
+      - run: |
+          set -o pipefail
+          pnpm test 2>&1 | tee test-output.log
+      # Job logs need a sign-in to read, annotations don't: on failure, repeat the end of the output as one.
+      - if: failure()
+        run: |
+          message=$( (grep -E 'FAIL|Error|error TS|Unhandled|timed out' test-output.log | head -n 40; echo '---'; tail -n 40 test-output.log) | sed 's/%/%25/g; s/\r/%0D/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=pnpm test failed::${message}"
