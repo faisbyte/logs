@@ -18,6 +18,7 @@ import {
   readState,
   redactSession,
   sessionKey,
+  sessionTickets,
   summarizeCached,
   summarizeSettings,
   writeState,
@@ -74,10 +75,11 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
 
   const plan = selected.map((session) => {
     // Repo-relative files and commits come from the parsed session and git, before redaction (DECISIONS.md D29).
-    const redacted = redactSession(prepareSessionForRepo(session, repoRoot), config.redaction);
+    const prepared = prepareSessionForRepo(session, repoRoot);
+    const redacted = redactSession(prepared, config.redaction);
     const key = cacheKey({ sessionId: session.sourceSessionId, contentHash: contentHash(redacted, settings.chunkTokens), promptVersion: PROMPT_VERSION, model: settings.model });
     const cached = readCachedSummary(repoRoot, key) !== null;
-    return { session, redacted, cached, estimate: cached ? null : estimateSummaryCost(redacted, settings), id: shortId(session) };
+    return { session, prepared, redacted, cached, estimate: cached ? null : estimateSummaryCost(redacted, settings), id: shortId(session) };
   });
   const toSend = plan.filter((p) => !p.cached);
   const total = (field: 'inputTokens' | 'outputTokens') => toSend.reduce((n, p) => n + p.estimate![field], 0);
@@ -108,17 +110,26 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
     saveSummary(repoRoot, approve(draft, { by: 'auto' }).summary as SessionSummary);
     return '  approved automatically';
   };
+  // Ticket keys follow the current tickets config, so a cached draft picks up a change too (DECISIONS.md D44).
+  const tagTickets = (p: (typeof plan)[number]) => {
+    const draft = current(p.session);
+    if (draft?.status !== 'draft' || isReviewed(draft)) return;
+    const tickets = sessionTickets(repoRoot, p.prepared, config.tickets);
+    if (JSON.stringify(tickets) !== JSON.stringify({ ticketRefs: draft.ticketRefs, ticketSources: draft.ticketSources })) saveSummary(repoRoot, { ...draft, ...tickets });
+  };
   const done = { inputTokens: 0, outputTokens: 0, cost: 0 as number | null, summarised: 0, failed: 0 };
 
   for (const p of plan) {
     const markDone = () => (state = markProcessed(state, sessionKey(p.session), fingerprintFile(p.session.sourcePath), new Date()));
     if (p.cached) {
+      tagTickets(p);
       ctx.stdout(`${p.id}  cached${autoApprove(p.session)}\n`);
       markDone();
       continue;
     }
     try {
       const { summary } = await summarizeCached(repoRoot, p.redacted, llm!, settings);
+      tagTickets(p);
       const { inputTokens, outputTokens, costUsd } = summary.usage;
       ctx.stdout(`${p.id}  summarised  ${tokens(inputTokens)} in / ${tokens(outputTokens)} out tokens  ${dollars(costUsd)}${autoApprove(p.session)}\n`);
       done.inputTokens += inputTokens;
