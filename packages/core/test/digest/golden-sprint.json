@@ -1,0 +1,73 @@
+{
+  "about": "Synthetic sprint for the opt-in digest eval (DECISIONS.md D56). plantedDigest holds three claims no summary supports; the judge must flag each mustFlag phrase and none of the mustNotFlag ones.",
+  "sprint": { "name": "Sprint 1", "from": "2026-03-02T00:00:00.000Z", "to": "2026-03-16T00:00:00.000Z" },
+  "titles": [
+    { "key": "PROJ-142", "title": "Rate limit login" },
+    { "key": "PROJ-150", "title": "Faster search" }
+  ],
+  "summaries": [
+    {
+      "developer": "alice",
+      "sessionId": "e0000001-0000-4000-8000-000000000001",
+      "ticketRefs": ["PROJ-142"],
+      "branch": "feature/PROJ-142-rate-limit",
+      "startedAt": "2026-03-03T09:00:00.000Z",
+      "endedAt": "2026-03-03T11:00:00.000Z",
+      "goal": "Stop brute-force guessing on the login endpoint.",
+      "outcome": "completed",
+      "whatWasDone": "Added a sliding-window limit of 5 login attempts per minute per IP address, with a clear error message when it is hit.",
+      "decisions": [{ "decision": "Keep the limiter in memory", "reason": "There is only one API server today." }],
+      "rejectedApproaches": [{ "approach": "A Redis-backed limiter", "reason": "There is no Redis in this deployment yet." }],
+      "risksOrFollowUps": ["The limit will not hold once there is more than one API server."],
+      "aiInvolvement": "heavy"
+    },
+    {
+      "developer": "bob",
+      "sessionId": "e0000002-0000-4000-8000-000000000002",
+      "ticketRefs": ["PROJ-142"],
+      "branch": "feature/PROJ-142-rate-limit",
+      "startedAt": "2026-03-05T14:00:00.000Z",
+      "endedAt": "2026-03-05T15:00:00.000Z",
+      "goal": "Test the login limiter.",
+      "outcome": "partial",
+      "whatWasDone": "Wrote tests for the limit and the error message. A test for the window reset is still failing intermittently.",
+      "decisions": [],
+      "rejectedApproaches": [],
+      "risksOrFollowUps": ["Fix the flaky window-reset test before release."],
+      "aiInvolvement": "moderate"
+    },
+    {
+      "developer": "bob",
+      "sessionId": "e0000003-0000-4000-8000-000000000003",
+      "ticketRefs": ["PROJ-150"],
+      "branch": "feature/PROJ-150-search",
+      "startedAt": "2026-03-09T10:00:00.000Z",
+      "endedAt": "2026-03-09T12:30:00.000Z",
+      "goal": "Make product search faster.",
+      "outcome": "completed",
+      "whatWasDone": "Cached the results of popular searches for five minutes and added a database index on product names.",
+      "decisions": [{ "decision": "Cache results for five minutes", "reason": "Prices change at most hourly, so slightly old results are acceptable." }],
+      "rejectedApproaches": [{ "approach": "A separate search service", "reason": "Too much to run for the current traffic." }],
+      "risksOrFollowUps": ["Measure the speed-up in staging; it has not been measured yet."],
+      "aiInvolvement": "light"
+    },
+    {
+      "developer": "alice",
+      "sessionId": "e0000004-0000-4000-8000-000000000004",
+      "ticketRefs": [],
+      "branch": "main",
+      "startedAt": "2026-03-12T09:00:00.000Z",
+      "endedAt": "2026-03-12T09:40:00.000Z",
+      "goal": "Tidy up noisy logs.",
+      "outcome": "completed",
+      "whatWasDone": "Removed duplicate log lines from the checkout flow so real errors are easier to spot.",
+      "decisions": [],
+      "rejectedApproaches": [],
+      "risksOrFollowUps": [],
+      "aiInvolvement": "moderate"
+    }
+  ],
+  "plantedDigest": "# AI work update: Sprint 1 (2026-03-02 to 2026-03-15)\n\nThe team made login safer and search faster, and tidied up logging.\n\n## PROJ-142: Rate limit login\n\nLogin now allows at most 5 attempts per minute from one address, and the limiter shipped to production on Friday. It also passed an external security pen test.\n\n**AI involvement: heavy.** The AI wrote most of the change.\n\n**Key decisions:**\n\n- Keep the limiter in memory, because there is only one server today.\n\n## PROJ-150: Faster search\n\nPopular searches are now cached for five minutes, and search is now 40% faster.\n\n**AI involvement: light.** The AI helped a little.\n\n## Other work\n\nDuplicate log lines were removed from checkout.\n\n## Risks and open questions\n\n- The login limit won't hold once there is more than one server.\n- A test for the limiter is still flaky.\n\n_Based on 4 summaries that 2 developers chose to share._\n",
+  "mustFlag": ["production", "pen test", "40%"],
+  "mustNotFlag": ["5 attempts", "in memory", "five minutes"]
+}

@@ -89,3 +89,4 @@ export { assertDeliverable, checkDigest, DigestBlockedError, DigestError, Digest
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';
 export { checkNewDigest, defaultRepoSettings, sameReport, type DigestKind, type DigestPatch, type DigestStatus, type DigestStore, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './shared/digests.js';
 export { capRefusal, monthStart, onDemandReport, periodKey, storedFields, writeDigest, type DigestDeps, type ReportResult } from './shared/reports.js';
+export { judgeDigest, judgeSystemPrompt, JudgeSchema, type JudgeVerdict } from './digest/judge.js';
