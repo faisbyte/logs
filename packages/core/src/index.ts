@@ -35,7 +35,7 @@ export {
   verifyApproval,
   type ApprovedSummary,
 } from './review/approval.js';
-export { UploadPayloadSchema, validatePush, type PushValidation, type UploadPayload } from './shared/payload.js';
+export { contentProblems, UploadPayloadSchema, validatePush, type PushValidation, type UploadPayload } from './shared/payload.js';
 export { findSummary, isReviewed, listSummaries, readSummaryFile, saveOriginal, saveSummary, summaryPath } from './review/store.js';
 export { editSummary, parseEdit, toEditable, type EditResult } from './review/edit.js';
 export { formatSummary, formatTime, SHARED_HEADER, statusText } from './review/format.js';
@@ -61,5 +61,23 @@ export {
   type TeamReport,
   type TokenStore,
 } from './shared/store.js';
+export {
+  byFrom,
+  decideLink,
+  decideSprint,
+  decideUnlink,
+  ticketKeyProblems,
+  type LinkResult,
+  type ManualTicketLink,
+  type SharedStore,
+  type Sprint,
+  type SprintResult,
+  type SummaryRef,
+  type TicketLink,
+  type TicketLinkSource,
+  type TicketStore,
+  type TrackerTicket,
+  type UnlinkResult,
+} from './shared/tickets.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
