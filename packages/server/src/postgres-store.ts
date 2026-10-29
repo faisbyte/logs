@@ -86,6 +86,13 @@ const MIGRATIONS: string[][] = [
       primary key (repo_id, ticket_key)
     )`,
   ],
+  [
+    // Two concurrent saves of overlapping sprints can't both win (DECISIONS.md D45). Needs btree_gist for the
+    // equality parts of the constraint; it ships with Postgres and with PGlite.
+    'create extension if not exists btree_gist',
+    `alter table sprints add constraint sprints_no_overlap
+      exclude using gist (repo_id with =, name with <>, tstzrange(starts_at, ends_at) with &&)`,
+  ],
 ];
 
 /**
@@ -244,11 +251,18 @@ export class PostgresSummaryStore implements SharedStore {
     const decision = decideSprint(await this.sprints(repoId), sprint);
     if (decision.status !== 'save') return decision;
     const s = decision.sprint;
-    await this.#sql.query(
-      `insert into sprints (repo_id, name, starts_at, ends_at) values ($1, $2, $3, $4)
-       on conflict (repo_id, name) do update set starts_at = excluded.starts_at, ends_at = excluded.ends_at`,
-      [repoId, s.name, s.from, s.to],
-    );
+    try {
+      await this.#sql.query(
+        `insert into sprints (repo_id, name, starts_at, ends_at) values ($1, $2, $3, $4)
+         on conflict (repo_id, name) do update set starts_at = excluded.starts_at, ends_at = excluded.ends_at`,
+        [repoId, s.name, s.from, s.to],
+      );
+    } catch (err) {
+      // exclusion_violation: an overlapping sprint was saved after the check above.
+      if ((err as { code?: string }).code !== '23P01') throw err;
+      const again = decideSprint(await this.sprints(repoId), sprint);
+      return again.status === 'invalid' ? again : { status: 'invalid', reason: `${s.name} overlaps another sprint` };
+    }
     return { status: 'saved' };
   }
 

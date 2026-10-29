@@ -1,10 +1,10 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { parseArgs } from 'node:util';
-import { PGlite } from '@electric-sql/pglite';
 import { normalizeRemoteUrl, type SharedStore } from '@digest/core';
 import pg from 'pg';
 import { createHandler } from './http.js';
+import { openPGlite } from './pglite.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
 
 // digest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
@@ -32,7 +32,7 @@ export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string
     return { store: new PostgresSummaryStore(pool), close: () => pool.end() };
   }
   if (!dataDir) throw new Error('set DATABASE_URL or pass --data <dir> for a local database.');
-  const db = new PGlite(dataDir);
+  const db = openPGlite(dataDir);
   await migrate(db);
   return { store: new PostgresSummaryStore(db), close: () => db.close() };
 }
