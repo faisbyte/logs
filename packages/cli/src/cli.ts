@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import type { LlmClient } from '@digest/core';
+import type { LlmClient, PushTarget } from '@digest/core';
 import { Command, CommanderError } from 'commander';
 import { listCommand } from './list.js';
+import { pushCommand } from './push.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
 import { summarizeCommand } from './summarize.js';
@@ -23,9 +24,11 @@ export interface CliIo {
   ask?: (question: string) => Promise<string>;
   /** Opens a file in the developer's editor and resolves when it is closed; absent when there is no terminal. */
   editor?: (file: string) => Promise<void>;
+  /** The shared store, behind its auth; absent until one is configured. */
+  pushTarget?: PushTarget;
 }
 
-type Optional = 'timeZone' | 'llm' | 'confirm' | 'ask' | 'editor';
+type Optional = 'timeZone' | 'llm' | 'confirm' | 'ask' | 'editor' | 'pushTarget';
 export type CliContext = Required<Omit<CliIo, Optional>> & Pick<CliIo, Optional>;
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
@@ -102,6 +105,12 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       .option(...repoOption)
       .action((sessionId: string, options: { repo?: string }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
   }
+
+  program
+    .command('push')
+    .description('Push approved summaries to the shared store (only the shared fields; drafts and rejected summaries never leave)')
+    .option(...repoOption)
+    .action((options: { repo?: string }) => guarded('push', () => pushCommand(options, ctx)));
 
   try {
     await program.parseAsync(argv, { from: 'user' });

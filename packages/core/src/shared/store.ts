@@ -108,3 +108,23 @@ export const bySessionStart = (a: StoredSummary, b: StoredSummary) =>
 export function teamReportFrom(query: { repoId: string; from: string; to: string }, summaries: StoredSummary[]): TeamReport {
   return { ...query, summaryCount: summaries.length, developerCount: new Set(summaries.map((s) => s.developerId)).size, summaries };
 }
+
+export type ReceiveResult = PushResult | { status: 'unauthorized' | 'forbidden'; reason: string };
+
+/** The receiving side of one push: the token decides who is pushing and to which repo, then the store's rules apply. */
+export async function receivePush(store: SummaryStore & TokenStore, token: string, repoId: string, payload: unknown): Promise<ReceiveResult> {
+  const identity = await store.authenticate(token);
+  if (!identity) return { status: 'unauthorized', reason: 'unknown or revoked token' };
+  if (identity.repoId !== repoId) return { status: 'forbidden', reason: 'this token is for a different repo' };
+  return store.push(identity, payload);
+}
+
+/** What `digest push` talks to: the store behind its auth. The token lives inside the target, never in a summary. */
+export interface PushTarget {
+  push(repoId: string, payload: UploadPayload): Promise<ReceiveResult>;
+}
+
+/** A PushTarget for a store in this process (tests, and local end-to-end runs). */
+export const localPushTarget = (store: SummaryStore & TokenStore, token: string): PushTarget => ({
+  push: (repoId, payload) => receivePush(store, token, repoId, payload),
+});
