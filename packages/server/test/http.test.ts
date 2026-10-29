@@ -161,4 +161,22 @@ describe('digest server HTTP API', () => {
       expect(logs.at(-1)).toBe('POST /v1/ticket-links 201');
     });
   });
+
+  it('gives a reader token 403 on every per-session summary endpoint, and on pushes and link changes (DECISIONS.md D51)', async () => {
+    const { store, push, call, link } = await start();
+    await push(payloadFor());
+    const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+    const repo = encodeURIComponent(REPO);
+    const answers = await Promise.all([
+      call(`/v1/summaries?repoId=${repo}`, { token: reader }),
+      call(`/v1/team-report?repoId=${repo}&from=2026-01-01&to=2027-01-01`, { token: reader }),
+      call(`/v1/tickets?repoId=${repo}&from=2026-01-01&to=2027-01-01`, { token: reader }),
+      call('/v1/summaries', { method: 'POST', token: reader, body: { repoId: REPO, payload: payloadFor({ sessionId: 'other' }) } }),
+      link('POST', 'OPS-7', reader),
+      link('DELETE', 'PROJ-142', reader),
+    ]);
+    expect(answers.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403]);
+    for (const r of answers) expect(JSON.stringify(await r.json())).not.toContain('Rate limit');
+    expect(await store.list({ repoId: REPO })).toHaveLength(1);
+  });
 });

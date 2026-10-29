@@ -19,4 +19,11 @@ describe('receivePush (the receiving side of one push)', () => {
     expect(await receivePush(store, token, 'github.com/acme/other', payloadFor())).toEqual({ status: 'forbidden', reason: 'this token is for a different repo' });
     expect(await store.list({ repoId: alice.repoId })).toEqual([]);
   });
+
+  it('refuses a push with a reader token (DECISIONS.md D51)', async () => {
+    const store = new InMemorySummaryStore();
+    const { token } = await store.issueToken(alice, 'reader');
+    expect(await receivePush(store, token, alice.repoId, payloadFor())).toEqual({ status: 'forbidden', reason: 'reader tokens can read digests and reports only' });
+    expect(await store.list({ repoId: alice.repoId })).toEqual([]);
+  });
 });

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AgentSchema, receivePush, ticketReport, type SharedStore, type SummaryRef } from '@digest/core';
+import { AgentSchema, READER_REFUSAL, receivePush, ticketReport, type SharedStore, type SummaryRef } from '@digest/core';
 
 // The digest server's HTTP API (DECISIONS.md D43). Every request is authenticated by a per-developer, per-repo
 // token and may only touch that token's repo. Logs carry method, path and status, never tokens or content.
@@ -63,6 +63,12 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
     if (identity.repoId !== repoId) throw new HttpError(403, 'this token is for a different repo');
     return identity;
   };
+  /** Per-session summaries carry developer identity: developer tokens only (DECISIONS.md D51). */
+  const developer = async (req: IncomingMessage, repoId: string) => {
+    const identity = await reader(req, repoId);
+    if (identity.role !== 'developer') throw new HttpError(403, READER_REFUSAL);
+    return identity;
+  };
 
   const route = async (req: IncomingMessage, url: URL): Promise<[number, unknown]> => {
     const methods: Record<string, string[]> = {
@@ -79,7 +85,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
 
     if (url.pathname === '/v1/ticket-links') {
       const { repoId, ref, ticket } = linkTarget(await readJson(req));
-      const identity = await reader(req, repoId);
+      const identity = await developer(req, repoId);
       if (req.method === 'DELETE' && typeof ticket !== 'string') throw new HttpError(400, 'ticket is required');
       const result = req.method === 'POST' ? await store.addTicketLink(identity, ref, ticket as string) : await store.removeTicketLink(identity, ref, ticket as string);
       return [LINK_STATUS[result.status], result];
@@ -97,7 +103,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
     const params = url.searchParams;
     const repoId = params.get('repoId');
     if (!repoId) throw new HttpError(400, 'repoId is required');
-    await reader(req, repoId);
+    await developer(req, repoId);
     if (url.pathname === '/v1/tickets') {
       const sprint = params.get('sprint');
       const [from, to] = [dateParam(params, 'from', false), dateParam(params, 'to', false)];

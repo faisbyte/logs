@@ -11,6 +11,14 @@ export interface PushIdentity {
   developerName: string;
 }
 
+/** Developers push and read summaries; readers (stakeholders) read digests and reports only (DECISIONS.md D51). */
+export type Role = 'developer' | 'reader';
+
+/** Who a token belongs to. For a reader, developerId and developerName are the reader's own. */
+export type Identity = PushIdentity & { role: Role };
+
+export const READER_REFUSAL = 'reader tokens can read digests and reports only';
+
 export interface StoredSummary {
   repoId: string;
   developerId: string;
@@ -56,9 +64,9 @@ export interface SummaryStore {
 }
 
 export interface TokenStore {
-  /** Issues the token for one developer on one repo, replacing any earlier one. The token is returned once and stored only as a hash. */
-  issueToken(identity: PushIdentity): Promise<{ token: string }>;
-  authenticate(token: string): Promise<PushIdentity | null>;
+  /** Issues the token for one person, role and repo, replacing any earlier one. The token is returned once and stored only as a hash. */
+  issueToken(identity: PushIdentity, role?: Role): Promise<{ token: string }>;
+  authenticate(token: string): Promise<Identity | null>;
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -117,5 +125,6 @@ export async function receivePush(store: SummaryStore & TokenStore, token: strin
   const identity = await store.authenticate(token);
   if (!identity) return { status: 'unauthorized', reason: 'unknown or revoked token' };
   if (identity.repoId !== repoId) return { status: 'forbidden', reason: 'this token is for a different repo' };
+  if (identity.role !== 'developer') return { status: 'forbidden', reason: READER_REFUSAL };
   return store.push(identity, payload);
 }

@@ -117,7 +117,7 @@ export function summaryStoreContract(name: string, make: () => Promise<SummarySt
       it('issues a token per developer per repo that authenticates as that identity', async () => {
         const { token } = await store.issueToken(alice);
         expect(token).toMatch(/^dgt_[A-Za-z0-9_-]{40,}$/);
-        expect(await store.authenticate(token)).toEqual(alice);
+        expect(await store.authenticate(token)).toEqual({ ...alice, role: 'developer' });
         expect(await store.authenticate(`${token}x`)).toBeNull();
         expect(await store.authenticate('')).toBeNull();
       });
@@ -126,10 +126,21 @@ export function summaryStoreContract(name: string, make: () => Promise<SummarySt
         const first = await store.issueToken(alice);
         const second = await store.issueToken(alice);
         expect(await store.authenticate(first.token)).toBeNull();
-        expect(await store.authenticate(second.token)).toEqual(alice);
+        expect(await store.authenticate(second.token)).toEqual({ ...alice, role: 'developer' });
         const other = await store.issueToken({ ...alice, repoId: 'github.com/acme/other' });
-        expect(await store.authenticate(other.token)).toEqual({ ...alice, repoId: 'github.com/acme/other' });
-        expect(await store.authenticate(second.token)).toEqual(alice);
+        expect(await store.authenticate(other.token)).toEqual({ ...alice, repoId: 'github.com/acme/other', role: 'developer' });
+        expect(await store.authenticate(second.token)).toEqual({ ...alice, role: 'developer' });
+      });
+
+      it('issues read-only tokens for stakeholders, kept apart from developer tokens with the same id (DECISIONS.md D51)', async () => {
+        const developer = await store.issueToken(alice);
+        const reader = await store.issueToken({ ...alice, developerName: 'Alice (PO)' }, 'reader');
+        expect(await store.authenticate(reader.token)).toEqual({ ...alice, developerName: 'Alice (PO)', role: 'reader' });
+        expect(await store.authenticate(developer.token)).toEqual({ ...alice, role: 'developer' });
+        const again = await store.issueToken(alice, 'reader');
+        expect(await store.authenticate(reader.token)).toBeNull();
+        expect(await store.authenticate(again.token)).toMatchObject({ role: 'reader' });
+        expect(await store.authenticate(developer.token)).toMatchObject({ role: 'developer' });
       });
 
       it('stores only a hash of each token', async () => {
