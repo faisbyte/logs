@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ensureDigestDir } from '../digest-dir.js';
+import { isReviewed, readSummaryFile, saveSummary, summaryPath } from '../review/store.js';
 import type { RedactedSession } from '../redact/session.js';
 import { condenseSession } from './condense.js';
 import type { LlmClient } from './llm.js';
@@ -33,10 +34,17 @@ export function readCachedSummary(repoRoot: string, key: string): SessionSummary
   }
 }
 
+export class ReviewedSummaryError extends Error {}
+
+/** Caches a generated summary and makes it the session's draft, unless the current one has been reviewed (D35). */
 export function writeSummary(repoRoot: string, key: string, summary: SessionSummary): void {
-  const json = JSON.stringify(summary, null, 2) + '\n';
-  writeFileSync(join(ensureDigestDir(repoRoot, 'cache', 'summaries'), `${key}.json`), json);
-  writeFileSync(join(ensureDigestDir(repoRoot, 'summaries'), `${summary.agent}-${summary.sessionId}.json`), json);
+  const current = readSummaryFile(summaryPath(repoRoot, summary));
+  if (current && isReviewed(current)) {
+    const what = current.status === 'approved' ? 'approved' : 'edited';
+    throw new ReviewedSummaryError(`${summary.sessionId} has an ${what} summary, which is never overwritten by a regenerated one.`);
+  }
+  writeFileSync(join(ensureDigestDir(repoRoot, 'cache', 'summaries'), `${key}.json`), JSON.stringify(summary, null, 2) + '\n');
+  saveSummary(repoRoot, summary);
 }
 
 /** One line per generated summary in .digest/usage.jsonl: tokens and cost, plus each part's output and every retry's errors. */
