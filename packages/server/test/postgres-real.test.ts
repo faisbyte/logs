@@ -4,6 +4,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe } from 'vitest';
 import { summaryStoreContract } from '../../core/test/shared/store-contract.js';
+import { digestStoreContract } from '../../core/test/shared/digest-contract.js';
 import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
 import { migrate, PostgresSummaryStore } from '../src/postgres-store.js';
 
@@ -21,9 +22,10 @@ describe.skipIf(!url)('real Postgres', () => {
   });
   afterAll(() => pool?.end());
   const fresh = async () => {
-    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets');
+    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings');
     return new PostgresSummaryStore(pool);
   };
   summaryStoreContract('PostgresSummaryStore (node-postgres)', fresh);
   ticketStoreContract('PostgresSummaryStore (node-postgres)', fresh);
+  digestStoreContract('PostgresSummaryStore (node-postgres)', fresh);
 });
