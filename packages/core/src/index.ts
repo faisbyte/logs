@@ -39,3 +39,4 @@ export { findSummary, isReviewed, listSummaries, readSummaryFile, saveOriginal, 
 export { editSummary, parseEdit, toEditable, type EditResult } from './review/edit.js';
 export { formatSummary, formatTime, SHARED_HEADER, statusText } from './review/format.js';
 export { ensureDigestDir } from './digest-dir.js';
+export { normalizeRemoteUrl, repoIdentity } from './shared/repo-id.js';
