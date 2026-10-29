@@ -244,10 +244,12 @@ describe('summarizeSession (the merge covers every part)', () => {
       llmSummary({
         decisions: items('Decision').map((decision) => ({ decision, reason: 'because' })),
         rejectedApproaches: items('Approach').map((approach) => ({ approach, reason: 'because' })),
-        risksOrFollowUps: items('Follow-up'),
+        risksOrFollowUps: items('Follow-up').map((text, i) => `${WORDS.slice((Number(part) * 2 + i) * 3, (Number(part) * 2 + i) * 3 + 3).join(' ')}: ${text}`),
       }),
     );
   };
+  // Distinct words per follow-up, so near-duplicate removal (D38) leaves them alone.
+  const WORDS = 'parser cache index router queue schema billing search export invoice tenant webhook audit login session upload report metric alert backup replica shard token locale banner widget cursor ledger badge digest filter thread pixel'.split(' ');
   // A recency-biased merge: picks only the last 6 candidates of each list.
   const latestSix = (request: LlmRequest) => {
     const ids = (prefix: string) => [...request.messages[0]!.content.matchAll(new RegExp(`^(${prefix}\\d+) `, 'gm'))].map((m) => m[1]!).slice(-6);
@@ -272,7 +274,7 @@ describe('summarizeSession (the merge covers every part)', () => {
     expect(merge).toMatch(/^Part \d+ of \d+ \(work period 2 of 2\):/m);
     expect(merge).toContain('D1 (part 1): Decision 1 from part 1 (reason: because)');
     expect(merge).toContain('R1 (part 1): Approach 1 from part 1 (reason: because)');
-    expect(merge).toContain('F1 (part 1): Follow-up 1 from part 1');
+    expect(merge).toMatch(/^F1 \(part 1\): .*Follow-up 1 from part 1$/m);
   });
 
   it('tells the merge to cover every work period and to pick from every part', () => {
@@ -394,5 +396,16 @@ describe('summarizeSession (reversals need evidence, follow-ups can be resolved)
   it('keeps a resolved follow-up that a later part raises again', async () => {
     const { summary } = await run((r) => (partNo(r) === 2 ? { resolvedFollowUps: ['F1'] } : { risksOrFollowUps: ['Write the cache invalidation tests.'] }));
     expect(summary.risksOrFollowUps).toEqual(['Write the cache invalidation tests.']);
+  });
+
+  it('removes near-duplicate follow-ups after the merge, keeping the more detailed one', async () => {
+    const first = llmSummary({ decisions: [], risksOrFollowUps: ['Re-run the notebook to confirm the load step now works after the region column fix.'] });
+    const llm = new FakeLlmClient((r) =>
+      isMerge(r)
+        ? pickAll(r)
+        : json(partNo(r) === 1 ? first : llmSummary({ decisions: [], risksOrFollowUps: ['Re-run the notebook to confirm the load step works locally and the remaining charts render correctly.'] })),
+    );
+    const summary = await summarizeSession(messy, llm, { ...options, chunkTokens });
+    expect(summary.risksOrFollowUps).toEqual(['Re-run the notebook to confirm the load step works locally and the remaining charts render correctly.']);
   });
 });
