@@ -1,5 +1,6 @@
 import { listSummaries, repoIdentity, saveSummary, uploadPayload, verifyApproval, type SessionSummary } from '@digest/core';
 import type { CliContext } from './cli.js';
+import { resolvePushTarget } from './share.js';
 import { writableRepoRoot } from './sessions.js';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -10,7 +11,8 @@ export async function pushCommand(options: { repo?: string }, ctx: CliContext): 
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
   const repoRoot = writable.root;
-  if (!ctx.pushTarget) return fail('no shared store is configured yet (the storage choice is pending; see DECISIONS.md D39).');
+  const resolved = resolvePushTarget(ctx, repoRoot);
+  if ('error' in resolved) return fail(resolved.error);
   const identity = repoIdentity(repoRoot);
   if ('error' in identity) return fail(identity.error);
 
@@ -32,7 +34,7 @@ export async function pushCommand(options: { repo?: string }, ctx: CliContext): 
       failed++;
       continue;
     }
-    const result = await ctx.pushTarget.push(identity.repoId, payload);
+    const result = await resolved.target.push(identity.repoId, payload);
     switch (result.status) {
       case 'unauthorized':
       case 'forbidden':

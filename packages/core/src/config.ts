@@ -38,10 +38,18 @@ export const ReviewConfigSchema = z
   })
   .strict();
 
+export const ShareConfigSchema = z
+  .object({
+    /** The digest server pushes go to (DECISIONS.md D43). The token is never stored here: see .digest/token or DIGEST_TOKEN. */
+    url: z.url({ protocol: /^https?$/, error: 'share.url must be an http(s) URL' }).optional(),
+  })
+  .strict();
+
 export const DigestConfigSchema = z.object({
   redaction: RedactionConfigSchema.default({}),
   summarize: SummarizeConfigSchema.default({}),
   review: ReviewConfigSchema.default({}),
+  share: ShareConfigSchema.default({}),
 });
 export type DigestConfig = z.infer<typeof DigestConfigSchema>;
 
@@ -49,7 +57,7 @@ const CONFIG_FILE = join('.digest', 'config.json');
 
 export function readConfig(repoRoot: string): DigestConfig {
   const file = join(repoRoot, CONFIG_FILE);
-  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {} };
+  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {}, share: {} };
   try {
     return DigestConfigSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
   } catch (err) {

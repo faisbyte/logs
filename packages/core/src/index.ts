@@ -51,6 +51,7 @@ export {
   teamReportFrom,
   type PushIdentity,
   type PushResult,
+  type PushOutcome,
   type PushTarget,
   type ReceiveResult,
   type StoredSummary,
@@ -60,3 +61,4 @@ export {
   type TokenStore,
 } from './shared/store.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
+export { httpPushTarget } from './shared/http-target.js';
