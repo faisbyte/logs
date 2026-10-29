@@ -11,12 +11,12 @@ export { createRedactor, redactText, type RedactedText } from './redact/text.js'
 export type { PlaceholderType, RedactionCounts, RedactOptions } from './redact/types.js';
 export { assertRedactedSession, isRedactedSession, redactSession, type DeepReadonly, type RedactedSession } from './redact/session.js';
 export { isEmptySession } from './empty.js';
-export { condenseSession, chunkTurns, estimateTokens, type CondensedSession } from './summarize/condense.js';
+export { condenseSession, chunkSession, chunkTurns, estimateTokens, type Chunk, type CondensedSession } from './summarize/condense.js';
 export { FakeLlmClient } from './summarize/fake-llm.js';
 export { guardRequest, type LlmClient, type LlmRequest, type LlmResponse, type LlmUsage } from './summarize/llm.js';
 export { PROMPT_VERSION } from './summarize/prompt.js';
 export { SessionSummarySchema, type SessionSummary } from './summarize/schema.js';
-export { DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettings } from './summarize/settings.js';
+export { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettings } from './summarize/settings.js';
 export { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary } from './summarize/store.js';
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';
 export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
