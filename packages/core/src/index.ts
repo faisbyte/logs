@@ -82,3 +82,5 @@ export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
 export { localPushTarget, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
 export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type DigestPeriod, type DigestTicket, type DigestWork } from './digest/input.js';
+export { assertDeliverable, checkDigest, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
+export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';
