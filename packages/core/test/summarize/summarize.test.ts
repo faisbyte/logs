@@ -296,6 +296,18 @@ describe('summarizeSession (the merge covers every part)', () => {
     expect(fromParts(summary.risksOrFollowUps)).toEqual([2, 3, 4]);
   });
 
+  it('offers a decision repeated word for word in a later part once, so a top-up never duplicates it', async () => {
+    const same = { decision: 'Use Python with BM25 over SQLite FTS5', reason: 'Fully local.' };
+    const llm = new FakeLlmClient((r) => {
+      if (isMerge(r)) return latestSix(r);
+      const part = Number(partOf(r));
+      return json(llmSummary({ decisions: part === 1 || part === 3 ? [same] : [{ decision: `Decision from part ${part}`, reason: 'r' }], rejectedApproaches: [], risksOrFollowUps: [] }));
+    });
+    const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });
+    expect(llm.requests.at(-1)!.messages[0]!.content.match(/Use Python with BM25/g)).toHaveLength(1);
+    expect(summary.decisions.filter((d) => d.decision === same.decision)).toHaveLength(1);
+  });
+
   it('only guarantees picks for parts that offered candidates', async () => {
     const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r, (part) => part === 1 || part === 4)));
     const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });

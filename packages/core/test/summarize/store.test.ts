@@ -122,7 +122,7 @@ describe('summarizeCached', () => {
     const [line] = readFileSync(join(repo, '.digest/usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     expect(line.parts).toHaveLength(3);
     expect(line.parts[0]).toEqual({ part: 1, period: 1, output: JSON.parse(reply) });
-    expect(line.merge).toMatchObject({ goal: 'Speed up search.', decisionIds: ['D1', 'D2', 'D3'] });
+    expect(line.merge).toMatchObject({ goal: 'Speed up search.', decisionIds: ['D1'] });
     expect(line.retries).toEqual([]);
   });
 

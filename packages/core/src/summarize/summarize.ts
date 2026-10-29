@@ -225,7 +225,8 @@ export async function summarizeSession(redacted: RedactedSession, llm: LlmClient
     for (const id of part.resolvedFollowUps) if (pending.some((f) => f.id === id)) resolved.add(id);
     // Exact duplicates of an open follow-up keep its first, earliest occurrence; a resolved one raised again is new.
     for (const text of part.risksOrFollowUps) if (!followUps.some((f) => f.text === text && !resolved.has(f.id))) followUps.push({ id: `F${followUps.length + 1}`, part: i + 1, text });
-    for (const d of part.decisions) decided.push({ id: `D${decided.length + 1}`, part: i + 1, ...d });
+    // A decision repeated word for word keeps its first id; one made again after being reversed is new.
+    for (const d of part.decisions) if (!decided.some((e) => e.decision === d.decision && !reversed.has(e.id))) decided.push({ id: `D${decided.length + 1}`, part: i + 1, ...d });
     parts.push({ ...part, period });
   }
 
