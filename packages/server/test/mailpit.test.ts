@@ -16,8 +16,10 @@ describe.skipIf(!smtp || !mailpit)('email through Mailpit', () => {
     const found = messages.find((m) => m.Subject === subject);
     expect(found).toBeDefined();
     const mail = (await (await fetch(`${mailpit}/api/v1/message/${found!.ID}`)).json()) as { HTML: string; Text: string; To: { Address: string }[] };
-    expect(mail.HTML.trim()).toBe(markdownToHtml(markdown).trim());
-    expect(mail.Text.trim()).toBe(plainText(markdown).trim());
+    // SMTP carries lines as CRLF.
+    const lf = (text: string) => text.replaceAll('\r\n', '\n').trim();
+    expect(lf(mail.HTML)).toBe(lf(markdownToHtml(markdown)));
+    expect(lf(mail.Text)).toBe(lf(plainText(markdown)));
     expect(mail.To.map((t) => t.Address)).toEqual(['po@example.com']);
   });
 });
