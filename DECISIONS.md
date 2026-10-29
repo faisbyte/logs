@@ -413,3 +413,13 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Team report:** `teamReport` returns every developer's summaries for a date range, with `summaryCount` and `developerCount`. It deliberately has no per-developer counts: the Phase 7 per-developer breakdown is off by default (the "no judgement of individual developers" rule). Each summary still carries its author's name, so a combined list shows who did what.
 - **Alternatives:** Trust the client's validation; key summaries by developer as well, which would let two developers push the same session; use last-write-wins on re-push.
 - **Why:** These rules are the same whichever store D39 picks, so they're built and tested once. Idempotent, immutable pushes make `digest push` safe to re-run, and a retraction field from the start avoids a migration later.
+
+## D41. `digest init` installs a print-only pre-push reminder
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **The hook:** `digest init` writes a `pre-push` hook made of comments, one `echo` to stderr, and `exit 0`. It doesn't run node, digest or git, so it can't block, slow or fail a push, and it never starts summarising.
+  - **Location:** the hooks directory comes from `git rev-parse --git-path hooks`, which respects `core.hooksPath` and worktrees. A missing hooks directory isn't created.
+  - **Existing hooks:** a `pre-push` hook digest didn't write is left untouched, and the command prints the one line to add by hand. Running `init` again is a no-op. Deleting the file removes the reminder.
+- **Alternatives:** Compute and print the number of unpushed summaries in the hook, which needs node on the PATH and costs time on every push; chain onto an existing hook automatically, which edits someone else's script.
+- **Why:** The spec requires that the reminder never blocks or slows a push. A static message is the only form that guarantees it.
