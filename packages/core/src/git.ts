@@ -50,3 +50,8 @@ export function filesInCommits(repoRoot: string, shas: readonly string[]): strin
   const files = shas.flatMap((sha) => (git(repoRoot, ['diff-tree', '--no-commit-id', '--name-only', '-r', '--root', sha]) ?? '').split('\n').filter(Boolean));
   return [...new Set(files)].sort();
 }
+
+/** Full commit messages, for local ticket-key extraction only; they are never stored or sent (DECISIONS.md D44). */
+export function commitMessages(repoRoot: string, shas: readonly string[]): string[] {
+  return shas.map((sha) => git(repoRoot, ['show', '-s', '--format=%B', sha])).filter((m): m is string => m !== null);
+}

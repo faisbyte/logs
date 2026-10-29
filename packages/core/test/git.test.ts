@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { commitsDuring, findRepoRoot } from '../src/git.js';
+import { commitMessages, commitsDuring, findRepoRoot } from '../src/git.js';
 
 let repo: string;
 const sha: Record<string, string> = {};
@@ -69,5 +69,16 @@ describe('commitsDuring', () => {
     expect(commitsDuring(repo, session(['deleted/branch']))).toEqual([]);
     expect(commitsDuring(repo, session([]))).toEqual([]);
     expect(commitsDuring('/work/acme-webapp', session(['main']))).toEqual([]);
+  });
+});
+
+describe('commitMessages', () => {
+  it('returns the full message of each commit, in the order asked for', () => {
+    expect(commitMessages(repo, [sha['during-2']!, sha['during-1']!])).toEqual(['during-2', 'during-1']);
+  });
+
+  it('returns nothing for no commits, and skips commits that no longer exist', () => {
+    expect(commitMessages(repo, [])).toEqual([]);
+    expect(commitMessages(repo, ['0'.repeat(40), sha['before']!])).toEqual(['before']);
   });
 });

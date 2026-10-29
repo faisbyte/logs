@@ -1,4 +1,5 @@
 import type { TicketsConfig } from '../config.js';
+import { commitMessages } from '../git.js';
 
 // Ticket keys found in a session's git metadata (DECISIONS.md D44). Commit messages are read locally and only
 // the keys they contain are kept, never the message text.
@@ -28,4 +29,9 @@ export function extractTickets(git: { branches: readonly string[]; commitMessage
   scan(git.branches, 'branch');
   if (allowed) scan(git.commitMessages, 'commit');
   return { ticketRefs: Object.keys(ticketSources), ticketSources };
+}
+
+/** A session's ticket keys from its branches and, when project keys are set, its commits' messages. */
+export function sessionTickets(repoRoot: string, session: { gitBranches: readonly string[]; commitShas: readonly string[] }, config: TicketsConfig = {}): ExtractedTickets {
+  return extractTickets({ branches: session.gitBranches, commitMessages: config.keys ? commitMessages(repoRoot, session.commitShas) : [] }, config);
 }

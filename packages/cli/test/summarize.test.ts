@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,6 +33,43 @@ describe('digest summarize', () => {
     expect(draft).toMatchObject({ status: 'draft', ticketRefs: ['PROJ-142'] });
     const list = await run(['list', '--json', '--repo', repo], env);
     expect(JSON.parse(list.stdout).find((s: { sourceSessionId: string }) => s.sourceSessionId.startsWith('c1a5e001')).status).toBe('processed');
+  });
+
+  describe('ticket keys from commit messages (DECISIONS.md D44)', () => {
+    // A commit on the session's branch inside its time window (09:00:00 to 09:00:54).
+    function withCommit(message: string) {
+      const { repo, env } = fixtureRepo();
+      const git = (args: string[]) => execFileSync('git', args, { cwd: repo, env: { ...process.env, GIT_AUTHOR_DATE: '2026-03-02T09:00:30Z', GIT_COMMITTER_DATE: '2026-03-02T09:00:30Z' } });
+      git(['checkout', '-q', '-b', 'feature/PROJ-142-rate-limit']);
+      git(['-c', 'user.email=dev@example.com', '-c', 'user.name=Dev', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', message]);
+      return { repo, env };
+    }
+    const draftOf = (repo: string) => JSON.parse(readFileSync(join(repo, '.digest/summaries/claude-code-c1a5e001-0000-4000-8000-000000000001.json'), 'utf8'));
+
+    it('adds keys from commit messages for the configured projects only', async () => {
+      const { repo, env } = withCommit('PROJ-150: limiter tests. Hash keys with SHA-256, ask GPT-4 for UTF-8 names');
+      mkdirSync(join(repo, '.digest'), { recursive: true });
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ tickets: { keys: ['PROJ'] } }));
+      await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+      expect(draftOf(repo)).toMatchObject({ ticketRefs: ['PROJ-142', 'PROJ-150'], ticketSources: { 'PROJ-142': 'branch', 'PROJ-150': 'commit' } });
+      expect(readFileSync(join(repo, '.digest/summaries/claude-code-c1a5e001-0000-4000-8000-000000000001.json'), 'utf8')).not.toContain('limiter tests');
+    });
+
+    it('ignores commit messages when no project keys are configured', async () => {
+      const { repo, env } = withCommit('PROJ-150: limiter tests');
+      await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+      expect(draftOf(repo)).toMatchObject({ ticketRefs: ['PROJ-142'], ticketSources: { 'PROJ-142': 'branch' } });
+    });
+
+    it('applies a changed ticket config to a cached draft on the next run', async () => {
+      const { repo, env } = withCommit('PROJ-150: limiter tests');
+      const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
+      await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ tickets: { keys: ['PROJ'] } }));
+      await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
+      expect(llm.requests).toHaveLength(1);
+      expect(draftOf(repo).ticketRefs).toEqual(['PROJ-142', 'PROJ-150']);
+    });
   });
 
   it('saves files relative to the repo root, even for a session launched in a subdirectory', async () => {
