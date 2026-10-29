@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { openStore, serverCli, startServer } from '../src/cli.js';
+import { digestDepsFromEnv, openStore, serverCli, startServer } from '../src/cli.js';
 
 async function cli(argv: string[], env: Record<string, string | undefined> = {}) {
   let stdout = '';
@@ -62,6 +62,20 @@ describe('digest-server sprint (DECISIONS.md D45)', () => {
     expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', 'next monday', '--to', '2026-03-16'])).stderr).toContain('--from and --to must be dates such as 2026-03-02');
     expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', '2026-03-02'])).stderr).toContain('--name, --from and --to are needed');
     expect((await cli(['sprint', ...data])).stderr).toContain('--repo is required');
+  });
+});
+
+describe('digestDepsFromEnv (DECISIONS.md D48, D53)', () => {
+  it('defaults to Sonnet 5.5 at medium effort with a $10 monthly cap, and no model without a key', () => {
+    expect(digestDepsFromEnv({})).toEqual({ llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 });
+    const deps = digestDepsFromEnv({ ANTHROPIC_API_KEY: 'test-key-not-real', DIGEST_MODEL: 'claude-opus-5-5', DIGEST_EFFORT: 'high', DIGEST_MONTHLY_CAP_USD: '2.5' });
+    expect(deps).toMatchObject({ model: 'claude-opus-5-5', defaultCapUsd: 2.5, llm: { model: 'claude-opus-5-5', effort: 'high' } });
+    expect(JSON.stringify(deps)).not.toContain('test-key-not-real');
+  });
+
+  it('rejects a nonsense cap or effort', () => {
+    expect(() => digestDepsFromEnv({ DIGEST_MONTHLY_CAP_USD: 'lots' })).toThrow(/DIGEST_MONTHLY_CAP_USD must be a number of dollars/);
+    expect(() => digestDepsFromEnv({ DIGEST_EFFORT: 'extreme' })).toThrow(/DIGEST_EFFORT must be one of low, medium, high, xhigh, max/);
   });
 });
 

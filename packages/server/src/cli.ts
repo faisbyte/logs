@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { parseArgs } from 'node:util';
-import { normalizeRemoteUrl, type SharedStore } from '@digest/core';
+import { AnthropicLlmClient, normalizeRemoteUrl, type DigestDeps, type Effort, type SharedStore } from '@digest/core';
 import pg from 'pg';
-import { createHandler } from './http.js';
+import { createHandler, type HandlerOptions } from './http.js';
 import { openPGlite } from './pglite.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
 
@@ -37,8 +37,29 @@ export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string
   return { store: new PostgresSummaryStore(db), close: () => db.close() };
 }
 
-export async function startServer({ store, port, host = '127.0.0.1', log }: { store: SharedStore; port: number; host?: string; log?: (line: string) => void }) {
-  const server = createServer(createHandler(store, log ? { log } : {}));
+const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/**
+ * How the server writes digests (DECISIONS.md D48, D53): Sonnet 5.5 at medium effort by default, with the key
+ * from ANTHROPIC_API_KEY (never stored or printed) and a default monthly cap per repo of $10.
+ */
+export function digestDepsFromEnv(env: Record<string, string | undefined>): Omit<DigestDeps, 'store'> {
+  const model = env.DIGEST_MODEL || 'claude-sonnet-5-5';
+  const effort = (env.DIGEST_EFFORT || 'medium') as Effort;
+  if (!EFFORTS.includes(effort)) throw new Error(`DIGEST_EFFORT must be one of ${EFFORTS.join(', ')}.`);
+  const defaultCapUsd = env.DIGEST_MONTHLY_CAP_USD === undefined ? 10 : Number(env.DIGEST_MONTHLY_CAP_USD);
+  if (!Number.isFinite(defaultCapUsd) || defaultCapUsd < 0) throw new Error('DIGEST_MONTHLY_CAP_USD must be a number of dollars, e.g. 10.');
+  return { llm: env.ANTHROPIC_API_KEY ? AnthropicLlmClient.fromEnv(env, model, effort) : null, model, defaultCapUsd };
+}
+
+export async function startServer({
+  store,
+  port,
+  host = '127.0.0.1',
+  log,
+  digests,
+}: { store: SharedStore; port: number; host?: string; log?: (line: string) => void; digests?: HandlerOptions['digests'] }) {
+  const server = createServer(createHandler(store, { ...(log ? { log } : {}), ...(digests ? { digests } : {}) }));
   await new Promise<void>((listening) => server.listen(port, host, listening));
   const address = server.address() as AddressInfo;
   return { url: `http://${host}:${address.port}`, close: () => new Promise<void>((closed) => server.close(() => closed())) };
@@ -148,7 +169,15 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   const port = Number(values.port ?? io.env.PORT ?? 8787);
   if (!Number.isInteger(port) || port < 0) return fail('--port must be a port number.');
   const { store, close } = await openStore(storage);
-  const server = await startServer({ store, port, host: io.env.HOST ?? '127.0.0.1', log: (line) => io.stdout(`${line}\n`) });
+  let digests: HandlerOptions['digests'];
+  try {
+    digests = digestDepsFromEnv(io.env);
+  } catch (err) {
+    await close();
+    return fail((err as Error).message);
+  }
+  const server = await startServer({ store, port, host: io.env.HOST ?? '127.0.0.1', log: (line) => io.stdout(`${line}\n`), digests });
+  if (!digests.llm) io.stdout('No ANTHROPIC_API_KEY: serving digests and reports already written, but not writing new ones.\n');
   io.stdout(`digest-server listening on ${server.url}\n`);
   await new Promise<void>((stop) => {
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => stop());

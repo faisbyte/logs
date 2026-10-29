@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { InMemorySummaryStore } from '@digest/core';
+import { FakeLlmClient, InMemorySummaryStore } from '@digest/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
 import { createHandler } from '../src/http.js';
@@ -12,10 +12,10 @@ const fakeGithub = ['ghp', '_', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'].join('')
 let server: Server | undefined;
 afterEach(() => new Promise<void>((done) => (server ? server.close(() => done()) : done())));
 
-async function start() {
+async function start(digests: Parameters<typeof createHandler>[1]['digests'] = undefined) {
   const store = new InMemorySummaryStore();
   const logs: string[] = [];
-  server = createServer(createHandler(store, { log: (line) => logs.push(line) }));
+  server = createServer(createHandler(store, { log: (line) => logs.push(line), ...(digests ? { digests } : {}) }));
   await new Promise<void>((listening) => server!.listen(0, '127.0.0.1', listening));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const token = (await store.issueToken(alice)).token;
@@ -178,5 +178,52 @@ describe('digest server HTTP API', () => {
     expect(answers.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403]);
     for (const r of answers) expect(JSON.stringify(await r.json())).not.toContain('Rate limit');
     expect(await store.list({ repoId: REPO })).toHaveLength(1);
+  });
+
+  describe('reports and digests (DECISIONS.md D51, D53)', () => {
+    const output = { overview: 'Login is safer.', tickets: [{ key: 'PROJ-142', achieved: 'Repeated attempts are limited.', aiInvolvement: 'AI wrote most of it.', keyDecisions: [] }], otherWork: null, risksAndOpenQuestions: [] };
+    const llm = () => new FakeLlmClient(() => JSON.stringify(output), 'claude-sonnet-5-5');
+    const body = { repoId: REPO, from: '2026-03-01', to: '2026-04-01' };
+    const readerOf = async (store: InMemorySummaryStore) => (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+
+    it('lets a reader request a report, then list and read it, without seeing who did the work', async () => {
+      const { store, push, call } = await start({ llm: llm(), model: 'claude-sonnet-5-5', defaultCapUsd: 10 });
+      await push(payloadFor());
+      const reader = await readerOf(store);
+      const made = await call('/v1/reports', { method: 'POST', token: reader, body });
+      expect(made.status).toBe(200);
+      const report = await made.json();
+      expect(report).toMatchObject({ status: 'ok', cached: false, digest: { kind: 'report', summaryCount: 1, developerCount: 1, markdown: expect.stringContaining('## PROJ-142') } });
+      expect(JSON.stringify(report)).not.toMatch(/alice|Alice/);
+      expect((await (await call('/v1/reports', { method: 'POST', token: reader, body })).json()).cached).toBe(true);
+      const list = await (await call(`/v1/digests?repoId=${encodeURIComponent(REPO)}`, { token: reader })).json();
+      expect(list.digests.map((d: { id: string; markdown?: string }) => [d.id, d.markdown])).toEqual([[report.digest.id, undefined]]);
+      const one = await call(`/v1/digests/${report.digest.id}?repoId=${encodeURIComponent(REPO)}`, { token: reader });
+      expect((await one.json()).digest.markdown).toBe(report.digest.markdown);
+    });
+
+    it('keeps previews from readers but shows them to developers', async () => {
+      const { store, call, token } = await start();
+      const reader = await readerOf(store);
+      const preview = await store.saveDigest({ repoId: REPO, kind: 'scheduled', periodKey: 'week:2026-03-09', periodLabel: 'w', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v1', model: 'm', markdown: '# w\n', summaryCount: 1, developerCount: 1, costUsd: 0, status: 'preview', previewUntil: '2026-03-17T00:00:00.000Z', createdAt: '2026-03-16T00:00:00.000Z' });
+      const repo = encodeURIComponent(REPO);
+      expect((await (await call(`/v1/digests?repoId=${repo}`, { token: reader })).json()).digests).toEqual([]);
+      expect((await call(`/v1/digests/${preview.id}?repoId=${repo}`, { token: reader })).status).toBe(404);
+      expect((await (await call(`/v1/digests?repoId=${repo}`, { token })).json()).digests).toMatchObject([{ id: preview.id, status: 'preview' }]);
+      expect((await call(`/v1/digests/${preview.id}?repoId=${repo}`, { token })).status).toBe(200);
+    });
+
+    it('answers 429 at the cost cap, 503 without an API key, and 400 for a bad period', async () => {
+      const capped = await start({ llm: llm(), model: 'claude-sonnet-5-5', defaultCapUsd: 0.000001 });
+      await capped.push(payloadFor());
+      const refused = await capped.call('/v1/reports', { method: 'POST', token: capped.token, body });
+      expect(refused.status).toBe(429);
+      expect((await refused.json()).reason).toMatch(/monthly LLM cost cap/);
+      await new Promise<void>((done) => server!.close(() => done()));
+      const keyless = await start();
+      await keyless.push(payloadFor());
+      expect((await keyless.call('/v1/reports', { method: 'POST', token: keyless.token, body })).status).toBe(503);
+      expect((await keyless.call('/v1/reports', { method: 'POST', token: keyless.token, body: { repoId: REPO, from: '2026-03-01' } })).status).toBe(400);
+    });
   });
 });
