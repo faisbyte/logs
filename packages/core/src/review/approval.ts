@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DeepReadonly } from '../redact/session.js';
+import { UploadPayloadSchema, type UploadPayload } from '../shared/payload.js';
 import type { SessionSummary } from '../summarize/schema.js';
 
 // The only way to get an ApprovedSummary is approve(), or verifyApproval() re-checking an approval that
@@ -25,7 +26,6 @@ export const SHARED_FIELDS = [
 
 const IDENTITY_FIELDS = ['sessionId', 'agent', 'editedByDeveloper', 'approvedAt', 'approvedBy'] as const;
 
-export type UploadPayload = Readonly<Pick<SessionSummary, (typeof SHARED_FIELDS)[number] | (typeof IDENTITY_FIELDS)[number]>>;
 
 const pick = <K extends keyof SessionSummary>(summary: SessionSummary, keys: readonly K[]) => Object.fromEntries(keys.map((k) => [k, summary[k]])) as Pick<SessionSummary, K>;
 const sharedHash = (summary: SessionSummary) => createHash('sha256').update(JSON.stringify(pick(summary, SHARED_FIELDS))).digest('hex');
@@ -92,10 +92,10 @@ export function reopen(summary: SessionSummary): SessionSummary {
   return { ...summary, status: 'draft', approvedAt: null, approvedBy: null, approvalHash: null };
 }
 
-/** The payload Phase 5 sends. Takes only an ApprovedSummary and checks it again at runtime. */
-export function uploadPayload(approved: ApprovedSummary): UploadPayload {
+/** The payload a push sends. Takes only an ApprovedSummary, checks it again at runtime, and fits the shared schema. */
+export function uploadPayload(approved: ApprovedSummary): Readonly<UploadPayload> {
   assertApprovedSummary(approved);
   const summary = approved.summary as SessionSummary;
   verifyApproval(summary);
-  return deepFreeze(structuredClone({ ...pick(summary, IDENTITY_FIELDS), ...pick(summary, SHARED_FIELDS) }));
+  return deepFreeze(UploadPayloadSchema.parse({ ...pick(summary, IDENTITY_FIELDS), ...pick(summary, SHARED_FIELDS) }));
 }
