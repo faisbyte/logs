@@ -17,7 +17,7 @@ export { guardRequest, type LlmClient, type LlmRequest, type LlmResponse, type L
 export { PROMPT_VERSION } from './summarize/prompt.js';
 export { SessionSummarySchema, type SessionSummary } from './summarize/schema.js';
 export { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettings } from './summarize/settings.js';
-export { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary } from './summarize/store.js';
+export { cacheKey, contentHash, readCachedSummary, ReviewedSummaryError, summarizeCached, writeSummary } from './summarize/store.js';
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';
 export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
 export { estimateSummaryCost, type CostEstimate } from './summarize/estimate.js';
@@ -35,3 +35,4 @@ export {
   type ApprovedSummary,
   type UploadPayload,
 } from './review/approval.js';
+export { findSummary, isReviewed, listSummaries, readSummaryFile, saveOriginal, saveSummary, summaryPath } from './review/store.js';
