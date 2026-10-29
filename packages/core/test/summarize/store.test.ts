@@ -87,6 +87,14 @@ describe('summarizeCached', () => {
     expect(other.requests).toHaveLength(1);
   });
 
+  it('regenerates when the chunk size changes, e.g. after the default moves', async () => {
+    const repo = tempRepo();
+    const llm = new FakeLlmClient(() => reply, 'claude-haiku-5-5');
+    await summarizeCached(repo, redacted, llm, settings, now);
+    expect((await summarizeCached(repo, redacted, llm, { ...settings, chunkTokens: 15_000 }, now)).cached).toBe(false);
+    expect((await summarizeCached(repo, redacted, llm, { ...settings, chunkTokens: 15_000 }, now)).cached).toBe(true);
+  });
+
   it('logs tokens and estimated cost for each summary it generates, not for cache hits', async () => {
     const repo = tempRepo();
     const llm = new FakeLlmClient([reply], 'claude-haiku-5-5');
