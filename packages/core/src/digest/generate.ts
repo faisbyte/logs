@@ -38,7 +38,10 @@ export interface Digest {
   generatedAt: string;
 }
 
-export class DigestError extends Error {}
+export class DigestError extends Error {
+  /** What the failed attempts cost, so it still counts against the monthly cap (D53). */
+  usage: Usage | null = null;
+}
 /** A digest that matched a secret detector. It is never stored or delivered. */
 export class DigestBlockedError extends DigestError {}
 
@@ -127,6 +130,11 @@ function totalUsage(model: string, usages: LlmUsage[]): Usage {
   };
 }
 
+function withUsage(error: DigestError, model: string, usages: LlmUsage[]): DigestError {
+  error.usage = totalUsage(model, usages);
+  return error;
+}
+
 export async function generateDigest(input: DigestInput, llm: LlmClient, { now = () => new Date() }: { now?: () => Date } = {}): Promise<Digest> {
   const done = (out: DigestOutput | null, usages: LlmUsage[]): Digest => {
     const markdown = renderDigest(out, input);
@@ -141,15 +149,15 @@ export async function generateDigest(input: DigestInput, llm: LlmClient, { now =
   for (let attempt = 1; ; attempt++) {
     const response = await llm.complete({ source: input, system, messages, schema: DigestOutputSchema, maxTokens: MAX_TOKENS });
     usages.push(response.usage);
-    if (response.stopReason === 'refusal') throw new DigestError(`The model refused to write the digest for ${input.period.label}.`);
+    if (response.stopReason === 'refusal') throw withUsage(new DigestError(`The model refused to write the digest for ${input.period.label}.`), llm.model, usages);
     const result = parse(response.text, response.stopReason, input);
     if ('value' in result) {
       // A secret is blocked outright, never retried: the reply that held it isn't sent back to the model either.
       const secrets = strings(result.value).flatMap(([path, text]) => contentProblems(path, text));
-      if (secrets.length) throw new DigestBlockedError(`Digest blocked: ${secrets.join('; ')}.`);
+      if (secrets.length) throw withUsage(new DigestBlockedError(`Digest blocked: ${secrets.join('; ')}.`), llm.model, usages);
       return done(result.value, usages);
     }
-    if (attempt === 2) throw new DigestError(`The digest for ${input.period.label} failed its checks twice: ${result.errors}`);
+    if (attempt === 2) throw withUsage(new DigestError(`The digest for ${input.period.label} failed its checks twice: ${result.errors}`), llm.model, usages);
     messages = [
       ...messages,
       { role: 'assistant', content: response.text || '(empty reply)' },

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Agent } from '../schema.js';
 import { contentProblems } from './payload.js';
+import type { DigestStore } from './digests.js';
 import type { PushIdentity, StoredSummary, SummaryStore, TokenStore } from './store.js';
 
 // Tickets and sprints on the shared store (DECISIONS.md D45). Ticket keys inside a pushed summary never change.
@@ -65,7 +66,7 @@ export interface TicketStore {
   trackerTickets(repoId: string): Promise<TrackerTicket[]>;
 }
 
-export type SharedStore = SummaryStore & TokenStore & TicketStore;
+export type SharedStore = SummaryStore & TokenStore & TicketStore & DigestStore;
 
 const TicketKeySchema = z.string().min(1, 'must not be empty').max(100, 'must be at most 100 characters').regex(/^\S+$/, 'must be a single word such as PROJ-142');
 

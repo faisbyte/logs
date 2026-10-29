@@ -17,7 +17,7 @@ export { FakeLlmClient } from './summarize/fake-llm.js';
 export { guardRequest, type LlmClient, type LlmRequest, type LlmResponse, type LlmUsage } from './summarize/llm.js';
 export { PROMPT_VERSION } from './summarize/prompt.js';
 export { SessionSummarySchema, TicketSourceSchema, type SessionSummary, type TicketSource } from './summarize/schema.js';
-export { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettings } from './summarize/settings.js';
+export { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type Effort, type SummarizeSettings } from './summarize/settings.js';
 export { cacheKey, contentHash, readCachedSummary, ReviewedSummaryError, summarizeCached, writeSummary } from './summarize/store.js';
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';
 export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
@@ -88,3 +88,4 @@ export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type 
 export { assertDeliverable, checkDigest, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';
 export { checkNewDigest, defaultRepoSettings, sameReport, type DigestKind, type DigestPatch, type DigestStatus, type DigestStore, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './shared/digests.js';
+export { capRefusal, monthStart, onDemandReport, periodKey, storedFields, writeDigest, type DigestDeps, type ReportResult } from './shared/reports.js';

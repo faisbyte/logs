@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AgentSchema, READER_REFUSAL, receivePush, ticketReport, type SharedStore, type SummaryRef } from '@digest/core';
+import { AgentSchema, onDemandReport, READER_REFUSAL, receivePush, ticketReport, type DigestDeps, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
 
 // The digest server's HTTP API (DECISIONS.md D43). Every request is authenticated by a per-developer, per-repo
 // token and may only touch that token's repo. Logs carry method, path and status, never tokens or content.
@@ -55,7 +55,33 @@ function linkTarget(body: unknown): { repoId: string; ref: SummaryRef; ticket: u
   return { repoId: b.repoId, ref: { agent: agent.data, sessionId: b.sessionId }, ticket: b.ticket };
 }
 
-export function createHandler(store: SharedStore, { log = (line: string) => console.log(line) }: { log?: (line: string) => void } = {}) {
+const REPORT_STATUS = { 'cap-reached': 429, unavailable: 503, failed: 502 } as const;
+
+/** from and to (dates or date-times; to is not included), or a sprint name. */
+function periodFrom(get: (name: string) => unknown): TicketReportFilter {
+  const date = (name: string) => {
+    const value = get(name);
+    if (value === undefined || value === null) return undefined;
+    if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) throw new HttpError(400, `${name} must be an ISO date`);
+    return new Date(value).toISOString();
+  };
+  const sprint = get('sprint');
+  const [from, to] = [date('from'), date('to')];
+  if (typeof sprint === 'string' && sprint && from === undefined && to === undefined) return { sprint };
+  if ((sprint === undefined || sprint === null) && from !== undefined && to !== undefined) return { from, to };
+  throw new HttpError(400, 'pass from and to, or sprint');
+}
+
+/** The list view leaves the text out. */
+const listed = ({ markdown: _, ...rest }: StoredDigest) => rest;
+
+export interface HandlerOptions {
+  log?: (line: string) => void;
+  /** How the server writes digests; without it, it serves only what it has already written. */
+  digests?: Omit<DigestDeps, 'store'>;
+}
+
+export function createHandler(store: SharedStore, { log = (line: string) => console.log(line), digests = { llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 } }: HandlerOptions = {}) {
   /** The token's identity, required to match the repo being read. */
   const reader = async (req: IncomingMessage, repoId: string) => {
     const identity = await store.authenticate(bearer(req));
@@ -77,11 +103,35 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/team-report': ['GET'],
       '/v1/ticket-links': ['POST', 'DELETE'],
       '/v1/tickets': ['GET'],
+      '/v1/reports': ['POST'],
+      '/v1/digests': ['GET'],
     };
-    const allowed = methods[url.pathname];
+    const digestId = /^\/v1\/digests\/([^/]+)$/.exec(url.pathname)?.[1];
+    const allowed = digestId ? ['GET'] : methods[url.pathname];
     if (!allowed) throw new HttpError(404, 'not found');
     if (!allowed.includes(req.method ?? '')) throw new HttpError(405, `use ${allowed.join(' or ')}`);
     if (url.pathname === '/healthz') return [200, { ok: true }];
+
+    // Digests and reports carry no developer identity: readers may use these (DECISIONS.md D51, D53).
+    if (url.pathname === '/v1/reports') {
+      const body = (await readJson(req)) as Record<string, unknown> | null;
+      const repoId = body?.repoId;
+      if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
+      await reader(req, repoId);
+      const result = await onDemandReport({ ...digests, store }, repoId, periodFrom((name) => body?.[name]));
+      return result.status === 'ok' ? [200, result] : [REPORT_STATUS[result.status], result];
+    }
+    if (url.pathname === '/v1/digests' || digestId) {
+      const repoId = url.searchParams.get('repoId');
+      if (!repoId) throw new HttpError(400, 'repoId is required');
+      const identity = await reader(req, repoId);
+      // Previews are for developers only (DECISIONS.md D54).
+      const statuses = identity.role === 'developer' ? undefined : (['ready', 'sent'] as const);
+      if (!digestId) return [200, { digests: (await store.digests(repoId, statuses ? { statuses: [...statuses] } : {})).map(listed) }];
+      const digest = await store.getDigest(repoId, decodeURIComponent(digestId));
+      if (!digest || (statuses && !statuses.includes(digest.status as 'ready'))) throw new HttpError(404, 'no such digest');
+      return [200, { digest }];
+    }
 
     if (url.pathname === '/v1/ticket-links') {
       const { repoId, ref, ticket } = linkTarget(await readJson(req));
