@@ -1,31 +1,60 @@
 import type { UploadPayload } from './payload.js';
-import type { PushOutcome, PushTarget } from './store.js';
+import type { LinkOutcome, PushOutcome, PushTarget, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { TicketReport } from './ticket-report.js';
+import type { SummaryRef } from './tickets.js';
 
 // The client side of `digest push` against a digest server (DECISIONS.md D43). The token travels only in the
 // Authorization header and never appears in errors.
 
 const OUTCOMES: Record<number, PushOutcome['status']> = { 201: 'created', 200: 'unchanged', 409: 'conflict', 422: 'rejected', 401: 'unauthorized', 403: 'forbidden' };
 
+const LINK_STATUSES = new Set(['created', 'unchanged', 'removed', 'not-found', 'forbidden', 'rejected', 'in-summary']);
+
+type Body = { status?: string; reason?: string; errors?: string[]; error?: string };
+
 export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof fetch = fetch): PushTarget {
-  const url = `${baseUrl.replace(/\/+$/, '')}/v1/summaries`;
+  const base = baseUrl.replace(/\/+$/, '');
+  const call = async (path: string, init: { method: string; body?: unknown } = { method: 'GET' }): Promise<[Response, Body]> => {
+    let response: Response;
+    try {
+      response = await fetchImpl(`${base}${path}`, {
+        method: init.method,
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+      });
+    } catch {
+      throw new Error(`could not reach the shared store at ${base}.`);
+    }
+    return [response, (await response.json().catch(() => ({}))) as Body];
+  };
+  const unexpected = (response: Response, body: Body) => new Error(`the shared store answered ${response.status}: ${body.error ?? 'no details'}`);
+  const refused = (response: Response, body: Body) =>
+    response.status === 401 || response.status === 403 ? { status: response.status === 401 ? ('unauthorized' as const) : ('forbidden' as const), reason: body.reason ?? body.error ?? `HTTP ${response.status}` } : null;
+  const linkChange = async (method: 'POST' | 'DELETE', repoId: string, ref: SummaryRef, ticket: string) => {
+    const [response, body] = await call('/v1/ticket-links', { method, body: { repoId, agent: ref.agent, sessionId: ref.sessionId, ticket } });
+    if (body.status && LINK_STATUSES.has(body.status)) return (body.reason === undefined ? { status: body.status } : { status: body.status, reason: body.reason }) as LinkOutcome & UnlinkOutcome;
+    const no = refused(response, body);
+    if (no) return no;
+    throw unexpected(response, body);
+  };
   return {
+    link: (repoId, ref, ticket): Promise<LinkOutcome> => linkChange('POST', repoId, ref, ticket),
+    unlink: (repoId, ref, ticket): Promise<UnlinkOutcome> => linkChange('DELETE', repoId, ref, ticket),
+    async tickets(repoId, filter): Promise<TicketsOutcome> {
+      const params = new URLSearchParams({ repoId, ...filter });
+      const [response, body] = await call(`/v1/tickets?${params}`);
+      if (response.status === 200) return { status: 'ok', report: body as unknown as TicketReport };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
     async push(repoId: string, payload: UploadPayload): Promise<PushOutcome> {
-      let response: Response;
-      try {
-        response = await fetchImpl(url, {
-          method: 'POST',
-          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ repoId, payload }),
-        });
-      } catch {
-        throw new Error(`could not reach the shared store at ${baseUrl.replace(/\/+$/, '')}.`);
-      }
-      const body = (await response.json().catch(() => ({}))) as { reason?: string; errors?: string[]; error?: string };
+      const [response, body] = await call('/v1/summaries', { method: 'POST', body: { repoId, payload } });
       const status = OUTCOMES[response.status];
       if (status === 'created' || status === 'unchanged') return { status };
       if (status === 'rejected') return { status, errors: body.errors ?? [body.error ?? 'rejected'] };
       if (status) return { status, reason: body.reason ?? body.error ?? `HTTP ${response.status}` };
-      throw new Error(`the shared store answered ${response.status}: ${body.error ?? 'no details'}`);
+      throw unexpected(response, body);
     },
   };
 }
