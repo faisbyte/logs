@@ -79,5 +79,6 @@ export {
   type TrackerTicket,
   type UnlinkResult,
 } from './shared/tickets.js';
+export { groupByTicket, linksOf, ticketReport, type SprintGroup, type TicketGroup, type TicketReport, type TicketReportFilter } from './shared/ticket-report.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
