@@ -5,6 +5,7 @@ import { Command, CommanderError } from 'commander';
 import { initCommand } from './init.js';
 import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
+import { linkCommand, ticketsCommand } from './tickets.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
 import { summarizeCommand } from './summarize.js';
@@ -125,6 +126,28 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .description('Push approved summaries to the shared store (only the shared fields; drafts and rejected summaries never leave)')
     .option(...repoOption)
     .action((options: { repo?: string }) => guarded('push', () => pushCommand(options, ctx)));
+
+  for (const [action, description] of [
+    ['link', 'Link a pushed summary to another ticket (only the developer who pushed it can)'],
+    ['unlink', 'Remove a link added with digest link (ticket keys inside the summary stay)'],
+  ] as const) {
+    program
+      .command(action)
+      .argument('<sessionId>', 'session id or a unique prefix of it (see digest review --list)')
+      .argument('<ticket>', 'ticket key, e.g. PROJ-142')
+      .description(description)
+      .option(...repoOption)
+      .action((sessionId: string, ticket: string, options: { repo?: string }) => guarded(action, () => linkCommand(action, sessionId, ticket, options, ctx)));
+  }
+
+  program
+    .command('tickets')
+    .description("Show the team's pushed summaries grouped by sprint, then ticket")
+    .option('--from <date>', 'start of a date range, e.g. 2026-03-01')
+    .option('--to <date>', 'end of the date range (not included)')
+    .option('--sprint <name>', 'one sprint by name instead of a date range')
+    .option(...repoOption)
+    .action((options: { from?: string; to?: string; sprint?: string; repo?: string }) => guarded('tickets', () => ticketsCommand(options, ctx)));
 
   try {
     await program.parseAsync(argv, { from: 'user' });

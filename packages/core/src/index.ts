@@ -46,14 +46,11 @@ export {
   hashToken,
   matchesQuery,
   newToken,
-  localPushTarget,
   payloadHash,
   receivePush,
   teamReportFrom,
   type PushIdentity,
   type PushResult,
-  type PushOutcome,
-  type PushTarget,
   type ReceiveResult,
   type StoredSummary,
   type SummaryQuery,
@@ -83,3 +80,4 @@ export { groupByTicket, linksOf, ticketReport, type SprintGroup, type TicketGrou
 export { FakeTracker, refreshTracker, type Tracker } from './shared/tracker.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
+export { localPushTarget, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
