@@ -18,7 +18,7 @@ Some tests are opt-in and skipped by default:
 
 ## Running the real-Postgres test
 
-This runs the SummaryStore contract tests against a real Postgres. Every test truncates the `summaries` and `tokens` tables, so use a throwaway database, never one you care about.
+This runs the SummaryStore and TicketStore contract tests against a real Postgres. Every test empties the tables it uses, so use a throwaway database, never one you care about.
 
 ```sh
 # 1. Start a throwaway Postgres 16 that only this machine can reach (no password).
