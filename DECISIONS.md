@@ -568,3 +568,147 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - A `digest-server` command that runs `refreshTracker`.
   - Removing tickets a tracker no longer knows.
   - Tracker sprint dates; tracker-only sprints have none.
+
+## D48. Digests use Claude Sonnet 5.5 by default
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - Digests and reports are written with `claude-sonnet-5-5` at `medium` effort.
+  - Configuration:
+    - Server: `DIGEST_MODEL` and `DIGEST_EFFORT`.
+    - `digest report`: `report.model` and `report.effort` in `.digest/config.json`.
+  - **Price** (confirmed against the live pricing page on 2026-10-30): $2 per million input tokens and $10 per million output tokens, flat across the 1M-token context. The price table already had this.
+  - A digest is one call. The estimate errs high, using D22's margins: input × 1.6 and 3,000 output tokens.
+- **Alternatives:** Haiku 5.5, like the summariser; Opus 5.5.
+- **Why:**
+  - A digest is one call per period, read by non-technical people, and its quality matters more than its cost: about $0.05–$0.10 per sprint.
+  - Summaries stay on Haiku because there are many of them.
+
+## D49. Digest input: the shared narrative, with its own provenance
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **What it holds:** `digestInput(report)` turns a ticket report into a frozen, branded `DigestInput`. It keeps goal, outcome, what was done, decisions, rejected approaches, follow-ups and AI involvement, grouped by ticket with titles, plus the unlinked work.
+  - **What it leaves out:** who did the work, session ids and file paths.
+  - **AI involvement per ticket** is the most common level among its work, the higher one on a tie.
+  - **Provenance:** LLM requests now accept a `RedactedSession` or a `DigestInput`, still hard-checked by every client (D16, D23). Nothing else can reach a model.
+  - **Hash:** the input's sha256 is the summary-set part of the report cache key.
+- **Why:**
+  - "No judgement of individual developers" (plan section 6.2) is enforced by never sending names.
+  - The provenance check keeps raw data from reaching a model through the new path.
+
+## D50. Digest generation: structured output, rendered here, checked twice
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Prompt:** the 6.2 prompt verbatim (`digest-v1`) with a structured-output schema: overview, one section per ticket (achieved, AI involvement in plain words, key decisions), other work, and risks and open questions.
+  - **Rendering:** this code renders the Markdown. Ticket titles and AI involvement levels come from the input, not the model.
+  - **Coverage line:** "Based on N summaries that M developers chose to share."
+    - It counts approved, pushed summaries only. The server never learns about unreviewed drafts; this is the coverage decision the plan asked for.
+  - **Post-check:**
+    - Exactly the input's tickets, one section each.
+    - No other ticket key with one of the input's project prefixes, so "UTF-8" passes.
+    - No code or code formatting.
+    - No "other work" when there was none.
+    - A failure gets one retry with the errors, then the digest is refused.
+  - **Secret detectors:** they run on every field and on the final Markdown. A match blocks the digest outright, with no retry. Every store and every delivery runs the same check again.
+  - **Empty periods:** an empty period writes itself without a model call.
+- **Alternatives:** let the model write Markdown and check it afterwards; retry after a secret match.
+- **Why:**
+  - Rendering ourselves makes the checks exact and the format stable.
+  - A secret in a digest is never worth a second try.
+
+## D51. Reader tokens for stakeholders
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - `digest-server token --reader <id> --name` issues a read-only token. Tokens are unique per person, role and repo (migration 4), so a person can hold both kinds.
+  - **Readers can:** request reports (`POST /v1/reports`), and list and read digests (`GET /v1/digests`, `/v1/digests/<id>`).
+  - **Readers get 403 on:** every per-session endpoint (`/v1/summaries`, `/v1/team-report`, `/v1/tickets`), because those carry developer identity; pushes; and ticket links.
+  - **Previews:** readers never see digests in developer preview.
+- **Alternatives:** wait for Phase 10's full roles.
+- **Why:** managers need reports now and must not see who did what. Phase 10 adds roles and audit on top.
+
+## D52. Stored digests, report cache, spend and repo settings
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Contract:** a `DigestStore` contract with in-memory and Postgres implementations (migration 5). It covers:
+    - `digests` (kind `report` or `scheduled`; status `ready`, `preview` or `sent`; deliveries per channel);
+    - `llm_spend`;
+    - `repo_settings`.
+  - **Uniqueness:** partial unique indexes keep one cached report per (period, input hash, prompt version, model), and one scheduled digest per period.
+  - **Repo settings:** schedule, weekday, developer preview hours, email recipients, the *name* of the environment variable holding the Slack webhook (the URL is a secret and stays out of the database), the monthly cap, and when the schedule started.
+- **Why:**
+  - Caching makes a repeated report free.
+  - One digest per period makes send-due safe to repeat.
+
+## D53. On-demand reports on the server, under a monthly cost cap
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Server path (primary):** `POST /v1/reports` takes a sprint or date range from a reader or developer token, and serves the cached report or writes one.
+  - **Cost cap:**
+    - Before any model call, the estimate plus this calendar month's spend (UTC) must fit under the repo's cap.
+    - The cap is the repo's own, or the server's `DIGEST_MONTHLY_CAP_USD` (default $10).
+    - If not, the server answers 429 with a clear message.
+    - Every call's cost is recorded, including attempts that failed their checks.
+  - **No API key:** the server serves cached reports only (503 for new ones).
+  - **Local path:** `digest report` writes locally with the caller's own key.
+    - It shows the estimate first and asks, or needs `--yes`.
+    - It caches in `.digest/cache/reports`.
+    - It writes to stdout or to `--out` inside the repo, never creating directories.
+- **Alternatives:** CLI only (managers don't use it); no cap until Phase 10.
+- **Why:** you chose the server path as primary, and a cap now keeps an open report endpoint from running up a bill.
+
+## D54. Scheduled digests: `send-due` by cron, with an optional view-only preview
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - `digest-server digest send-due` is run by cron, for example `0 7 * * *`. It is idempotent.
+  - **What's due:**
+    - Weekly: the 7 days before the chosen weekday.
+    - Sprint-end: each sprint that has ended.
+    - Never a period that ended before the schedule was turned on (`--since` can backdate it).
+  - **Per due period:**
+    - Write the digest once, after the cost-cap check.
+    - If the repo has a preview window (`--preview-hours`, off by default), hold the digest there. Developers can read it with `digest preview`; they can't edit or stop it.
+    - Then deliver it, retrying only the channels that failed. It is marked sent once every channel has it.
+  - **Exit code:** 1 when anything due wasn't sent, so cron can alert.
+  - **Settings:** `digest-server repo` shows and changes the repo's digest settings.
+- **Alternatives:** a timer inside the server process; a preview that can hold a digest back.
+- **Why:**
+  - Cron and an idempotent command are easy to test and can't miss a digest after a restart.
+  - The view-only preview was chosen to keep the flow simple.
+
+## D55. Delivery: Slack incoming webhook and SMTP
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Interface:** a `Delivery` interface with two implementations.
+  - **Slack:**
+    - Posts mrkdwn to an incoming webhook: headings and bold become `*bold*`, `&`, `<` and `>` are escaped, and text past 39,000 characters is cut short with a note.
+    - The webhook URL comes from a server environment variable that the repo settings name.
+  - **Email:**
+    - Sent over SMTP (`SMTP_URL`, `DIGEST_EMAIL_FROM`), which works with Resend, Postmark or a self-hosted server.
+    - Markdown is rendered to HTML with `marked` (raw HTML escaped), plus a plain-text part.
+    - Tested locally against Mailpit (an opt-in test).
+  - **Errors:** never include webhook URLs or SMTP credentials.
+  - **New dependencies** (each at least two weeks old): `marked` 18.1.1 and `nodemailer` 10.1.1.
+- **Alternatives:** provider APIs (Resend, Postmark) directly; Slack Block Kit.
+- **Why:**
+  - SMTP covers every provider and self-hosting with one code path.
+  - Plain mrkdwn is enough for a text digest.
+
+## D56. An opt-in judge eval for digest faithfulness
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Judge:** `judgeDigest` asks a model (Sonnet 5.5 by default, `DIGEST_JUDGE_MODEL`) to list every factual claim in a digest and say whether the input summaries support it.
+  - **Golden fixture:** a synthetic sprint of four summaries (`packages/core/test/digest/golden-sprint.json`). Its digest has three planted unsupported claims (a production release, a pen test, "40% faster") and three supported ones.
+  - **The eval** (`DIGEST_EVAL=1`):
+    - It requires the judge to flag every planted claim and none of the supported ones.
+    - It then writes a fresh digest from the fixture, judges it, and reports to `.digest/eval/`.
+- **Why:**
+  - The deterministic checks (D50) can't see invented outcomes; a reader can.
+  - Keeping it opt-in keeps CI free of API calls and cost.
