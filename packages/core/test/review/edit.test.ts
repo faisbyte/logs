@@ -28,6 +28,12 @@ describe('toEditable', () => {
 describe('parseEdit', () => {
   const edit = (change: (yaml: string) => string, original = draftSummary()) => parseEdit(original, change(toEditable(original)), redact);
 
+  it('marks ticket keys added during review as manual, keeps the others, and drops removed ones', () => {
+    const original = draftSummary({ ticketRefs: ['PROJ-142', 'PROJ-7'], ticketSources: { 'PROJ-142': 'branch', 'PROJ-7': 'commit' } });
+    const result = edit((y) => y.replace('  - PROJ-7\n', '  - OPS-3\n'), original);
+    expect(result).toMatchObject({ changed: true, summary: { ticketRefs: ['PROJ-142', 'OPS-3'], ticketSources: { 'PROJ-142': 'branch', 'OPS-3': 'manual' } } });
+  });
+
   it('applies edits to text fields and ticket refs, and marks the summary edited', () => {
     const result = edit((t) => t.replace('goal: Rate limit the login endpoint.', 'goal: Rate limit login, per IP.').replace('- PROJ-142', '- PROJ-142\n  - PROJ-150'));
     expect(result).toMatchObject({ changed: true, summary: { goal: 'Rate limit login, per IP.', ticketRefs: ['PROJ-142', 'PROJ-150'], editedByDeveloper: true, status: 'draft' } });

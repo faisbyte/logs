@@ -84,7 +84,11 @@ export function parseEdit(original: SessionSummary, yaml: string, redact: (text:
   };
 
   if (JSON.stringify(edited) === JSON.stringify(editable(original))) return { summary: original, changed: false, redactions };
-  return { summary: { ...original, ...edited, editedByDeveloper: true }, changed: true, redactions };
+  // Keys added here are manual links; the rest keep the source they had.
+  const ticketSources = Object.fromEntries(
+    edited.ticketRefs.flatMap((key) => (original.ticketRefs.includes(key) ? (original.ticketSources[key] ? [[key, original.ticketSources[key]]] : []) : [[key, 'manual' as const]])),
+  );
+  return { summary: { ...original, ...edited, ticketSources, editedByDeveloper: true }, changed: true, redactions };
 }
 
 const withErrors = (yaml: string, errors: string[]) =>

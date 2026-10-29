@@ -50,7 +50,10 @@ export function postCheck(summary: object): string[] {
   return issues;
 }
 
-export const ticketRefsFrom = (branches: readonly string[]) => extractTickets({ branches, commitMessages: [] }).ticketRefs;
+/** Where a ticket key in a summary came from (DECISIONS.md D44). Links added after a push are kept by the server instead. */
+export const TicketSourceSchema = z.enum(['branch', 'commit', 'manual']);
+export type TicketSource = z.infer<typeof TicketSourceSchema>;
+
 
 export const UsageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
@@ -74,6 +77,8 @@ export const SessionSummarySchema = z.object({
   // From parsed metadata, never from the model:
   filesTouched: z.array(z.string()),
   ticketRefs: z.array(z.string()),
+  /** Source per key in ticketRefs. Summaries written before Phase 6 have none. */
+  ticketSources: z.record(z.string(), TicketSourceSchema).default({}),
   branch: z.string().nullable(),
   startedAt: z.string(),
   endedAt: z.string(),
@@ -111,7 +116,7 @@ export function buildSessionSummary(
     risksOrFollowUps: [...llm.risksOrFollowUps],
     aiInvolvement: llm.aiInvolvement,
     filesTouched: s.filesTouched.map(rel),
-    ticketRefs: ticketRefsFrom(s.gitBranches),
+    ...extractTickets({ branches: s.gitBranches, commitMessages: [] }),
     branch: s.gitBranch,
     startedAt: s.startedAt,
     endedAt: s.endedAt,

@@ -39,6 +39,8 @@ export function statusText(s: SessionSummary, timeZone?: string): string {
 
 const list = (title: string, items: string[]) => (items.length ? `${title}:\n${items.map((i) => `  - ${i}`).join('\n')}` : `${title}: none`);
 const because = (reason: string) => (reason ? ` (because: ${reason})` : '');
+const FROM = { branch: 'branch', commit: 'commit message', manual: 'added in review' } as const;
+const ticket = (s: SessionSummary, key: string) => (s.ticketSources[key] ? `${key} (${FROM[s.ticketSources[key]]})` : key);
 
 export function formatSummary(s: SessionSummary, { timeZone }: { timeZone?: string } = {}): string {
   const started = formatTime(s.startedAt, timeZone);
@@ -56,6 +58,6 @@ export function formatSummary(s: SessionSummary, { timeZone }: { timeZone?: stri
     list('Rejected approaches', s.rejectedApproaches.map((r) => `${r.approach}${because(r.reason)}`)),
     list('Risks and follow-ups', s.risksOrFollowUps),
     `Files touched (${s.filesTouched.length}): ${s.filesTouched.join(', ') || 'none'}`,
-    `Ticket refs: ${s.ticketRefs.join(', ') || 'none'}`,
+    `Ticket refs: ${s.ticketRefs.map((key) => ticket(s, key)).join(', ') || 'none'}`,
   ].join('\n');
 }

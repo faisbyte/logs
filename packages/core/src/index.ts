@@ -16,7 +16,7 @@ export { condenseSession, chunkSession, chunkTurns, estimateTokens, type Chunk, 
 export { FakeLlmClient } from './summarize/fake-llm.js';
 export { guardRequest, type LlmClient, type LlmRequest, type LlmResponse, type LlmUsage } from './summarize/llm.js';
 export { PROMPT_VERSION } from './summarize/prompt.js';
-export { SessionSummarySchema, type SessionSummary } from './summarize/schema.js';
+export { SessionSummarySchema, TicketSourceSchema, type SessionSummary, type TicketSource } from './summarize/schema.js';
 export { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd, summarizeSettings, type SummarizeSettings } from './summarize/settings.js';
 export { cacheKey, contentHash, readCachedSummary, ReviewedSummaryError, summarizeCached, writeSummary } from './summarize/store.js';
 export { SummarizeError, summarizeSession } from './summarize/summarize.js';

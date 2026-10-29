@@ -24,7 +24,9 @@ export const SHARED_FIELDS = [
   'endedAt',
 ] as const;
 
-const IDENTITY_FIELDS = ['sessionId', 'agent', 'editedByDeveloper', 'approvedAt', 'approvedBy'] as const;
+// Sent with the shared fields but outside the approval hash: they describe the summary rather than say anything,
+// and leaving ticketSources out keeps approvals made before Phase 6 valid (DECISIONS.md D44).
+const IDENTITY_FIELDS = ['sessionId', 'agent', 'editedByDeveloper', 'approvedAt', 'approvedBy', 'ticketSources'] as const;
 
 
 const pick = <K extends keyof SessionSummary>(summary: SessionSummary, keys: readonly K[]) => Object.fromEntries(keys.map((k) => [k, summary[k]])) as Pick<SessionSummary, K>;

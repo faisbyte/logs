@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { approve, assertApprovedSummary, isApprovedSummary, reject, reopen, uploadPayload, verifyApproval, type ApprovedSummary } from '../../src/review/approval.js';
 import { draftSummary } from './helpers.js';
+import { SessionSummarySchema, type SessionSummary } from '../../src/summarize/schema.js';
 
 const now = new Date('2026-10-29T12:00:00.000Z');
 
@@ -71,8 +72,13 @@ describe('uploadPayload (the only way summaries leave the machine, Phase 5)', ()
   it('returns only the shared fields plus identity and approval details', () => {
     const payload = uploadPayload(approve(draftSummary(), { now }));
     expect(Object.keys(payload).sort()).toEqual(
-      ['agent', 'aiInvolvement', 'approvedAt', 'approvedBy', 'branch', 'decisions', 'editedByDeveloper', 'endedAt', 'filesTouched', 'goal', 'outcome', 'rejectedApproaches', 'risksOrFollowUps', 'sessionId', 'startedAt', 'ticketRefs', 'whatWasDone'].sort(),
+      ['agent', 'aiInvolvement', 'approvedAt', 'approvedBy', 'branch', 'decisions', 'editedByDeveloper', 'endedAt', 'filesTouched', 'goal', 'outcome', 'rejectedApproaches', 'risksOrFollowUps', 'sessionId', 'startedAt', 'ticketRefs', 'ticketSources', 'whatWasDone'].sort(),
     );
+  });
+
+  it('keeps approvals made before ticket sources existed valid', () => {
+    const { ticketSources: _, ...legacy } = approve(draftSummary(), { now }).summary as SessionSummary;
+    expect(() => uploadPayload(verifyApproval(SessionSummarySchema.parse(legacy)))).not.toThrow();
   });
 
   it('throws for anything that is not an ApprovedSummary, even when forced through the type system', () => {
