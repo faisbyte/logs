@@ -12,9 +12,12 @@
   "dependencies": {
     "@digest/core": "workspace:*",
     "@electric-sql/pglite": "0.5.10",
+    "marked": "18.1.1",
+    "nodemailer": "10.1.1",
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@types/nodemailer": "8.0.2",
     "@types/pg": "^8.23.1"
   }
 }
