@@ -26,7 +26,10 @@ async function start() {
       ...(init.raw !== undefined ? { body: init.raw } : init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });
   const push = (payload: unknown, as = token, repoId = REPO) => call('/v1/summaries', { method: 'POST', token: as, body: { repoId, payload } });
-  return { store, logs, token, call, push };
+  const bobToken = (await store.issueToken({ repoId: REPO, developerId: 'bob', developerName: 'Bob' })).token;
+  const link = (method: 'POST' | 'DELETE', ticket: unknown, as = token, extra: object = {}) =>
+    call('/v1/ticket-links', { method, token: as, body: { repoId: REPO, agent: 'claude-code', sessionId: payloadFor().sessionId, ticket, ...extra } });
+  return { store, logs, token, bobToken, call, push, link };
 }
 
 describe('digest server HTTP API', () => {
@@ -103,5 +106,59 @@ describe('digest server HTTP API', () => {
     expect(logs).toContain('POST /v1/summaries 201');
     const all = logs.join('\n');
     for (const secret of [token, 'dgt_unknown_value_123', fakeGithub, 'PROJ-1', 'Rate limit']) expect(all).not.toContain(secret);
+  });
+
+  describe('tickets (DECISIONS.md D45, D46)', () => {
+    it('adds a manual link (201, then 200), and refuses another developer (403), an unknown session (404) and a bad key (422)', async () => {
+      const { push, link, bobToken } = await start();
+      await push(payloadFor());
+      expect((await link('POST', 'OPS-7')).status).toBe(201);
+      expect((await link('POST', 'OPS-7')).status).toBe(200);
+      expect((await link('POST', 'OPS-8', bobToken)).status).toBe(403);
+      expect((await link('POST', 'OPS-8', undefined, { sessionId: 'unknown' })).status).toBe(404);
+      const bad = await link('POST', `see ${fakeGithub}`);
+      expect(bad.status).toBe(422);
+      expect(await bad.text()).not.toContain(fakeGithub);
+      expect((await link('POST', 'OPS-8', undefined, { agent: 'cursor' })).status).toBe(400);
+      expect((await link('POST', 'OPS-8', 'dgt_unknown')).status).toBe(401);
+    });
+
+    it('removes a manual link (200) but never a key inside the summary (409)', async () => {
+      const { push, link, store } = await start();
+      await push(payloadFor());
+      await link('POST', 'OPS-7');
+      expect((await link('DELETE', 'PROJ-142')).status).toBe(409);
+      expect((await link('DELETE', 'OPS-7')).status).toBe(200);
+      expect((await link('DELETE', 'OPS-7')).status).toBe(404);
+      expect(await store.ticketLinks(REPO)).toEqual([]);
+    });
+
+    it('returns summaries grouped by sprint and ticket, for a date range or a sprint name', async () => {
+      const { push, call, token, store } = await start();
+      await store.saveSprint(REPO, { name: 'Sprint 1', from: '2026-03-02T00:00:00.000Z', to: '2026-03-16T00:00:00.000Z' });
+      await push(payloadFor());
+      const byRange = await call(`/v1/tickets?repoId=${encodeURIComponent(REPO)}&from=2026-03-01&to=2026-04-01`, { token });
+      expect(byRange.status).toBe(200);
+      const body = await byRange.json();
+      expect(body).toMatchObject({ repoId: REPO, summaryCount: 1, sprints: [{ sprint: { name: 'Sprint 1' }, tickets: [{ key: 'PROJ-142', summaries: [{ link: { source: 'branch' } }] }], unlinked: [] }] });
+      const bySprint = await call(`/v1/tickets?repoId=${encodeURIComponent(REPO)}&sprint=${encodeURIComponent('Sprint 1')}`, { token });
+      expect((await bySprint.json()).summaryCount).toBe(1);
+    });
+
+    it('needs either from and to, or a sprint name, and the token for that repo', async () => {
+      const { call, token } = await start();
+      const repo = encodeURIComponent(REPO);
+      expect((await call(`/v1/tickets?repoId=${repo}`, { token })).status).toBe(400);
+      expect((await call(`/v1/tickets?repoId=${repo}&from=2026-03-01`, { token })).status).toBe(400);
+      expect((await call(`/v1/tickets?repoId=${repo}&from=2026-03-01&to=2026-04-01&sprint=S1`, { token })).status).toBe(400);
+      expect((await call(`/v1/tickets?repoId=github.com%2Facme%2Fother&sprint=S1`, { token })).status).toBe(403);
+    });
+
+    it('logs only the fixed path for link changes, never the session or ticket', async () => {
+      const { push, link, logs } = await start();
+      await push(payloadFor());
+      await link('POST', 'OPS-7');
+      expect(logs.at(-1)).toBe('POST /v1/ticket-links 201');
+    });
   });
 });
