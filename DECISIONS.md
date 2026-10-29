@@ -221,7 +221,7 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** The cache key is `sha256(sessionId, contentHash, promptVersion, model)`. `contentHash` hashes the condensed, redacted text plus the chunk size, so it changes when the session grows, when redaction settings change, or when chunking changes. Bumping `PROMPT_VERSION` or switching model also invalidates. Files:
   - cache entries: `.digest/cache/summaries/<key>.json`
   - latest draft per session: `.digest/summaries/<agent>-<id>.json`, status `draft`
-  - usage log: each generated summary appends one line to `.digest/usage.jsonl` (input and output tokens, request count, estimated cost), plus each part's output, the merge's picks and the validation errors behind every retry, added 2026-10-29); cache hits don't
+  - usage log: each generated summary appends one line to `.digest/usage.jsonl` (input and output tokens, request count, estimated cost, plus each part's output, the merge's picks and the validation errors behind every retry, added 2026-10-29); cache hits don't
   - corrupt cache entries count as misses
 - **Alternatives:** Key on the source file's hash (misses redaction-config changes); cache in the OS temp directory.
 - **Why:** Keying on exactly what the model sees means a summary is reused only when an identical request would be sent. `.digest/` is already self-ignoring (D9), so drafts never reach git, and nothing is uploaded in Phase 3.

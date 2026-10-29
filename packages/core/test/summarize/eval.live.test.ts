@@ -18,14 +18,10 @@ import type { SessionSummary } from '../../src/summarize/schema.js';
 import { estimateSummaryCost } from '../../src/summarize/estimate.js';
 import { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd } from '../../src/summarize/settings.js';
 import { summarizeSession } from '../../src/summarize/summarize.js';
-import { claude, codex } from '../fixtures.js';
+import { fixtureFiles } from '../fixtures.js';
 import { compareToGolden, goldens } from './compare.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
-const files: Record<string, string> = Object.fromEntries([
-  ...Object.entries(claude).map(([k, v]) => [`claude.${k}`, v]),
-  ...Object.entries(codex).map(([k, v]) => [`codex.${k}`, v]),
-]);
 
 const JudgeSchema = z.strictObject({ unsupportedClaims: z.array(z.string()) });
 const JUDGE_PROMPT = `You check a summary of an AI coding session against the session transcript.
@@ -57,7 +53,7 @@ describe.skipIf(!process.env.DIGEST_EVAL || !process.env.ANTHROPIC_API_KEY)('liv
     const rows: string[] = [];
     let cost = 0;
     for (const golden of goldens()) {
-      const parsed = (parseClaudeCodeFile(files[golden.fixture]!) ?? parseCodexFile(files[golden.fixture]!))!;
+      const parsed = (parseClaudeCodeFile(fixtureFiles[golden.fixture]!) ?? parseCodexFile(fixtureFiles[golden.fixture]!))!;
       const redacted = redactSession(parsed);
       const summary = await summarizeSession(redacted, llm, { chunkTokens: DEFAULT_CHUNK_TOKENS });
       const expected = estimateSummaryCost(redacted, { model, effort: 'low', chunkTokens: DEFAULT_CHUNK_TOKENS }).requests;

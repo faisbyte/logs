@@ -375,6 +375,59 @@ const REJECTED =
   writeJsonl(`claude-code/projects/-work-acme-webapp-legacy/${sessionId}.jsonl`, s.events);
 }
 
+// --- Claude early decision (eval only, not discovered): a decision and a rejected approach in the
+// first few turns, then a long stretch of unrelated work, so a recency-biased summary misses them ---
+{
+  const sessionId = 'c1a5e005-0000-4000-8000-000000000005';
+  const s = claudeSession({ sessionId, cwd: REPO, gitBranch: 'feature/PROJ-180-session-store', version: '2.1.310', start: '2026-03-09T09:00:00.000Z' });
+  s.prompt('Login sessions live in process memory, so everyone is logged out on every deploy. Move them somewhere that survives restarts.');
+  s.respond(
+    [
+      {
+        text: 'The simplest option is stateless sessions: sign a JWT with the user id and an expiry, put it in the cookie, and drop server-side session storage entirely. Nothing to store, nothing lost on deploy.',
+      },
+    ],
+    { stopReason: 'end_turn' },
+  );
+  s.prompt('No JWTs. When an admin disables an account the user has to be logged out immediately, and we cannot revoke a signed token before it expires.');
+  let [read] = s.respond([{ text: 'Understood. Then the sessions need a server-side store. We already run Postgres, so I will add a sessions table rather than a new service.' }, { tool: 'Read', input: { file_path: `${REPO}/src/auth/session.ts` } }]);
+  s.result(read, 'export const sessions = new Map();', readResult(`${REPO}/src/auth/session.ts`, 'export const sessions = new Map();'));
+  let [mig] = s.respond([{ tool: 'Write', input: { file_path: `${REPO}/migrations/0042_sessions.sql`, content: 'create table sessions (id text primary key);' } }]);
+  s.result(mig, 'File created successfully', writeResult(`${REPO}/migrations/0042_sessions.sql`, 'x'));
+  let [ed] = s.respond([{ tool: 'Edit', input: { file_path: `${REPO}/src/auth/session.ts`, old_string: 'new Map()', new_string: 'pgSessionStore(db)', replace_all: false } }]);
+  s.result(ed, 'The file has been updated successfully.', editResult(`${REPO}/src/auth/session.ts`, 'a', 'b', 'x'));
+  let [t] = s.respond([{ tool: 'Bash', input: { command: 'pnpm test auth', description: 'Run auth tests' } }]);
+  s.result(t, ' ✓ test/auth.test.ts (9 tests)', bashResult(' ✓ test/auth.test.ts (9 tests)'));
+  let [c] = s.respond([{ tool: 'Bash', input: { command: 'git commit -qam "PROJ-180: store sessions in Postgres"', description: 'Commit' } }]);
+  s.result(c, '', bashResult(''));
+  s.respond(
+    [{ text: 'Sessions are now rows in a Postgres sessions table with a 30-day sliding expiry. Disabling an account deletes its rows, so the user is logged out on the next request, and deploys no longer log anyone out.' }],
+    { stopReason: 'end_turn' },
+  );
+
+  // The rest of the session is unrelated: translating UI strings, area by area and locale by locale.
+  s.set({ gitBranch: 'feature/PROJ-181-translations' });
+  const areas = ['settings', 'billing', 'onboarding', 'invites', 'notifications', 'reports', 'profile'];
+  const locales = ['de', 'fr', 'es', 'it', 'pt-BR', 'nl', 'sv', 'pl', 'ja', 'ko'];
+  const keys = ['title', 'subtitle', 'save', 'cancel', 'confirm', 'emptyState', 'errorGeneric', 'helpLink', 'tooltip', 'successToast', 'deleteWarning', 'lastUpdated'];
+  for (const area of areas) {
+    for (const locale of locales) {
+      s.prompt(`Next, translate the ${area} screen strings into ${locale}. Keep placeholders and plural forms intact.`);
+      const file = `${REPO}/src/i18n/${locale}/${area}.json`;
+      let [r] = s.respond([{ tool: 'Read', input: { file_path: file } }]);
+      s.result(r, '{}', readResult(file, '{}'));
+      let [e] = s.respond([{ tool: 'Edit', input: { file_path: file, old_string: '{}', new_string: '{"title": "..."}', replace_all: false } }]);
+      s.result(e, 'The file has been updated successfully.', editResult(file, 'a', 'b', 'x'));
+      let [chk] = s.respond([{ tool: 'Bash', input: { command: `pnpm i18n:check ${locale}/${area}`, description: 'Check translations' } }]);
+      s.result(chk, 'ok', bashResult('ok'));
+      const details = keys.map((k, i) => `${area}.${k} now reads naturally in ${locale} (${i % 3 === 0 ? 'kept the {name} placeholder' : i % 3 === 1 ? 'checked the plural forms' : 'shortened it to fit the button'})`).join('; ');
+      s.respond([{ text: `Translated the ${area} strings into ${locale}: ${details}. The i18n check passes.` }], { stopReason: 'end_turn' });
+    }
+  }
+  s.title('Session store, then translations');
+  writeJsonl(`eval/claude-code/${sessionId}.jsonl`, s.events);
+}
+
 // ---------------------------------------------------------------------------
 // Codex CLI
 // ---------------------------------------------------------------------------

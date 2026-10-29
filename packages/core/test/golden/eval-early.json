@@ -1,0 +1,15 @@
+{
+  "fixture": "eval.early",
+  "goal": "Move login sessions to a store that survives deploys, then translate the UI strings into every supported locale.",
+  "outcome": "completed",
+  "whatWasDone": "Sessions moved from process memory to a Postgres sessions table with a 30-day sliding expiry, so deploys no longer log users out and disabling an account logs its user out immediately. The rest of the session translated the settings, billing, onboarding, invites, notifications, reports and profile strings into ten locales, keeping placeholders and plural forms, with the i18n check passing.",
+  "decisions": [
+    { "decision": "Store sessions in a Postgres sessions table with a 30-day sliding expiry", "reason": "Postgres already runs, and server-side sessions can be revoked immediately.", "mustMention": ["postgres|database|table", "session"] }
+  ],
+  "rejectedApproaches": [
+    { "approach": "Stateless JWT sessions", "reason": "A signed token can't be revoked before it expires, but disabling an account must log the user out immediately.", "mustMention": ["jwt|token"] }
+  ],
+  "risksOrFollowUps": [],
+  "aiInvolvement": "heavy",
+  "mustNotMention": ["redis", "websocket", "trigram"]
+}

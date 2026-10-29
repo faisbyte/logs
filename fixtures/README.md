@@ -26,3 +26,11 @@ The fictional repo is `/work/acme-webapp`. Directory layout matches each agent's
 | `019c0005…` other | 0.81 | `cwd` is `/work/other-project`. Must be filtered out |
 
 Codex date folders and file-name times are local time (UTC+11 here), while event timestamps are UTC. Example: `2026/03/07/rollout-2026-03-07T10-00-00…` starts at `2026-03-06T23:00:00Z`.
+
+## Eval only (`eval/`)
+
+Not under a discovered folder, so `digest list` and the CLI tests never see them. Used by the goldens and the live eval.
+
+| Session | What it exercises |
+|---|---|
+| `c1a5e005…` early | Recency bias: a decision (Postgres session table) and a rejected approach (JWT sessions) in the first turns, then 70 turns of unrelated translation work. Splits into 3 parts at the default chunk size |

@@ -9,15 +9,11 @@ import { chunkTurns, condenseSession, estimateTokens } from '../../src/summarize
 import { FakeLlmClient } from '../../src/summarize/fake-llm.js';
 import { SessionSummarySchema } from '../../src/summarize/schema.js';
 import { summarizeCached } from '../../src/summarize/store.js';
-import { claude, codex } from '../fixtures.js';
+import { fixtureFiles } from '../fixtures.js';
 import { asLlmReply, compareToGolden, goldens } from './compare.js';
 import { pickAll } from './helpers.js';
 
-const files: Record<string, string> = Object.fromEntries([
-  ...Object.entries(claude).map(([k, v]) => [`claude.${k}`, v]),
-  ...Object.entries(codex).map(([k, v]) => [`codex.${k}`, v]),
-]);
-const parse = (fixture: string) => (parseClaudeCodeFile(files[fixture]!) ?? parseCodexFile(files[fixture]!))!;
+const parse = (fixture: string) => (parseClaudeCodeFile(fixtureFiles[fixture]!) ?? parseCodexFile(fixtureFiles[fixture]!))!;
 const settings = { model: 'claude-haiku-5-5', effort: 'low' as const, chunkTokens: 60_000 };
 
 describe('fake-LLM pipeline against the goldens', () => {
