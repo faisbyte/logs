@@ -4,7 +4,7 @@ Reads the session files your AI coding agents (Claude Code, Codex CLI) already w
 It turns them into plain-language, ticket-level digests for POs, scrum masters and managers, and into a short shared context log for the team's agents.
 Developers approve every summary before it's shared, and raw transcripts stay on the machine.
 
-**Status:** Phase 6: ticket linking.
+**Status:** Phase 7: stakeholder digests.
 
 ## Setup
 
@@ -41,6 +41,8 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `digest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
 | `digest link <id> <ticket>` / `unlink <id> <ticket>` | Link a pushed summary to another ticket, or remove such a link (ticket keys come from branch names, and from commit messages when `tickets.keys` is set in `.digest/config.json`) |
 | `digest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
+| `digest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
+| `digest preview` | Show scheduled digests waiting in developer preview before they are sent |
 | `digest --version` | Print the CLI version |
 
 ### Shared store (digest server)
@@ -48,6 +50,9 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 ```sh
 node packages/server/dist/main.js token --data ./server-data --repo git@github.com:org/repo.git --developer alice --name Alice
 node packages/server/dist/main.js sprint --data ./server-data --repo github.com/org/repo --name "Sprint 1" --from 2026-03-02 --to 2026-03-16
+node packages/server/dist/main.js token --data ./server-data --repo github.com/org/repo --reader pat --name "Pat (PO)"   # read-only: digests and reports
+node packages/server/dist/main.js repo --data ./server-data --repo github.com/org/repo --schedule sprint-end --email po@example.com --slack-env SLACK_WEBHOOK_URL
+node packages/server/dist/main.js digest send-due --data ./server-data   # run from cron; sends what is due, once
 node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE_URL for Postgres; PORT defaults to 8787
 ```
 
@@ -62,5 +67,6 @@ Summarising sends redacted, condensed session text to the Anthropic API using yo
 
 - [PROJECT_PLAN.md](PROJECT_PLAN.md): goals, architecture, phases
 - [DECISIONS.md](DECISIONS.md): architectural decisions and why they were made
+- [docs/digests.md](docs/digests.md): the digest server's environment, scheduling with cron, and the report API
 - [docs/development.md](docs/development.md): package layout, tests, and how to run the real-Postgres test
 - [docs/formats.md](docs/formats.md): Claude Code and Codex session file formats, as observed

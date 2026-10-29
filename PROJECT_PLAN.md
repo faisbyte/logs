@@ -217,11 +217,11 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] On-demand team report: a manager can generate one document covering all developers'
       approved AI work on a repo for any sprint or date range, not just on the schedule.
       Available from the dashboard and as `digest report --from --to` (or `--sprint`).
-- [ ] Export the report as Markdown and PDF.
+- [ ] Export the report as Markdown and PDF. (Markdown done; PDF moved to the backlog, with the Phase 9 dashboard.)
 - [ ] The report states its coverage, e.g. "Based on 23 approved session summaries from
       4 developers." Whether it also shows how many sessions are still unreviewed is a
       decision to log in DECISIONS.md.
-- [ ] Per-developer breakdown: off by default (see the "no judgement of individual
+- [ ] (Moved to the backlog, waiting for interview evidence.) Per-developer breakdown: off by default (see the "no judgement of individual
       developers" rule). If enabled, it's a repo-level setting that every developer on
       that repo can see is on.
 
@@ -255,6 +255,8 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] Read and write Agent Trace records.
 - [ ] Add more agents (Gemini CLI, Cursor CLI).
 - [ ] Opt-in GitHub issue references (#123, fixes #45) as ticket keys (left out of Phase 6).
+- [ ] Per-developer breakdown in reports (from Phase 7): off by default, a repo-level setting every developer can see is on. Waiting for interview evidence that stakeholders need it.
+- [ ] PDF export of reports (from Phase 7): with the Phase 9 dashboard.
 - [ ] Tracker work left from Phase 6, waiting for a Jira or Linear sandbox (DECISIONS.md D47): real Jira and Linear clients, a `digest-server` command that runs refreshTracker, removing tickets a tracker no longer knows, and tracker sprint dates.
 
 ---

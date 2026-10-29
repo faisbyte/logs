@@ -13,7 +13,8 @@
 
 Some tests are opt-in and skipped by default:
 
-- The live API smoke test (`DIGEST_LIVE_TESTS=1`) and the live eval against the goldens (`DIGEST_EVAL=1`). Both also need `ANTHROPIC_API_KEY`, and both cost money.
+- The live API smoke test (`DIGEST_LIVE_TESTS=1`) and the live evals against the goldens and the golden sprint (`DIGEST_EVAL=1`). All also need `ANTHROPIC_API_KEY`, and all cost money.
+- The Mailpit email test below.
 - The real-Postgres test below.
 
 ## Running the real-Postgres test
@@ -37,3 +38,28 @@ docker stop digest-pg
 ```
 
 These steps map the container to port 5433, because 5432 is often taken by a local Postgres. If you change the port, change it in the URL too. If the test fails with "password authentication failed", it has probably reached a different Postgres than the container.
+
+## Running the Mailpit email test
+
+This sends a digest email through a real SMTP server and reads it back from Mailpit's API.
+
+```sh
+docker run --rm -d --name digest-mailpit -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 axllent/mailpit:v1.31.5
+until curl -fs http://127.0.0.1:8025/api/v1/info >/dev/null; do sleep 1; done
+DIGEST_TEST_SMTP_URL=smtp://127.0.0.1:1025 DIGEST_TEST_MAILPIT_URL=http://127.0.0.1:8025 \
+  pnpm exec vitest run packages/server/test/mailpit.test.ts
+docker stop digest-mailpit
+```
+
+Open http://127.0.0.1:8025 to see the message as an email client would.
+
+## Running the digest eval
+
+The eval costs money, so it needs `DIGEST_EVAL=1` and `ANTHROPIC_API_KEY`:
+
+```sh
+DIGEST_EVAL=1 pnpm exec vitest run packages/core/test/digest/judge.live.test.ts
+```
+
+It checks that the judge flags the claims planted in `packages/core/test/digest/golden-sprint.json`, then writes and judges a fresh digest. The report goes to `.digest/eval/`.
+
