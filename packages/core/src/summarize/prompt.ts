@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LlmSummarySchema, MergeSchema } from './schema.js';
 
 // Bump on any change to the text below, to the schema or to how parts are merged: it is part of the summary cache key.
-export const PROMPT_VERSION = 'summarize-v6';
+export const PROMPT_VERSION = 'summarize-v7';
 
 // PROJECT_PLAN.md Section 6.1, verbatim apart from {schema}.
 const SECTION_6_1 = `You are summarising one AI coding session for a team log.
@@ -46,11 +46,6 @@ export interface ChunkMessageInput {
 
 export function chunkMessage({ metadata, chunk, part, parts, earlierDecisions, earlierFollowUps = [] }: ChunkMessageInput): string {
   const sections = [`Session metadata:\n${metadata}\n\nTranscript (part ${part} of ${parts}):\n${chunk}`];
-  if (parts > 1) {
-    sections.push(
-      'This part is one stretch of a longer session: earlier and later parts cover other work. In "risksOrFollowUps", list only work this part started and left unfinished; never list work as missing just because it is not in this part. "outcome" here is whether the work in this part was finished.',
-    );
-  }
   if (earlierDecisions.length) {
     const listed = earlierDecisions.map((d) => `${d.id}: ${d.decision}`).join('\n');
     sections.push(`Decisions recorded in earlier parts:\n${listed}\nIf this part explicitly drops, replaces or undoes any of them, list its id in "reversedDecisions" with the reason and a quote, and leave it out of "decisions".`);
