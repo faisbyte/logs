@@ -461,3 +461,106 @@ Option A. The requirement that stakeholders read reports without repo access, pl
 - **Why:** Postgres was chosen in D39. PGlite gives the real Postgres dialect in tests and local runs with nothing to install. Keeping token issuing off the network means no admin endpoint exists to attack.
 - **Verified (2026-10-29):** the opt-in real-Postgres test passed 14/14 contract tests against a throwaway `postgres:16` Docker container (mapped to port 5433, because 5432 was already taken). Steps are in [docs/development.md](docs/development.md).
 - **Not yet:** read-only stakeholder tokens and roles (Phase 7 and Phase 10), retraction (the `retracted_at` column is already there), TLS (put the server behind a reverse proxy), and Docker Compose (Phase 10). With PGlite, one process holds the data directory, so stop the server before issuing tokens.
+
+## D44. Ticket keys are found on the developer's machine, with where each came from
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Config:** `tickets.pattern` and `tickets.keys` in `.digest/config.json`.
+    - The pattern defaults to keys like PROJ-142. A custom one must compile, be at most 100 characters and never match empty text, or the config is rejected with a clear error.
+    - With `keys` set, a match counts only when the text before its first `-` is one of the keys.
+  - **Sources:**
+    - Branch names always count.
+    - Commit messages of the session's commits count only when `keys` is set. Without the list they match UTF-8, SHA-256 and GPT-4.
+    - Messages are read locally with `git show`, and only the keys found in them are kept. The text is never stored or sent.
+  - **Recording the source:**
+    - Each summary records `ticketSources` (`branch`, `commit` or `manual`) for the keys in `ticketRefs`.
+    - Keys a developer adds while editing in review are `manual`.
+    - `digest summarize` re-applies the config to every unreviewed draft, including cached ones.
+  - **Upload:**
+    - `ticketSources` travels in the upload payload, strictly typed: every key in it must be in `ticketRefs`.
+    - It is outside the approval hash, so approvals made before Phase 6 stay valid.
+    - Payloads without it, from older clients, still validate.
+- **Alternatives:**
+  - Extract keys on the server (it never sees commits).
+  - Include `ticketSources` in the approval hash, which would void every earlier approval.
+  - Count commit-message keys without a project list.
+- **Why:**
+  - The developer sees and approves the keys before anything is shared.
+  - Commit text stays local, in line with D40's no-raw-content rule.
+
+## D45. Ticket links, sprints and tracker data are separate server-side records
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Pushed summaries never change.** Three kinds of changeable records sit next to them, joined in only when grouping: manual ticket links, sprints, and tracker tickets.
+  - **Manual links:**
+    - Each link records who added it and when.
+    - Only the developer who pushed the summary can add or remove its manual links.
+    - Removing one deletes only that record. A key inside the summary can't be removed (409).
+    - Adding a key the summary already has is a no-op.
+    - Keys must be a single word of at most 100 characters and pass the secret detectors.
+    - `POST`/`DELETE /v1/ticket-links` carry the session and ticket in the body, so the logged path never contains them.
+    - Ticket queries (`list`) include manual links.
+    - Command: `digest link` and `digest unlink`.
+  - **Sprints:**
+    - Named `[from, to)` ranges per repo, kept with `digest-server sprint` (an admin command, like `token`).
+    - Dates are UTC days or ISO date-times.
+    - Saving with an existing name replaces that sprint. Overlapping sprints are refused, so every date falls in at most one.
+  - **Tracker tickets:** title and sprint name per key, replaced on each refresh (D47).
+  - **Postgres:** migration 2 adds `ticket_links` (with a foreign key to `summaries`), `sprints` and `tracker_tickets`. The same `TicketStore` contract runs on the in-memory store, on PGlite and on the opt-in real Postgres.
+- **Alternatives:**
+  - Bake sprint or title into the summary at push time; it goes stale.
+  - Allow overlapping sprints and pick one.
+  - Put the ticket in the URL path; it would land in the logs.
+- **Why:**
+  - Pushed summaries stay what the developer approved.
+  - Sprint membership and titles change after the fact.
+- **Not yet:**
+  - The overlap check isn't atomic under concurrent admin commands.
+  - Manual-link history isn't kept (Phase 10's audit log).
+
+## D46. Grouping: tracker sprint first, then the sprint containing the session's start
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Sprint of a link:**
+    - If the tracker knows the ticket, use the tracker's sprint. Its "no sprint" means No sprint.
+    - Otherwise, use the dated sprint containing the session's start. A session crossing a boundary lands in exactly one sprint.
+    - An unlinked summary goes by its start date.
+  - **Summaries with several tickets** appear under each ticket, possibly in different sprints. Each entry carries its `TicketLink`: source, plus author and time for manual links.
+  - **Summaries pushed before Phase 6** have no sources:
+    - A key found in the branch name counts as `branch`; any other counts as `manual`.
+    - Keys added during review are attributed to the pusher at the approval time.
+  - **`GET /v1/tickets`** takes either `from` and `to`, or `sprint`.
+    - A range selects summaries with the usual overlap rule (D40), then groups them. So a range inside Sprint 2 can show the boundary session under Sprint 1.
+    - A sprint name returns only that sprint's group.
+  - **Order:** dated sprints by start, then tracker-only sprints by name, then No sprint. Tickets are in natural key order.
+  - **Each report** includes summary and developer counts.
+  - **`digest tickets`** prints the same view.
+- **Alternatives:**
+  - The date rule always.
+  - Assigning by end date, or by most of the session's time.
+  - Selecting a date range by start date only.
+- **Why:** chosen by the project owner. A ticket's sprint in the tracker is what a PO plans by, and dates are the fallback that works without a tracker.
+
+## D47. Issue trackers behind an interface; a fake for now
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Interface:** `Tracker.lookup(keys)` returns the tickets a tracker knows (title, current sprint name), leaving unknown keys out.
+  - **Refresh:** `refreshTracker` asks in batches of 100 about every key in the repo's summaries and manual links, and stores the answers as tracker tickets.
+  - **Phase 6** ships the interface and `FakeTracker`, so every grouping rule is tested without network calls.
+  - **Credentials** for real clients will live only in the server's environment.
+- **Alternatives:**
+  - Build the Jira and Linear clients now, against recorded responses.
+  - Look tickets up at query time instead of storing them.
+- **Why:**
+  - There is no sandbox yet, so real clients come in a later phase.
+  - The brief's placeholder for a sandbox key was left unfilled, so nothing reads one.
+  - Stored records keep reports fast and working while a tracker is down.
+- **Not yet:**
+  - Real clients.
+  - A `digest-server` command that runs `refreshTracker`.
+  - Removing tickets a tracker no longer knows.
+  - Tracker sprint dates; tracker-only sprints have none.

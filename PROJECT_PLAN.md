@@ -254,6 +254,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] Ingest Entire checkpoints from the entire/checkpoints/v1 branch.
 - [ ] Read and write Agent Trace records.
 - [ ] Add more agents (Gemini CLI, Cursor CLI).
+- [ ] Opt-in GitHub issue references (#123, fixes #45) as ticket keys (left out of Phase 6).
 
 ---
 
