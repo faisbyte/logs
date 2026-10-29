@@ -64,4 +64,5 @@ export const asLlmReply = (g: Golden): LlmSummary => ({
   risksOrFollowUps: g.risksOrFollowUps,
   aiInvolvement: g.aiInvolvement,
   reversedDecisions: [],
+  resolvedFollowUps: [],
 });
