@@ -3,7 +3,7 @@ import { chunkMessage, mergeSystemPrompt, PROMPT_VERSION, systemPrompt } from '.
 
 describe('summariser prompt', () => {
   it('is versioned', () => {
-    expect(PROMPT_VERSION).toBe('summarize-v5');
+    expect(PROMPT_VERSION).toBe('summarize-v6');
   });
 
   it('contains the Section 6.1 prompt from PROJECT_PLAN.md verbatim, with the schema filled in', () => {
@@ -30,7 +30,16 @@ describe('summariser prompt', () => {
 
   it('frames a chunk with metadata and its position', () => {
     const message = chunkMessage({ metadata: 'Agent: codex', chunk: 'USER: hi', part: 2, parts: 3, earlierDecisions: [] });
-    expect(message).toBe('Session metadata:\nAgent: codex\n\nTranscript (part 2 of 3):\nUSER: hi');
+    expect(message.startsWith('Session metadata:\nAgent: codex\n\nTranscript (part 2 of 3):\nUSER: hi\n\n')).toBe(true);
+  });
+
+  it("tells each part of a split session that work missing from its stretch isn't unfinished", () => {
+    const input = { metadata: 'm', chunk: 'c', earlierDecisions: [] };
+    const part = chunkMessage({ ...input, part: 2, parts: 3 });
+    expect(part).toContain('This part is one stretch of a longer session');
+    expect(part).toContain('never list work as missing just because it is not in this part');
+    expect(part).toContain('"outcome" here is whether the work in this part was finished');
+    expect(chunkMessage({ ...input, part: 1, parts: 1 })).not.toContain('one stretch');
   });
 
   it('lists earlier decisions with ids so a later part can reverse them', () => {
