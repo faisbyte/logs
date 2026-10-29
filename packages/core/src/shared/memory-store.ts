@@ -15,8 +15,11 @@ import {
   type UnlinkResult,
 } from './tickets.js';
 
+import { randomUUID } from 'node:crypto';
+import { checkNewDigest, defaultRepoSettings, sameReport, type DigestPatch, type DigestStore, type DigestKind, type DigestStatus, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './digests.js';
+
 /** A shared store kept in memory: for tests, and the reference implementation of the contracts. */
-export class InMemorySummaryStore implements SharedStore {
+export class InMemorySummaryStore implements SharedStore, DigestStore {
   readonly #summaries = new Map<string, StoredSummary>();
   /** token hash → identity */
   readonly #tokens = new Map<string, Identity>();
@@ -24,6 +27,9 @@ export class InMemorySummaryStore implements SharedStore {
   readonly #sprints = new Map<string, Sprint[]>();
   /** Tracker tickets by repo, then by key. */
   readonly #tracker = new Map<string, Map<string, TrackerTicket>>();
+  readonly #digests: StoredDigest[] = [];
+  readonly #spend: { repoId: string; usd: number; at: string }[] = [];
+  readonly #settings = new Map<string, RepoSettings>();
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -108,5 +114,68 @@ export class InMemorySummaryStore implements SharedStore {
 
   async trackerTickets(repoId: string): Promise<TrackerTicket[]> {
     return structuredClone([...(this.#tracker.get(repoId)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key)));
+  }
+
+  async saveDigest(digest: NewDigest): Promise<StoredDigest> {
+    checkNewDigest(digest);
+    const existing = this.#digests.find(
+      (d) => d.repoId === digest.repoId && (digest.kind === 'scheduled' ? d.kind === 'scheduled' && d.periodKey === digest.periodKey : sameReport(d, digest)),
+    );
+    if (existing) return structuredClone(existing);
+    const stored: StoredDigest = { ...structuredClone(digest), id: randomUUID(), deliveries: {}, sentAt: null };
+    this.#digests.push(stored);
+    return structuredClone(stored);
+  }
+
+  async getDigest(repoId: string, id: string): Promise<StoredDigest | null> {
+    const d = this.#digests.find((x) => x.repoId === repoId && x.id === id);
+    return d ? structuredClone(d) : null;
+  }
+
+  async findReport(repoId: string, key: ReportKey): Promise<StoredDigest | null> {
+    const d = this.#digests.find((x) => x.repoId === repoId && sameReport(x, key));
+    return d ? structuredClone(d) : null;
+  }
+
+  async scheduledDigest(repoId: string, periodKey: string): Promise<StoredDigest | null> {
+    const d = this.#digests.find((x) => x.repoId === repoId && x.kind === 'scheduled' && x.periodKey === periodKey);
+    return d ? structuredClone(d) : null;
+  }
+
+  async digests(repoId: string, filter: { kinds?: DigestKind[]; statuses?: DigestStatus[] } = {}): Promise<StoredDigest[]> {
+    return structuredClone(
+      this.#digests
+        .filter((d) => d.repoId === repoId && (!filter.kinds || filter.kinds.includes(d.kind)) && (!filter.statuses || filter.statuses.includes(d.status)))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)),
+    );
+  }
+
+  async updateDigest(repoId: string, id: string, patch: DigestPatch): Promise<void> {
+    const d = this.#digests.find((x) => x.repoId === repoId && x.id === id);
+    if (!d) return;
+    const { deliveries, ...rest } = patch;
+    Object.assign(d, rest, { deliveries: { ...d.deliveries, ...deliveries } });
+  }
+
+  async recordSpend(repoId: string, usd: number, at: string): Promise<void> {
+    this.#spend.push({ repoId, usd, at });
+  }
+
+  async spendSince(repoId: string, since: string): Promise<number> {
+    return this.#spend.filter((s) => s.repoId === repoId && Date.parse(s.at) >= Date.parse(since)).reduce((n, s) => n + s.usd, 0);
+  }
+
+  async repoSettings(repoId: string): Promise<RepoSettings> {
+    return structuredClone(this.#settings.get(repoId) ?? defaultRepoSettings(repoId));
+  }
+
+  async saveRepoSettings(repoId: string, patch: Partial<Omit<RepoSettings, 'repoId'>>): Promise<RepoSettings> {
+    const next = { ...(await this.repoSettings(repoId)), ...structuredClone(patch), repoId };
+    this.#settings.set(repoId, next);
+    return structuredClone(next);
+  }
+
+  async scheduledRepos(): Promise<string[]> {
+    return [...this.#settings.values()].filter((s) => s.schedule !== 'off').map((s) => s.repoId).sort();
   }
 }
