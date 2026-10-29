@@ -4,7 +4,7 @@ Reads the session files your AI coding agents (Claude Code, Codex CLI) already w
 It turns them into plain-language, ticket-level digests for POs, scrum masters and managers, and into a short shared context log for the team's agents.
 Developers approve every summary before it's shared, and raw transcripts stay on the machine.
 
-**Status:** Phase 3: per-session summarisation.
+**Status:** Phase 4: developer review and approval.
 
 ## Requirements
 
@@ -38,6 +38,9 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `digest list --json` | Same sessions as JSON (no transcript content beyond the title) |
 | `digest redact <sessionId>` | Redact a session and print counts per placeholder type (never the values); honours `.digest/config.json` |
 | `digest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation) |
+| `digest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
+| `digest review --list` | List every summary with its status (draft, approved, rejected, edited) |
+| `digest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |
 | `digest --version` | Print the CLI version |
 
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
