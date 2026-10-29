@@ -63,7 +63,12 @@ export function transitionCommand(action: 'approve' | 'reject' | 'reopen', id: s
 const PROMPT = '[a]pprove  [e]dit  [r]eject  [s]kip  [q]uit: ';
 
 export async function reviewCommand(options: RepoOption, ctx: CliContext): Promise<number> {
-  const fail = (message: string) => (ctx.stderr(`digest review: ${message}\n`), 1);
+  return (await reviewDrafts(options, ctx)).code;
+}
+
+/** The interactive review; `quit` is true when the developer stopped before the end (digest sync then stops too). */
+export async function reviewDrafts(options: RepoOption, ctx: CliContext): Promise<{ code: number; quit: boolean }> {
+  const fail = (message: string) => (ctx.stderr(`digest review: ${message}\n`), { code: 1, quit: false });
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
   const repoRoot = writable.root;
@@ -71,9 +76,10 @@ export async function reviewCommand(options: RepoOption, ctx: CliContext): Promi
   const { ask, editor } = ctx;
 
   const drafts = listSummaries(repoRoot).filter((s) => s.status === 'draft');
-  if (drafts.length === 0) return (ctx.stdout('No drafts to review.\n'), 0);
+  if (drafts.length === 0) return (ctx.stdout('No drafts to review.\n'), { code: 0, quit: false });
   const redact = createRedactor(readConfig(repoRoot).redaction);
   const tally = { approved: 0, rejected: 0, skipped: 0, seen: 0 };
+  let quit = false;
 
   // Writes the YAML under .digest/edit/, runs the editor on it and reads back what was saved.
   const open = async (run: (file: string) => Promise<void>, summary: SessionSummary, text: string) => {
@@ -111,6 +117,7 @@ export async function reviewCommand(options: RepoOption, ctx: CliContext): Promi
       if (answer === 'q') {
         // The draft on screen, and any after it, are left for next time.
         tally.seen--;
+        quit = true;
         break review;
       }
       if (answer !== 'e') continue;
@@ -134,5 +141,5 @@ export async function reviewCommand(options: RepoOption, ctx: CliContext): Promi
 
   const noun = tally.seen === 1 ? 'draft' : 'drafts';
   ctx.stdout(`\nReviewed ${tally.seen} ${noun}: ${tally.approved} approved, ${tally.rejected} rejected, ${tally.skipped} skipped.\n`);
-  return 0;
+  return { code: 0, quit };
 }

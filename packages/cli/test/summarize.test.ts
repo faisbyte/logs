@@ -1,38 +1,10 @@
-import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { FakeLlmClient, type LlmRequest } from '@digest/core';
+import { FakeLlmClient } from '@digest/core';
 import { describe, expect, it } from 'vitest';
-import { llmSummary } from '../../core/test/summarize/helpers.js';
+import { fixtureRepo, reply, tempDir } from './helpers.js';
 import { runCli, type CliIo } from '../src/cli.js';
-
-const FIXTURES = fileURLToPath(new URL('../../../fixtures/', import.meta.url));
-const tempDir = (prefix: string) => realpathSync(mkdtempSync(join(tmpdir(), prefix)));
-
-/** Copies every fixture session, rewriting /work/acme-webapp to a temp repo the CLI can write .digest/ into. */
-function fixtureRepo() {
-  const repo = tempDir('digest-sum-repo-');
-  execFileSync('git', ['init', '-q'], { cwd: repo });
-  const home = tempDir('digest-sum-agents-');
-  cpSync(join(FIXTURES, 'claude-code'), join(home, 'claude'), { recursive: true });
-  cpSync(join(FIXTURES, 'codex'), join(home, 'codex'), { recursive: true });
-  const rewrite = (dir: string) => {
-    for (const name of readdirSync(dir)) {
-      const path = join(dir, name);
-      if (statSync(path).isDirectory()) rewrite(path);
-      else if (name.endsWith('.jsonl')) writeFileSync(path, readFileSync(path, 'utf8').replaceAll('/work/acme-webapp', repo));
-    }
-  };
-  rewrite(home);
-  return { repo, env: { CLAUDE_CONFIG_DIR: join(home, 'claude'), CODEX_HOME: join(home, 'codex') } };
-}
-
-const reply = (request: LlmRequest) =>
-  request.system.startsWith('You are merging')
-    ? JSON.stringify({ goal: 'g', outcome: 'completed', whatWasDone: 'w', aiInvolvement: 'moderate' })
-    : JSON.stringify(llmSummary());
 
 async function run(argv: string[], env: Record<string, string>, extra: Partial<CliIo> = {}) {
   let stdout = '';

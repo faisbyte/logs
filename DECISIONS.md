@@ -423,3 +423,14 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Existing hooks:** a `pre-push` hook digest didn't write is left untouched, and the command prints the one line to add by hand. Running `init` again is a no-op. Deleting the file removes the reminder.
 - **Alternatives:** Compute and print the number of unpushed summaries in the hook, which needs node on the PATH and costs time on every push; chain onto an existing hook automatically, which edits someone else's script.
 - **Why:** The spec requires that the reminder never blocks or slows a push. A static message is the only form that guarantees it.
+
+## D42. `digest sync` composes the existing commands and checks everything first
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **Steps:** `digest sync` runs `summarize --all --estimate`, then `summarize --all`, then the interactive review, then `push`. Each step is the same code as the standalone command.
+  - **Checks first:** before anything is summarised, it checks for a valid repo, a configured shared store, a hosted `origin` remote and a terminal. Any problem that would stop it later stops it before any money is spent.
+  - **Cost:** the estimate is always printed. The usual confirmation applies before sending more than one session.
+  - **Stopping:** it stops without pushing if summarising fails or is declined, or if the developer quits the review. Skipped and rejected drafts don't stop it, since they are simply not pushed.
+- **Alternatives:** Push whatever was approved even after a quit; carry on after a failed session.
+- **Why:** The spec says quitting the review stops the sync, and a quit means "not now". Reusing the commands keeps one implementation of each rule.
