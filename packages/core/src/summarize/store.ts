@@ -8,7 +8,7 @@ import type { LlmClient } from './llm.js';
 import { PROMPT_VERSION } from './prompt.js';
 import { SessionSummarySchema, type SessionSummary } from './schema.js';
 import type { SummarizeSettings } from './settings.js';
-import { summarizeSession } from './summarize.js';
+import { summarizeSession, type SummaryTrace } from './summarize.js';
 
 // Summaries live in .digest/ (gitignored): a cache keyed by what produced them, and the latest
 // draft per session for review (DECISIONS.md D25). Nothing is uploaded.
@@ -39,9 +39,10 @@ export function writeSummary(repoRoot: string, key: string, summary: SessionSumm
   writeFileSync(join(ensureDigestDir(repoRoot, 'summaries'), `${summary.agent}-${summary.sessionId}.json`), json);
 }
 
-function logUsage(repoRoot: string, summary: SessionSummary): void {
+/** One line per generated summary in .digest/usage.jsonl: tokens and cost, plus each part's output and every retry's errors. */
+function logUsage(repoRoot: string, summary: SessionSummary, trace: SummaryTrace): void {
   const { sessionId, model, promptVersion, generatedAt, usage } = summary;
-  appendFileSync(join(ensureDigestDir(repoRoot), 'usage.jsonl'), JSON.stringify({ sessionId, model, promptVersion, generatedAt, ...usage }) + '\n');
+  appendFileSync(join(ensureDigestDir(repoRoot), 'usage.jsonl'), JSON.stringify({ sessionId, model, promptVersion, generatedAt, ...usage, ...trace }) + '\n');
 }
 
 /** Summarises a session unless an identical request was summarised before. */
@@ -61,8 +62,9 @@ export async function summarizeCached(
   const hit = readCachedSummary(repoRoot, key);
   if (hit) return { summary: hit, cached: true };
 
-  const summary = await summarizeSession(redacted, llm, { chunkTokens: settings.chunkTokens, now });
+  const trace: SummaryTrace = { parts: [], merge: null, retries: [] };
+  const summary = await summarizeSession(redacted, llm, { chunkTokens: settings.chunkTokens, now, trace });
   writeSummary(repoRoot, key, summary);
-  logUsage(repoRoot, summary);
+  logUsage(repoRoot, summary, trace);
   return { summary, cached: false };
 }
