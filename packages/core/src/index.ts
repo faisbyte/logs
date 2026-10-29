@@ -22,3 +22,16 @@ export { SummarizeError, summarizeSession } from './summarize/summarize.js';
 export { AnthropicLlmClient, MissingApiKeyError } from './summarize/anthropic-llm.js';
 export { estimateSummaryCost, type CostEstimate } from './summarize/estimate.js';
 export { prepareSessionForRepo, repoFiles } from './repo-files.js';
+export {
+  approve,
+  assertApprovedSummary,
+  isApprovedSummary,
+  reject,
+  reopen,
+  ReviewError,
+  SHARED_FIELDS,
+  uploadPayload,
+  verifyApproval,
+  type ApprovedSummary,
+  type UploadPayload,
+} from './review/approval.js';
