@@ -119,9 +119,15 @@ export async function receivePush(store: SummaryStore & TokenStore, token: strin
   return store.push(identity, payload);
 }
 
+/** What a pusher learns about one push. */
+export type PushOutcome =
+  | { status: 'created' | 'unchanged' }
+  | { status: 'conflict' | 'unauthorized' | 'forbidden'; reason: string }
+  | { status: 'rejected'; errors: string[] };
+
 /** What `digest push` talks to: the store behind its auth. The token lives inside the target, never in a summary. */
 export interface PushTarget {
-  push(repoId: string, payload: UploadPayload): Promise<ReceiveResult>;
+  push(repoId: string, payload: UploadPayload): Promise<PushOutcome>;
 }
 
 /** A PushTarget for a store in this process (tests, and local end-to-end runs). */

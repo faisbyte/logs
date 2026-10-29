@@ -51,12 +51,12 @@ describe('allow list', () => {
 
 describe('readConfig', () => {
   it('returns defaults when there is no config file', () => {
-    expect(readConfig(mkdtempSync(join(tmpdir(), 'digest-noconfig-')))).toEqual({ redaction: {}, summarize: {}, review: {} });
+    expect(readConfig(mkdtempSync(join(tmpdir(), 'digest-noconfig-')))).toEqual({ redaction: {}, summarize: {}, review: {}, share: {} });
   });
 
   it('reads allow, deny and pii settings', () => {
     const repo = repoWithConfig(JSON.stringify({ redaction: { allow: ['a'], deny: ['b'], pii: { phone: false }, home: false } }));
-    expect(readConfig(repo)).toEqual({ redaction: { allow: ['a'], deny: ['b'], pii: { phone: false }, home: false }, summarize: {}, review: {} });
+    expect(readConfig(repo)).toEqual({ redaction: { allow: ['a'], deny: ['b'], pii: { phone: false }, home: false }, summarize: {}, review: {}, share: {} });
   });
 
   it('rejects unreadable JSON and unknown redaction keys, naming the file', () => {

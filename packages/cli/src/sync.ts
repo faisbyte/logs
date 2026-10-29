@@ -2,6 +2,7 @@ import { repoIdentity } from '@digest/core';
 import type { CliContext } from './cli.js';
 import { pushCommand } from './push.js';
 import { reviewDrafts } from './review.js';
+import { resolvePushTarget } from './share.js';
 import { writableRepoRoot } from './sessions.js';
 import { summarizeCommand } from './summarize.js';
 
@@ -11,7 +12,8 @@ export async function syncCommand(options: { repo?: string }, ctx: CliContext): 
   // Everything that would stop the run later is checked before any money is spent.
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
-  if (!ctx.pushTarget) return fail('no shared store is configured yet (the storage choice is pending; see DECISIONS.md D39).');
+  const target = resolvePushTarget(ctx, writable.root);
+  if ('error' in target) return fail(target.error);
   const identity = repoIdentity(writable.root);
   if ('error' in identity) return fail(identity.error);
   if (!ctx.ask) return fail('the review step needs a terminal. Run digest summarize, digest approve and digest push instead.');
