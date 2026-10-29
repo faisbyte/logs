@@ -355,3 +355,39 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Calibration:** On the v7 real-session run, the two near-duplicate pairs (a re-knit check worded twice, and a hook-gating fix worded twice) scored 0.57 and 0.59. The closest pair of distinct items scored 0.33.
 - **Alternatives:** Ask the merge model to merge rewordings, which it already fails to do reliably; use embedding similarity, which needs a model call or a dependency for a short list.
 - **Why:** It's deterministic, testable and cheap. Keeping the longer text keeps the more specific wording.
+
+## D39. Shared store: server with Postgres, or JSON on an orphan git branch (PROPOSED, awaiting the owner's choice)
+
+- **Date:** 2026-10-29
+- **Status:** Proposed. Neither option is built yet. The storage-agnostic parts are built first (D40): the `SummaryStore` interface, an in-memory store, contract tests, and `digest push`.
+
+### Option A: a small HTTP server backed by Postgres
+
+- **Access control:** we control it. Developers get a push token per repo; stakeholders get read-only access to reports and the dashboard without any repo access. That covers Phase 10's roles (developer, stakeholder, admin) and "stakeholders never see raw content" directly.
+- **Concurrent pushes:** each push is a single transaction with a unique key on (repo, agent, session id), so pushes from several developers never conflict, and a repeat push is a no-op.
+- **Server-side checks:** the server validates every payload with the shared zod schema and runs the secret detectors before storing anything, a real second line of defence.
+- **Self-hosting:** someone has to run it. It would be one Node process plus Postgres, with Docker Compose in Phase 10 (already planned). Locally, tests can use an in-process Postgres (PGlite) so CI needs no database service.
+- **Phase 7 (digests, on-demand team report):** date-range and per-developer coverage queries are plain SQL. Scheduled sends (Slack, email) need a long-running process anyway, and the server is that process. Sent digests become a table.
+- **Phase 9 (dashboard):** served by the same server behind the same auth.
+- **Phase 10 (hardening):**
+  - **Retraction and delete-my-data:** real deletes or tombstones.
+  - **Audit log:** a table.
+  - **Rate limits and cost caps:** server middleware.
+  - **Retention:** a scheduled cleanup job.
+- **Cost:** hosting and operations, plus more code (HTTP layer, migrations, token management).
+
+### Option B: JSON files on an orphan branch (e.g. `digest/summaries`) in the project repo
+
+- **Access control:** it inherits repo access. Stakeholders could only read reports with repo access, unless a CI job republishes them elsewhere, which makes that job the real server. Tokens are just git credentials, so we can't issue per-repo tokens or hash them.
+- **Concurrent pushes:**
+  - One file per summary avoids merge conflicts. But simultaneous pushes are rejected as non-fast-forward, so the client must fetch, rebase and retry.
+  - Immutability is by convention only: anyone with write access can rewrite the branch.
+- **Server-side checks:** none on github.com, which has no custom pre-receive hooks. A CI check only runs after the content is already in the remote.
+- **Self-hosting:** nothing to run. It works offline and costs nothing, which is the strongest argument for this option.
+- **Phase 7:** the client fetches the branch and scans every JSON file. That's fine for one team. Scheduled digests need CI cron, and delivery secrets live in CI.
+- **Phase 9:** a static site built from the branch. For a private repo the site is either public or limited to repo members, which brings back the access problem.
+- **Phase 10:** retraction leaves the content in git history unless the branch is force-rewritten. That conflicts with "delete my data" and with immutability. There's no audit log of reads.
+
+### Recommendation
+
+Option A. The requirement that stakeholders read reports without repo access, plus server-side validation and Phase 10's retraction and audit log, all point to a server. Option B suits a solo developer who never shares reports outside the repo, and it could come back later as a second `SummaryStore` implementation behind the same contract tests.
