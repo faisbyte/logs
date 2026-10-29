@@ -31,6 +31,29 @@ describe('digest-server token', () => {
   });
 });
 
+describe('digest-server sprint (DECISIONS.md D45)', () => {
+  const repo = ['--repo', 'git@github.com:Acme/WebApp.git'];
+
+  it('adds, lists, replaces and removes the named date ranges of a repo', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const added = await cli(['sprint', ...data, ...repo, '--name', 'Sprint 1', '--from', '2026-03-02', '--to', '2026-03-16']);
+    expect(added).toMatchObject({ exitCode: 0, stdout: 'Saved Sprint 1 on github.com/acme/webapp: 2026-03-02 up to 2026-03-16 (not included).\n' });
+    await cli(['sprint', ...data, ...repo, '--name', 'Sprint 2', '--from', '2026-03-16', '--to', '2026-03-30T12:00:00Z']);
+    expect((await cli(['sprint', ...data, ...repo])).stdout).toBe('Sprints on github.com/acme/webapp:\n  Sprint 1  2026-03-02 up to 2026-03-16\n  Sprint 2  2026-03-16 up to 2026-03-30T12:00:00.000Z\n');
+    const overlap = await cli(['sprint', ...data, ...repo, '--name', 'Sprint 3', '--from', '2026-03-29', '--to', '2026-04-10']);
+    expect(overlap).toMatchObject({ exitCode: 1, stderr: expect.stringContaining('Sprint 3 overlaps Sprint 2') });
+    expect((await cli(['sprint', ...data, ...repo, '--remove', '--name', 'Sprint 1'])).stdout).toBe('Removed Sprint 1 from github.com/acme/webapp.\n');
+    expect((await cli(['sprint', ...data, ...repo, '--remove', '--name', 'Sprint 1'])).exitCode).toBe(1);
+  });
+
+  it('explains bad dates and missing arguments', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', 'next monday', '--to', '2026-03-16'])).stderr).toContain('--from and --to must be dates such as 2026-03-02');
+    expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', '2026-03-02'])).stderr).toContain('--name, --from and --to are needed');
+    expect((await cli(['sprint', ...data])).stderr).toContain('--repo is required');
+  });
+});
+
 describe('startServer', () => {
   it('serves the API on the given port until closed', async () => {
     const data = join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db');
