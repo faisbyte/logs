@@ -4,7 +4,7 @@ Reads the session files your AI coding agents (Claude Code, Codex CLI) already w
 It turns them into plain-language, ticket-level digests for POs, scrum masters and managers, and into a short shared context log for the team's agents.
 Developers approve every summary before it's shared, and raw transcripts stay on the machine.
 
-**Status:** Phase 4: developer review and approval.
+**Status:** Phase 5: shared store (storage choice pending; see DECISIONS.md D39).
 
 ## Requirements
 
@@ -41,6 +41,9 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `digest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
 | `digest review --list` | List every summary with its status (draft, approved, rejected, edited) |
 | `digest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |
+| `digest push` | Push approved summaries to the shared store (only the shared fields; drafts and rejected summaries stay local) |
+| `digest sync` | Summarise new sessions (cost estimate first), review the drafts, then push what you approved |
+| `digest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
 | `digest --version` | Print the CLI version |
 
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.

@@ -8,6 +8,7 @@ import { pushCommand } from './push.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
 import { summarizeCommand } from './summarize.js';
+import { syncCommand } from './sync.js';
 
 export interface CliIo {
   stdout: (text: string) => void;
@@ -106,6 +107,12 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       .option(...repoOption)
       .action((sessionId: string, options: { repo?: string }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
   }
+
+  program
+    .command('sync')
+    .description('Summarise new sessions (showing the cost first), review the drafts, then push what you approved')
+    .option(...repoOption)
+    .action((options: { repo?: string }) => guarded('sync', () => syncCommand(options, ctx)));
 
   program
     .command('init')
