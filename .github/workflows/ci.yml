@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # pnpm comes from the packageManager field in package.json.
+      - run: corepack enable && corepack install
+      - run: pnpm install --frozen-lockfile
+      # Build, then every test. Live API tests skip themselves: no DIGEST_LIVE_TESTS, DIGEST_EVAL or API key here.
+      - run: pnpm test
