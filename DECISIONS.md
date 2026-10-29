@@ -182,7 +182,7 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Date:** 2026-10-28
 - **Decision:** The default model is `claude-haiku-5-5`, run at effort `low`, with input split into chunks of about 60K tokens. All three are overridable in `.digest/config.json` → `summarize` (`model`, `effort`, `chunkTokens`). Cost estimates use a pricing table checked against Anthropic's live models and pricing pages on 2026-10-28.
 - **Alternatives:** `claude-sonnet-5-5` ($2 / $10 per MTok) by default; no chunking, relying on the 1M context window.
-- **Why:** The plan asks for a fast model for per-session summaries. Haiku 5.5 is Anthropic's fastest, cheapest current model: $0.10 / $0.50 per MTok, but $0.50 / $2.50 once a single prompt passes 100K tokens. Chunks of about 60K estimated tokens (2.5 chars per token; see the D22 correction) keep every request on the cheaper rate card and keep each summary focused. Haiku 5.5 has adaptive thinking on by default, so effort is the cost lever. It doesn't accept `temperature` or prefill, so JSON comes from structured outputs.
+- **Why:** The plan asks for a fast model for per-session summaries. Haiku 5.5 is Anthropic's fastest, cheapest current model: $0.10 / $0.50 per MTok, but $0.50 / $2.50 once a single prompt passes 100K tokens. Chunks of about 60K estimated tokens (2.5 chars per token; see the D22 correction) keep every request on the cheaper rate card and keep each summary focused. *Chunk size superseded by D31 (15K).* Haiku 5.5 has adaptive thinking on by default, so effort is the cost lever. It doesn't accept `temperature` or prefill, so JSON comes from structured outputs.
 
 ## D22. What the summariser sees: a condensed transcript, chunked by turns
 
@@ -266,3 +266,11 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** Commands that write (`summarize`, and the Phase 4 review commands) require a repo path that exists, is inside a git repo, and whose root isn't the home directory. Otherwise they stop with `skipped: … drafts need a valid repo`. `ensureDigestDir()` refuses to create a missing repo root. Read-only commands (`list`, `redact`) still accept a non-git path, but also refuse the home directory.
 - **Alternatives:** Fall back to the raw path, as before; allow the home directory with a warning.
 - **Why:** The Phase 3 run recreated a deleted project folder (`~/Documents/GitHub/pretian-takehome`), because `mkdir -p` built the missing root, and wrote `~/.digest/` because the home directory is a git repo on this machine. A home-directory "repo" holds every project, so per-repo state there is meaningless. Both stray folders were deleted at the owner's request.
+
+## D31. Default chunk size is 15K tokens (supersedes D21's 60K)
+
+- **Date:** 2026-10-29
+- **Decision:** `DEFAULT_CHUNK_TOKENS` is 15,000 estimated tokens. `.digest/config.json` → `summarize.chunkTokens` still overrides it.
+- **Evidence:** In the v2 re-run, real session `1740fae9` had two work periods of about 27.9K and 23.7K tokens. At 60K each period was one part, and the v2 goal and all six picked decisions came from the second period only, which was worse than v1. Re-run at 15K (5 parts, 6 requests), the summary covered both periods evenly. Cost went from $0.0077 to $0.0106.
+- **Alternatives:** Keep 60K and only balance the merge (the coverage half of this fix, which remains in place: D32).
+- **Why:** The recency bias seen in multi-day sessions (D28) also happens inside a single large part, and only smaller parts prevent it. The extra requests cost fractions of a cent per long session.

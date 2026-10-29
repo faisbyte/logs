@@ -10,8 +10,9 @@ export interface SummarizeSettings {
 
 // Claude Haiku 5.5: Anthropic's fast, low-cost model (checked against the live models page, 2026-10-28).
 export const DEFAULT_MODEL = 'claude-haiku-5-5';
-// Keeps every request under 100K prompt tokens, where Haiku 5.5 is billed at its cheaper rate card.
-export const DEFAULT_CHUNK_TOKENS = 60_000;
+// Small enough that no one part dominates the merged summary (DECISIONS.md D31), and far under the
+// 100K-token prompt tier where Haiku 5.5 costs more.
+export const DEFAULT_CHUNK_TOKENS = 15_000;
 
 export function summarizeSettings(config: DigestConfig): SummarizeSettings {
   return {

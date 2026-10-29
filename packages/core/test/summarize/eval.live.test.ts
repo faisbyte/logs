@@ -16,7 +16,7 @@ import { condenseSession } from '../../src/summarize/condense.js';
 import type { LlmClient } from '../../src/summarize/llm.js';
 import type { SessionSummary } from '../../src/summarize/schema.js';
 import { estimateSummaryCost } from '../../src/summarize/estimate.js';
-import { DEFAULT_MODEL, estimateCostUsd } from '../../src/summarize/settings.js';
+import { DEFAULT_CHUNK_TOKENS, DEFAULT_MODEL, estimateCostUsd } from '../../src/summarize/settings.js';
 import { summarizeSession } from '../../src/summarize/summarize.js';
 import { claude, codex } from '../fixtures.js';
 import { compareToGolden, goldens } from './compare.js';
@@ -59,8 +59,8 @@ describe.skipIf(!process.env.DIGEST_EVAL || !process.env.ANTHROPIC_API_KEY)('liv
     for (const golden of goldens()) {
       const parsed = (parseClaudeCodeFile(files[golden.fixture]!) ?? parseCodexFile(files[golden.fixture]!))!;
       const redacted = redactSession(parsed);
-      const summary = await summarizeSession(redacted, llm, { chunkTokens: 60_000 });
-      const expected = estimateSummaryCost(redacted, { model, effort: 'low', chunkTokens: 60_000 }).requests;
+      const summary = await summarizeSession(redacted, llm, { chunkTokens: DEFAULT_CHUNK_TOKENS });
+      const expected = estimateSummaryCost(redacted, { model, effort: 'low', chunkTokens: DEFAULT_CHUNK_TOKENS }).requests;
       const report = compareToGolden(summary, golden);
       const invented = await unsupportedClaims(judge, redacted, summary);
       cost += summary.usage.costUsd ?? 0;
