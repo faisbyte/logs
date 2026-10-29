@@ -7,7 +7,8 @@ import pg from 'pg';
 import { createHandler } from './http.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
 
-// digest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43).
+// digest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
+// `sprint` keeps a repo's named date ranges (D45).
 // Storage is Postgres from DATABASE_URL, or a local PGlite directory (--data) for running on one machine.
 
 export interface ServerIo {
@@ -18,6 +19,7 @@ export interface ServerIo {
 
 const USAGE = `usage: digest-server serve [--port 8787] [--data <dir>]
        digest-server token --repo <repo URL or host/path> --developer <id> --name <display name> [--data <dir>]
+       digest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
 export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
@@ -46,23 +48,84 @@ function repoIdFrom(value: string): string | null {
   return normalizeRemoteUrl(value) ?? (/^[a-z0-9.-]+\.[a-z]{2,}(\/[\w.-]+)+$/i.test(value) ? value.toLowerCase() : null);
 }
 
+interface Args {
+  data?: string;
+  port?: string;
+  repo?: string;
+  developer?: string;
+  name?: string;
+  from?: string;
+  to?: string;
+  remove?: boolean;
+}
+
+/** A date (midnight UTC) or a full ISO date-time. */
+function sprintDate(value: string): string | null {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value;
+  return /^\d{4}-\d{2}-\d{2}T/.test(date) && !Number.isNaN(Date.parse(date)) ? new Date(date).toISOString() : null;
+}
+const showDate = (iso: string) => (iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso);
+
+async function sprintCommand(store: SharedStore, repoId: string, values: Args, io: ServerIo): Promise<number> {
+  const fail = (message: string) => (io.stderr(`digest-server: ${message}\n`), 1);
+  const name = values.name;
+  if (values.remove) {
+    if (!name) return fail('--remove needs --name.');
+    if (!(await store.removeSprint(repoId, name))) return fail(`no sprint named ${name} on ${repoId}.`);
+    io.stdout(`Removed ${name} from ${repoId}.\n`);
+    return 0;
+  }
+  if (!name && !values.from && !values.to) {
+    const sprints = await store.sprints(repoId);
+    io.stdout(sprints.length ? `Sprints on ${repoId}:\n${sprints.map((s) => `  ${s.name}  ${showDate(s.from)} up to ${showDate(s.to)}\n`).join('')}` : `No sprints on ${repoId}.\n`);
+    return 0;
+  }
+  if (!name || !values.from || !values.to) return fail('--name, --from and --to are needed to save a sprint.');
+  const [from, to] = [sprintDate(values.from), sprintDate(values.to)];
+  if (!from || !to) return fail('--from and --to must be dates such as 2026-03-02, or ISO date-times; --to is not included.');
+  const result = await store.saveSprint(repoId, { name, from, to });
+  if (result.status !== 'saved') return fail(result.reason);
+  io.stdout(`Saved ${name} on ${repoId}: ${showDate(from)} up to ${showDate(to)} (not included).\n`);
+  return 0;
+}
+
 export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   const fail = (message: string) => (io.stderr(`digest-server: ${message}\n`), 1);
   const [command, ...rest] = argv;
-  let values: Record<string, string | undefined>;
+  let values: Args;
   try {
-    ({ values } = parseArgs({ args: rest, options: { data: { type: 'string' }, port: { type: 'string' }, repo: { type: 'string' }, developer: { type: 'string' }, name: { type: 'string' } } }) as { values: Record<string, string | undefined> });
+    ({ values } = parseArgs({
+      args: rest,
+      options: {
+        data: { type: 'string' },
+        port: { type: 'string' },
+        repo: { type: 'string' },
+        developer: { type: 'string' },
+        name: { type: 'string' },
+        from: { type: 'string' },
+        to: { type: 'string' },
+        remove: { type: 'boolean' },
+      },
+    }));
   } catch (err) {
     return fail(`${(err as Error).message}\n${USAGE}`);
   }
-  if (command !== 'serve' && command !== 'token') return fail(USAGE);
+  if (command !== 'serve' && command !== 'token' && command !== 'sprint') return fail(USAGE);
   const storage = { databaseUrl: io.env.DATABASE_URL, dataDir: values.data };
   if (!storage.databaseUrl && !storage.dataDir) return fail('set DATABASE_URL or pass --data <dir> for a local database.');
 
-  if (command === 'token') {
+  if (command === 'token' || command === 'sprint') {
     if (!values.repo) return fail('--repo is required.');
     const repoId = repoIdFrom(values.repo);
     if (!repoId) return fail('--repo must be a repo URL or host/path id, e.g. git@github.com:acme/webapp.git or github.com/acme/webapp.');
+    if (command === 'sprint') {
+      const { store, close } = await openStore(storage);
+      try {
+        return await sprintCommand(store, repoId, values, io);
+      } finally {
+        await close();
+      }
+    }
     if (!values.developer || !values.name) return fail('--developer and --name are required.');
     const { store, close } = await openStore(storage);
     try {
