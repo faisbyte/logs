@@ -53,17 +53,21 @@ function strings(value: unknown, path: string[] = []): { path: string; text: str
   return [];
 }
 
+/** What is wrong with one string from a client: raw transcript content or a secret. Never includes the value. */
+export function contentProblems(path: string, text: string): string[] {
+  const problems: string[] = [];
+  if (TRANSCRIPT.some((re) => re.test(text))) problems.push(`${path}: looks like raw transcript content`);
+  const secrets = (Object.keys(detect(text).counts) as PlaceholderType[]).filter((t) => !NOT_SECRETS.has(t));
+  for (const type of secrets) problems.push(`${path}: contains a secret (${type})`);
+  return problems;
+}
+
 export type PushValidation = { ok: true; payload: UploadPayload } | { ok: false; errors: string[] };
 
 /** Validates an incoming push. Errors name the field and the problem, never the matched value. */
 export function validatePush(input: unknown): PushValidation {
   const parsed = UploadPayloadSchema.safeParse(input);
   if (!parsed.success) return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(payload)'}: ${i.message}`) };
-  const errors: string[] = [];
-  for (const { path, text } of strings(parsed.data)) {
-    if (TRANSCRIPT.some((re) => re.test(text))) errors.push(`${path}: looks like raw transcript content`);
-    const secrets = (Object.keys(detect(text).counts) as PlaceholderType[]).filter((t) => !NOT_SECRETS.has(t));
-    for (const type of secrets) errors.push(`${path}: contains a secret (${type})`);
-  }
+  const errors = strings(parsed.data).flatMap(({ path, text }) => contentProblems(path, text));
   return errors.length ? { ok: false, errors } : { ok: true, payload: parsed.data };
 }

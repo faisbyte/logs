@@ -92,10 +92,11 @@ export function decidePush(
   };
 }
 
-export function matchesQuery(s: StoredSummary, q: SummaryQuery): boolean {
+/** `linked` are the ticket keys manually linked to this summary after it was pushed (DECISIONS.md D45). */
+export function matchesQuery(s: StoredSummary, q: SummaryQuery, linked: readonly string[] = []): boolean {
   if (s.repoId !== q.repoId || s.retractedAt) return false;
   if (q.branch !== undefined && s.summary.branch !== q.branch) return false;
-  if (q.ticket !== undefined && !s.summary.ticketRefs.includes(q.ticket)) return false;
+  if (q.ticket !== undefined && !s.summary.ticketRefs.includes(q.ticket) && !linked.includes(q.ticket)) return false;
   if (q.developerId !== undefined && s.developerId !== q.developerId) return false;
   if (q.from !== undefined && Date.parse(s.summary.endedAt) < Date.parse(q.from)) return false;
   if (q.to !== undefined && Date.parse(s.summary.startedAt) >= Date.parse(q.to)) return false;
