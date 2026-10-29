@@ -80,5 +80,6 @@ export {
   type UnlinkResult,
 } from './shared/tickets.js';
 export { groupByTicket, linksOf, ticketReport, type SprintGroup, type TicketGroup, type TicketReport, type TicketReportFilter } from './shared/ticket-report.js';
+export { FakeTracker, refreshTracker, type Tracker } from './shared/tracker.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
