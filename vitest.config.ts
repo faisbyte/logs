@@ -14,5 +14,9 @@ export default defineConfig({
   },
   test: {
     include: ['packages/*/test/**/*.test.ts'],
+    // PGlite boots Postgres in WebAssembly. On a 4-core CI runner, with every file running in parallel, a test
+    // that opens it can pass the 5 s default.
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
   },
 });
