@@ -4,6 +4,7 @@ import type { LlmClient } from '@digest/core';
 import { Command, CommanderError } from 'commander';
 import { listCommand } from './list.js';
 import { redactCommand } from './redact.js';
+import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
 import { summarizeCommand } from './summarize.js';
 
 export interface CliIo {
@@ -18,9 +19,13 @@ export interface CliIo {
   llm?: LlmClient;
   /** Asks a yes/no question; absent when there is no terminal to ask in. */
   confirm?: (question: string) => Promise<boolean>;
+  /** Asks a question and returns the typed answer; absent when there is no terminal. */
+  ask?: (question: string) => Promise<string>;
+  /** Opens a file in the developer's editor and resolves when it is closed; absent when there is no terminal. */
+  editor?: (file: string) => Promise<void>;
 }
 
-type Optional = 'timeZone' | 'llm' | 'confirm';
+type Optional = 'timeZone' | 'llm' | 'confirm' | 'ask' | 'editor';
 export type CliContext = Required<Omit<CliIo, Optional>> & Pick<CliIo, Optional>;
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
@@ -73,6 +78,30 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .action((sessionId: string | undefined, options: { all?: boolean; estimate?: boolean; yes?: boolean; repo?: string }) =>
       guarded('summarize', () => summarizeCommand(sessionId, options, ctx)),
     );
+
+  const repoOption = ['--repo <path>', 'repo the summaries belong to (default: the git repo containing the current directory)'] as const;
+
+  program
+    .command('review')
+    .description('Step through draft summaries: approve, edit in $EDITOR, reject or skip each one')
+    .option('--list', 'list every summary with its status instead')
+    .option(...repoOption)
+    .action((options: { list?: boolean; repo?: string }) =>
+      guarded('review', () => (options.list ? reviewListCommand(options, ctx) : reviewCommand(options, ctx))),
+    );
+
+  for (const [action, description] of [
+    ['approve', 'Approve a draft summary so it can be pushed'],
+    ['reject', 'Reject a draft summary: it is never uploaded or re-summarised automatically'],
+    ['reopen', 'Put an approved or rejected summary back to draft (only before it is pushed)'],
+  ] as const) {
+    program
+      .command(action)
+      .argument('<sessionId>', 'session id or a unique prefix of it (see digest review --list)')
+      .description(description)
+      .option(...repoOption)
+      .action((sessionId: string, options: { repo?: string }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
+  }
 
   try {
     await program.parseAsync(argv, { from: 'user' });
