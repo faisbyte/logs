@@ -67,6 +67,7 @@ Rules:
 - "goal": one sentence on what the developer set out to do across the whole session.
 - "whatWasDone": 2–5 plain sentences on what changed and why, covering every part from the earliest to the latest.
 - "decisionIds", "rejectedApproachIds", "followUpIds": choose at most 6 ids from each candidate list, keeping the most durable and important ones (what a teammate would still need to know later). Include at least one id from each part that has candidates in that list; when more than 6 parts do, at least one from each work period. When several candidates say the same thing, choose only one of them. Use only ids from the matching list.
+- "followUpIds": Leave out any follow-up that a later part's "What was done" shows was finished; each part only saw its own stretch of the session.
 - "aiInvolvement": light = Q&A/explanations, moderate = AI wrote parts, heavy = AI wrote most of the change.
 - Write about the session's work only: never mention the transcript, its parts, the metadata, summarising, or a team log.
 - Don't invent anything that isn't in the part summaries. Don't include code, secrets, or redaction placeholders.`;

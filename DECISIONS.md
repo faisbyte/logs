@@ -322,3 +322,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - **Who can edit:** only drafts. An approved or rejected summary must be reopened first, so an approval always covers exactly what was approved.
 - **Alternatives:** Structured markdown, with `## Decisions` sections and bullet lists, parsed by a custom parser. It's friendlier to write, but it needs its own grammar for nested items such as a decision's reason, and its error messages would be ours to invent.
 - **Why:** YAML maps directly onto the summary's shape, so validation is just the schema. Long text folds onto readable lines, and the `yaml` package reports syntax errors with line numbers. The one cost is a small, widely used dependency.
+
+## D36. Stale follow-ups are dropped by the merge, not by the parts
+
+- **Date:** 2026-10-29
+- **Decision:** The merge prompt tells the model to leave out any follow-up that a later part's "What was done" shows was finished. Parts get no extra instruction about other parts, apart from the decision and follow-up ids they already receive (D33).
+- **Alternatives:** A note to each part saying it is one stretch of a longer session (v6, reverted: part 1 then called its own work "existing"); leave stale follow-ups for the developer to delete during review.
+- **Why:** Only the merge sees every part's narrative, so it can tell that "ko onboarding still needs translating" from part 2 was done in part 3. This is prompt-only, so it isn't guaranteed. The review step (Phase 4) remains the backstop.

@@ -38,6 +38,10 @@ describe('summariser prompt', () => {
     expect(part).toBe('Session metadata:\nAgent: codex\n\nTranscript (part 1 of 3):\nUSER: hi');
   });
 
+  it("tells the merge to drop follow-ups that a later part's work finished", () => {
+    expect(mergeSystemPrompt()).toContain('Leave out any follow-up that a later part\'s "What was done" shows was finished; each part only saw its own stretch of the session.');
+  });
+
   it('lists earlier decisions with ids so a later part can reverse them', () => {
     const message = chunkMessage({ metadata: 'm', chunk: 'c', part: 2, parts: 2, earlierDecisions: [{ id: 'D1', decision: 'Use Redis' }] });
     expect(message).toContain('Decisions recorded in earlier parts:\nD1: Use Redis');
