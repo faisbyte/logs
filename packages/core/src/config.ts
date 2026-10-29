@@ -45,11 +45,37 @@ export const ShareConfigSchema = z
   })
   .strict();
 
+/** A short regular expression that compiles and never matches empty text (DECISIONS.md D44). */
+const TicketPatternSchema = z
+  .string()
+  .max(100, 'tickets.pattern must be at most 100 characters')
+  .superRefine((pattern, ctx) => {
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern);
+    } catch (err) {
+      ctx.addIssue({ code: 'custom', message: `tickets.pattern is not a valid regular expression: ${(err as Error).message}` });
+      return;
+    }
+    if (re.test('')) ctx.addIssue({ code: 'custom', message: 'tickets.pattern must not match empty text' });
+  });
+
+export const TicketsConfigSchema = z
+  .object({
+    /** Ticket keys in branch names (and commit messages, with `keys`). Defaults to keys like PROJ-142. */
+    pattern: TicketPatternSchema.optional(),
+    /** Project keys that count, e.g. ["PROJ"]. Setting them also turns on keys from commit messages. */
+    keys: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,29}$/, 'tickets.keys are project keys such as PROJ')).optional(),
+  })
+  .strict();
+export type TicketsConfig = z.infer<typeof TicketsConfigSchema>;
+
 export const DigestConfigSchema = z.object({
   redaction: RedactionConfigSchema.default({}),
   summarize: SummarizeConfigSchema.default({}),
   review: ReviewConfigSchema.default({}),
   share: ShareConfigSchema.default({}),
+  tickets: TicketsConfigSchema.default({}),
 });
 export type DigestConfig = z.infer<typeof DigestConfigSchema>;
 
@@ -57,7 +83,7 @@ const CONFIG_FILE = join('.digest', 'config.json');
 
 export function readConfig(repoRoot: string): DigestConfig {
   const file = join(repoRoot, CONFIG_FILE);
-  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {}, share: {} };
+  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {}, share: {}, tickets: {} };
   try {
     return DigestConfigSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
   } catch (err) {
