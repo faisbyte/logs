@@ -1,0 +1,14 @@
+#!/bin/sh
+# Blocks a commit when the build or any test fails. Installed by `pnpm install` (the prepare script).
+# Runs against the working tree, so unstaged changes count too.
+# Git exports GIT_INDEX_FILE and friends to hooks; tests that create throwaway repos must not inherit them.
+for var in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$var"; done
+log=$(mktemp)
+if pnpm test >"$log" 2>&1; then
+  rm -f "$log"
+  exit 0
+fi
+cat "$log" >&2
+rm -f "$log"
+echo "Commit blocked: the build or tests failed." >&2
+exit 1
