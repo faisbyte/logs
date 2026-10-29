@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { digestDepsFromEnv, openStore, serverCli, startServer } from '../src/cli.js';
 
-async function cli(argv: string[], env: Record<string, string | undefined> = {}) {
+async function cli(argv: string[], env: Record<string, string | undefined> = {}, fetchImpl?: typeof fetch) {
   let stdout = '';
   let stderr = '';
-  const exitCode = await serverCli(argv, { stdout: (s) => (stdout += s), stderr: (s) => (stderr += s), env });
+  const exitCode = await serverCli(argv, { stdout: (s) => (stdout += s), stderr: (s) => (stderr += s), env, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
   return { exitCode, stdout, stderr };
 }
 
@@ -62,6 +62,65 @@ describe('digest-server sprint (DECISIONS.md D45)', () => {
     expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', 'next monday', '--to', '2026-03-16'])).stderr).toContain('--from and --to must be dates such as 2026-03-02');
     expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', '2026-03-02'])).stderr).toContain('--name, --from and --to are needed');
     expect((await cli(['sprint', ...data])).stderr).toContain('--repo is required');
+  });
+});
+
+describe('digest-server repo (DECISIONS.md D54)', () => {
+  const repo = ['--repo', 'github.com/acme/webapp'];
+
+  it('shows the defaults, then changes what is asked and keeps the rest', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    expect((await cli(['repo', ...data, ...repo])).stdout).toBe(
+      'Digest settings for github.com/acme/webapp:\n  schedule: off\n  developer preview: off\n  email: none\n  slack: none\n  monthly LLM cost cap: the server default\n',
+    );
+    const set = await cli(['repo', ...data, ...repo, '--schedule', 'weekly', '--weekday', 'tue', '--since', '2026-03-01', '--preview-hours', '24', '--email', 'po@example.com,sm@example.com', '--slack-env', 'SLACK_WEBHOOK_URL', '--cap-usd', '2.5']);
+    expect(set).toMatchObject({ exitCode: 0 });
+    expect(set.stdout).toBe(
+      'Digest settings for github.com/acme/webapp:\n  schedule: weekly on Tuesday, for periods ending after 2026-03-01\n  developer preview: 24 hours before sending\n  email: po@example.com, sm@example.com\n  slack: the webhook URL in SLACK_WEBHOOK_URL\n  monthly LLM cost cap: $2.50\n',
+    );
+    expect((await cli(['repo', ...data, ...repo, '--slack-env', 'none', '--cap-usd', 'default'])).stdout).toContain('  slack: none\n  monthly LLM cost cap: the server default\n');
+    expect((await cli(['repo', ...data, ...repo, '--schedule', 'off'])).stdout).toContain('  schedule: off\n');
+  });
+
+  it('explains bad values', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    for (const [flag, value, message] of <[string, string | undefined, string][]>[
+      ['--schedule', 'daily', '--schedule must be off, weekly or sprint-end'],
+      ['--weekday', 'someday', '--weekday must be a day such as mon, or 1 to 7'],
+      ['--email', 'not-an-address', '--email must be addresses separated by commas, or none'],
+      ['--slack-env', 'https://hooks.slack.com/x', '--slack-env is the name of a server environment variable that holds the webhook URL, such as SLACK_WEBHOOK_URL'],
+      ['--cap-usd', 'lots', '--cap-usd must be a number of dollars, or default'],
+      ['--cap-usd=-1', undefined, '--cap-usd must be a number of dollars, or default'],
+      ['--preview-hours', '1000', '--preview-hours must be a whole number from 0 to 168'],
+    ]) {
+      expect((await cli(['repo', ...data, ...repo, flag!, ...(value === undefined ? [] : [value])])).stderr).toContain(message);
+    }
+  });
+});
+
+describe('digest-server digest send-due (DECISIONS.md D54)', () => {
+  it('sends what is due once, and reports it; a second run sends nothing', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const repo = ['--repo', 'github.com/acme/webapp'];
+    await cli(['sprint', ...data, ...repo, '--name', 'Sprint 1', '--from', '2026-03-02', '--to', '2026-03-16']);
+    await cli(['repo', ...data, ...repo, '--schedule', 'sprint-end', '--since', '2026-03-01', '--slack-env', 'SLACK_WEBHOOK_URL']);
+    const posts: string[] = [];
+    const fakeFetch = (async (_url: string, init: RequestInit) => (posts.push(String(init.body)), new Response('ok'))) as typeof fetch;
+    const env = { SLACK_WEBHOOK_URL: 'https://hooks.example.test/not-real' };
+    const first = await cli(['digest', 'send-due', ...data], env, fakeFetch);
+    expect(first).toMatchObject({ exitCode: 0, stdout: 'github.com/acme/webapp  sprint:Sprint 1  sent to slack\n' });
+    expect(JSON.parse(posts[0]!).text).toContain('No AI-assisted work was shared for this period.');
+    expect((await cli(['digest', 'send-due', ...data], env, fakeFetch)).stdout).toBe('github.com/acme/webapp  sprint:Sprint 1  already sent\n');
+    expect(posts).toHaveLength(1);
+  });
+
+  it('exits 1 when something due could not be sent, so cron can alert', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const repo = ['--repo', 'github.com/acme/webapp'];
+    await cli(['sprint', ...data, ...repo, '--name', 'Sprint 1', '--from', '2026-03-02', '--to', '2026-03-16']);
+    await cli(['repo', ...data, ...repo, '--schedule', 'sprint-end', '--since', '2026-03-01', '--slack-env', 'SLACK_WEBHOOK_URL']);
+    expect(await cli(['digest', 'send-due', ...data])).toMatchObject({ exitCode: 1, stdout: 'github.com/acme/webapp  sprint:Sprint 1  not sent: slack: SLACK_WEBHOOK_URL is not set on the server\n' });
+    expect((await cli(['digest', ...data])).stderr).toContain('usage: digest-server');
   });
 });
 
