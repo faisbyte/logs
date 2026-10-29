@@ -33,8 +33,8 @@ export {
   uploadPayload,
   verifyApproval,
   type ApprovedSummary,
-  type UploadPayload,
 } from './review/approval.js';
+export { UploadPayloadSchema, validatePush, type PushValidation, type UploadPayload } from './shared/payload.js';
 export { findSummary, isReviewed, listSummaries, readSummaryFile, saveOriginal, saveSummary, summaryPath } from './review/store.js';
 export { editSummary, parseEdit, toEditable, type EditResult } from './review/edit.js';
 export { formatSummary, formatTime, SHARED_HEADER, statusText } from './review/format.js';
