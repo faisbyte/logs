@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LlmSummarySchema, MergeSchema } from './schema.js';
 
 // Bump on any change to the text below, to the schema or to how parts are merged: it is part of the summary cache key.
-export const PROMPT_VERSION = 'summarize-v4';
+export const PROMPT_VERSION = 'summarize-v5';
 
 // PROJECT_PLAN.md Section 6.1, verbatim apart from {schema}.
 const SECTION_6_1 = `You are summarising one AI coding session for a team log.
