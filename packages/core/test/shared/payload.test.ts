@@ -12,6 +12,18 @@ describe('UploadPayloadSchema', () => {
   it('accepts exactly what uploadPayload() returns', () => {
     expect(UploadPayloadSchema.parse(payload())).toEqual(payload());
   });
+
+  it('carries where each ticket key came from, and only for keys in ticketRefs', () => {
+    const withSources = uploadPayload(approve(draftSummary({ ticketRefs: ['PROJ-142', 'PROJ-7'], ticketSources: { 'PROJ-142': 'branch', 'PROJ-7': 'commit' } })));
+    expect(withSources.ticketSources).toEqual({ 'PROJ-142': 'branch', 'PROJ-7': 'commit' });
+    expect(validatePush({ ...withSources, ticketSources: { 'OPS-1': 'manual' } })).toMatchObject({ ok: false, errors: [expect.stringMatching(/ticketSources: OPS-1 is not in ticketRefs/)] });
+    expect(validatePush({ ...withSources, ticketSources: { 'PROJ-7': 'api' } })).toMatchObject({ ok: false });
+  });
+
+  it('accepts a payload without ticket sources, from a client older than Phase 6', () => {
+    const { ticketSources: _, ...older } = payload();
+    expect(validatePush(older)).toMatchObject({ ok: true });
+  });
 });
 
 describe('validatePush (server side)', () => {

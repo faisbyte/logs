@@ -28,6 +28,11 @@ describe('formatSummary', () => {
     expect(text).not.toMatch(/[{}"]/);
   });
 
+  it('says where each ticket key came from, when known', () => {
+    const summary = draftSummary({ ticketRefs: ['PROJ-142', 'PROJ-7', 'OPS-3'], ticketSources: { 'PROJ-142': 'branch', 'PROJ-7': 'commit', 'OPS-3': 'manual' } });
+    expect(formatSummary(summary, UTC)).toContain('Ticket refs: PROJ-142 (branch), PROJ-7 (commit message), OPS-3 (added in review)');
+  });
+
   it('says "none" for empty lists', () => {
     expect(formatSummary(draftSummary({ decisions: [], ticketRefs: [] }), UTC)).toMatch(/Decisions: none[\s\S]*Ticket refs: none/);
   });

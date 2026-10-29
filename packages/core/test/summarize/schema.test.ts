@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseClaudeCodeFile } from '../../src/parsers/claude-code.js';
 import { redactSession } from '../../src/redact/session.js';
-import { buildSessionSummary, LlmSummarySchema, postCheck, SessionSummarySchema, ticketRefsFrom, type LlmSummary } from '../../src/summarize/schema.js';
+import { buildSessionSummary, LlmSummarySchema, postCheck, SessionSummarySchema, type LlmSummary } from '../../src/summarize/schema.js';
 import { claude, REPO } from '../fixtures.js';
 import { llmSummary } from './helpers.js';
 
@@ -36,12 +36,6 @@ describe('postCheck', () => {
   });
 });
 
-describe('ticketRefsFrom', () => {
-  it('extracts ticket keys from branch names', () => {
-    expect(ticketRefsFrom(['feature/PROJ-142-rate-limit', 'main', 'fix/ABC-7-and-ABC-8', 'feature/PROJ-142-v2'])).toEqual(['PROJ-142', 'ABC-7', 'ABC-8']);
-  });
-});
-
 describe('buildSessionSummary', () => {
   const redacted = redactSession(parseClaudeCodeFile(claude.basic)!, { home: false });
   const meta = { model: 'claude-haiku-5-5', promptVersion: 'summarize-v1', generatedAt: '2026-10-28T10:00:00.000Z', usage: { inputTokens: 900, outputTokens: 300, requests: 1, costUsd: 0.00024 } };
@@ -65,6 +59,15 @@ describe('buildSessionSummary', () => {
       promptVersion: 'summarize-v1',
     });
     expect(redacted.session.cwd).toBe(REPO);
+  });
+
+  it('records where each ticket key came from', () => {
+    expect(buildSessionSummary(llmSummary(), redacted, meta).ticketSources).toEqual({ 'PROJ-142': 'branch' });
+  });
+
+  it('reads summaries written before ticket sources existed', () => {
+    const { ticketSources: _, ...legacy } = buildSessionSummary(llmSummary(), redacted, meta);
+    expect(SessionSummarySchema.parse(legacy).ticketSources).toEqual({});
   });
 
   it('ignores anything else the model object carries', () => {

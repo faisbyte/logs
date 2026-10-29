@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createRedactor } from '../redact/text.js';
 import type { PlaceholderType } from '../redact/types.js';
-import { LlmSummarySchema } from '../summarize/schema.js';
+import { LlmSummarySchema, TicketSourceSchema } from '../summarize/schema.js';
 import { AgentSchema } from '../schema.js';
 
 // What a push carries (DECISIONS.md D34, D40): exactly uploadPayload()'s output. The receiving side validates
@@ -11,7 +11,8 @@ const text = (max: number) => z.string().min(1).max(max);
 const reason = z.string().max(1_000);
 const list = <T extends z.ZodType>(item: T, max = 50) => z.array(item).max(max);
 
-export const UploadPayloadSchema = z.strictObject({
+export const UploadPayloadSchema = z
+  .strictObject({
   sessionId: text(200),
   agent: AgentSchema,
   editedByDeveloper: z.boolean(),
@@ -26,10 +27,17 @@ export const UploadPayloadSchema = z.strictObject({
   aiInvolvement: LlmSummarySchema.shape.aiInvolvement,
   filesTouched: list(text(500), 1_000),
   ticketRefs: list(text(100)),
+  /** Optional so pushes from clients older than Phase 6 still validate. */
+  ticketSources: z.record(text(100), TicketSourceSchema).default({}),
   branch: text(500).nullable(),
   startedAt: z.iso.datetime(),
   endedAt: z.iso.datetime(),
-});
+})
+  .superRefine((p, ctx) => {
+    for (const key of Object.keys(p.ticketSources)) {
+      if (!p.ticketRefs.includes(key)) ctx.addIssue({ code: 'custom', path: ['ticketSources'], message: `${key} is not in ticketRefs` });
+    }
+  });
 export type UploadPayload = z.infer<typeof UploadPayloadSchema>;
 
 // Markers of session content rather than a summary: condensed-transcript lines and raw JSONL events.
