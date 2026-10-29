@@ -18,7 +18,7 @@ export interface ServerIo {
 }
 
 const USAGE = `usage: digest-server serve [--port 8787] [--data <dir>]
-       digest-server token --repo <repo URL or host/path> --developer <id> --name <display name> [--data <dir>]
+       digest-server token --repo <repo URL or host/path> (--developer <id> | --reader <id>) --name <display name> [--data <dir>]
        digest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
@@ -53,6 +53,7 @@ interface Args {
   port?: string;
   repo?: string;
   developer?: string;
+  reader?: string;
   name?: string;
   from?: string;
   to?: string;
@@ -101,6 +102,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         port: { type: 'string' },
         repo: { type: 'string' },
         developer: { type: 'string' },
+        reader: { type: 'string' },
         name: { type: 'string' },
         from: { type: 'string' },
         to: { type: 'string' },
@@ -126,11 +128,17 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         await close();
       }
     }
-    if (!values.developer || !values.name) return fail('--developer and --name are required.');
+    const person = values.developer ?? values.reader;
+    if (!person || !values.name || (values.developer && values.reader)) return fail('--developer (or --reader) and --name are required.');
     const { store, close } = await openStore(storage);
     try {
-      const { token } = await store.issueToken({ repoId, developerId: values.developer, developerName: values.name });
-      io.stdout(`Token for ${values.name} (${values.developer}) on ${repoId}. It is shown only this once:\n${token}\nIssuing another token for this developer and repo revokes this one.\n`);
+      if (values.reader) {
+        const { token } = await store.issueToken({ repoId, developerId: values.reader, developerName: values.name }, 'reader');
+        io.stdout(`Read-only token for ${values.name} (${values.reader}) on ${repoId}: digests and reports only. It is shown only this once:\n${token}\nIssuing another reader token for this person and repo revokes this one.\n`);
+      } else {
+        const { token } = await store.issueToken({ repoId, developerId: person, developerName: values.name });
+        io.stdout(`Token for ${values.name} (${person}) on ${repoId}. It is shown only this once:\n${token}\nIssuing another token for this developer and repo revokes this one.\n`);
+      }
     } finally {
       await close();
     }

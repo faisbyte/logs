@@ -1,5 +1,5 @@
 import type { UploadPayload } from './payload.js';
-import { receivePush, type PushIdentity } from './store.js';
+import { READER_REFUSAL, receivePush, type PushIdentity } from './store.js';
 import { ticketReport, type TicketReport, type TicketReportFilter } from './ticket-report.js';
 import type { LinkResult, SharedStore, SummaryRef, UnlinkResult } from './tickets.js';
 
@@ -31,6 +31,7 @@ export function localPushTarget(store: SharedStore, token: string): PushTarget {
     const identity = await store.authenticate(token);
     if (!identity) return { status: 'unauthorized', reason: 'unknown or revoked token' };
     if (identity.repoId !== repoId) return { status: 'forbidden', reason: 'this token is for a different repo' };
+    if (identity.role !== 'developer') return { status: 'forbidden', reason: READER_REFUSAL };
     return identity;
   };
   const refused = (x: PushIdentity | Refused): x is Refused => 'status' in x;

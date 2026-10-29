@@ -10,8 +10,10 @@ import {
   UploadPayloadSchema,
   type LinkResult,
   type ManualTicketLink,
+  type Identity,
   type PushIdentity,
   type PushResult,
+  type Role,
   type SharedStore,
   type Sprint,
   type SprintResult,
@@ -92,6 +94,12 @@ const MIGRATIONS: string[][] = [
     'create extension if not exists btree_gist',
     `alter table sprints add constraint sprints_no_overlap
       exclude using gist (repo_id with =, name with <>, tstzrange(starts_at, ends_at) with &&)`,
+  ],
+  [
+    // Read-only tokens for stakeholders (DECISIONS.md D51): one token per person, role and repo.
+    "alter table tokens add column role text not null default 'developer' check (role in ('developer', 'reader'))",
+    'alter table tokens drop constraint tokens_repo_id_developer_id_key',
+    'alter table tokens add constraint tokens_repo_role_person unique (repo_id, role, developer_id)',
   ],
 ];
 
@@ -193,24 +201,24 @@ export class PostgresSummaryStore implements SharedStore {
     return teamReportFrom(query, await this.list(query));
   }
 
-  async issueToken(identity: PushIdentity): Promise<{ token: string }> {
+  async issueToken(identity: PushIdentity, role: Role = 'developer'): Promise<{ token: string }> {
     const token = newToken();
     await this.#sql.query(
-      `insert into tokens (token_hash, repo_id, developer_id, developer_name) values ($1, $2, $3, $4)
-       on conflict (repo_id, developer_id) do update set token_hash = excluded.token_hash, developer_name = excluded.developer_name, issued_at = now()`,
-      [hashToken(token), identity.repoId, identity.developerId, identity.developerName],
+      `insert into tokens (token_hash, repo_id, developer_id, developer_name, role) values ($1, $2, $3, $4, $5)
+       on conflict (repo_id, role, developer_id) do update set token_hash = excluded.token_hash, developer_name = excluded.developer_name, issued_at = now()`,
+      [hashToken(token), identity.repoId, identity.developerId, identity.developerName, role],
     );
     return { token };
   }
 
-  async authenticate(token: string): Promise<PushIdentity | null> {
+  async authenticate(token: string): Promise<Identity | null> {
     if (!token) return null;
-    const { rows } = await this.#sql.query<{ repo_id: string; developer_id: string; developer_name: string }>(
-      'select repo_id, developer_id, developer_name from tokens where token_hash = $1',
+    const { rows } = await this.#sql.query<{ repo_id: string; developer_id: string; developer_name: string; role: Role }>(
+      'select repo_id, developer_id, developer_name, role from tokens where token_hash = $1',
       [hashToken(token)],
     );
     const r = rows[0];
-    return r ? { repoId: r.repo_id, developerId: r.developer_id, developerName: r.developer_name } : null;
+    return r ? { repoId: r.repo_id, developerId: r.developer_id, developerName: r.developer_name, role: r.role } : null;
   }
 
   async #linked(repoId: string, ref: SummaryRef, ticketKey: string): Promise<boolean> {

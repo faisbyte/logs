@@ -1,4 +1,4 @@
-import { bySessionStart, decidePush, hashToken, matchesQuery, newToken, summaryKey, teamReportFrom, type PushIdentity, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
+import { bySessionStart, decidePush, hashToken, matchesQuery, newToken, summaryKey, teamReportFrom, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
 import {
   byFrom,
   byLinkTime,
@@ -19,7 +19,7 @@ import {
 export class InMemorySummaryStore implements SharedStore {
   readonly #summaries = new Map<string, StoredSummary>();
   /** token hash → identity */
-  readonly #tokens = new Map<string, PushIdentity>();
+  readonly #tokens = new Map<string, Identity>();
   readonly #links: ManualTicketLink[] = [];
   readonly #sprints = new Map<string, Sprint[]>();
   /** Tracker tickets by repo, then by key. */
@@ -46,14 +46,14 @@ export class InMemorySummaryStore implements SharedStore {
     return teamReportFrom(query, await this.list(query));
   }
 
-  async issueToken(identity: PushIdentity): Promise<{ token: string }> {
-    for (const [hash, held] of this.#tokens) if (held.repoId === identity.repoId && held.developerId === identity.developerId) this.#tokens.delete(hash);
+  async issueToken(identity: PushIdentity, role: Role = 'developer'): Promise<{ token: string }> {
+    for (const [hash, held] of this.#tokens) if (held.repoId === identity.repoId && held.developerId === identity.developerId && held.role === role) this.#tokens.delete(hash);
     const token = newToken();
-    this.#tokens.set(hashToken(token), { ...identity });
+    this.#tokens.set(hashToken(token), { repoId: identity.repoId, developerId: identity.developerId, developerName: identity.developerName, role });
     return { token };
   }
 
-  async authenticate(token: string): Promise<PushIdentity | null> {
+  async authenticate(token: string): Promise<Identity | null> {
     const identity = token ? this.#tokens.get(hashToken(token)) : undefined;
     return identity ? { ...identity } : null;
   }

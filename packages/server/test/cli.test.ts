@@ -19,12 +19,23 @@ describe('digest-server token', () => {
     expect(stdout).toContain('Token for Alice (alice) on github.com/acme/webapp. It is shown only this once:');
     const token = /^(dgt_\S+)$/m.exec(stdout)![1]!;
     const { store, close } = await openStore({ dataDir: data });
-    expect(await store.authenticate(token)).toEqual({ repoId: 'github.com/acme/webapp', developerId: 'alice', developerName: 'Alice' });
+    expect(await store.authenticate(token)).toEqual({ repoId: 'github.com/acme/webapp', developerId: 'alice', developerName: 'Alice', role: 'developer' });
+    await close();
+  });
+
+  it('issues a read-only token for a stakeholder with --reader', async () => {
+    const data = join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db');
+    const { exitCode, stdout } = await cli(['token', '--data', data, '--repo', 'github.com/acme/webapp', '--reader', 'pat', '--name', 'Pat (PO)']);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Read-only token for Pat (PO) (pat) on github.com/acme/webapp: digests and reports only. It is shown only this once:');
+    const token = /^(dgt_\S+)$/m.exec(stdout)![1]!;
+    const { store, close } = await openStore({ dataDir: data });
+    expect(await store.authenticate(token)).toMatchObject({ developerId: 'pat', role: 'reader' });
     await close();
   });
 
   it('explains missing arguments and missing storage', async () => {
-    expect((await cli(['token', '--data', '/tmp/x', '--repo', 'github.com/acme/webapp'])).stderr).toContain('--developer and --name are required');
+    expect((await cli(['token', '--data', '/tmp/x', '--repo', 'github.com/acme/webapp'])).stderr).toContain('--developer (or --reader) and --name are required');
     expect((await cli(['token', '--repo', 'a/b', '--developer', 'a', '--name', 'A'])).stderr).toContain('set DATABASE_URL or pass --data');
     expect((await cli(['token', '--data', '/tmp/x', '--repo', 'not a repo', '--developer', 'a', '--name', 'A'])).stderr).toContain('--repo must be a repo URL or host/path id');
     expect((await cli(['frobnicate'])).stderr).toContain('usage: digest-server');

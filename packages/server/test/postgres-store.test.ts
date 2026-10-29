@@ -22,6 +22,6 @@ describe('migrations', () => {
     await ready;
     await migrate(db);
     const { rows } = await db.query<{ version: number }>('select version from schema_migrations order by version');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4]);
   });
 });
