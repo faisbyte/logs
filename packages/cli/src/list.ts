@@ -2,6 +2,7 @@ import { relative } from 'node:path';
 import {
   commitsDuring,
   fingerprintFile,
+  formatTime,
   isEmptySession,
   isInRepo,
   readState,
@@ -14,15 +15,6 @@ import type { CliContext } from './cli.js';
 import { repoSessions, resolveRepoRoot, shortIdLength } from './sessions.js';
 
 type ListedSession = ParsedSession & { status: SessionStatus };
-
-function formatStarted(iso: string, timeZone: string | undefined): string {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-      .formatToParts(new Date(iso))
-      .map((p) => [p.type, p.value]),
-  );
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
-}
 
 function formatDuration(startedAt: string, endedAt: string): string {
   const minutes = Math.floor((Date.parse(endedAt) - Date.parse(startedAt)) / 60_000);
@@ -41,7 +33,7 @@ function table(sessions: ListedSession[], timeZone: string | undefined): string 
   const idLength = shortIdLength(sessions.map((s) => s.sourceSessionId));
   const header = ['STARTED', 'AGENT', 'SESSION', 'DURATION', 'TURNS', 'TOOLS', 'FILES', 'COMMITS', 'STATUS', 'BRANCH', 'TITLE'];
   const rows = sessions.map((s) => [
-    formatStarted(s.startedAt, timeZone),
+    formatTime(s.startedAt, timeZone),
     s.agent,
     s.sourceSessionId.slice(0, idLength),
     formatDuration(s.startedAt, s.endedAt),
