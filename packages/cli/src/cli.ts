@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { LlmClient, PushTarget } from '@digest/core';
 import { Command, CommanderError } from 'commander';
+import { initCommand } from './init.js';
 import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
 import { redactCommand } from './redact.js';
@@ -105,6 +106,12 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       .option(...repoOption)
       .action((sessionId: string, options: { repo?: string }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
   }
+
+  program
+    .command('init')
+    .description('Install an optional pre-push reminder to run digest sync (it only prints; it never blocks a push)')
+    .option(...repoOption)
+    .action((options: { repo?: string }) => guarded('init', () => initCommand(options, ctx)));
 
   program
     .command('push')
