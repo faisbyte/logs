@@ -13,11 +13,11 @@ function repoWithConfig(contents: object) {
 }
 
 describe('summarize settings', () => {
-  it('defaults to the fast, cheap Haiku model at low effort with chunks under the long-prompt price tier', () => {
+  it('defaults to the fast, cheap Haiku model at low effort, in chunks small enough that no part dominates the summary', () => {
     expect(summarizeSettings(readConfig(mkdtempSync(join(tmpdir(), 'digest-nocfg-'))))).toEqual({
       model: 'claude-haiku-5-5',
       effort: 'low',
-      chunkTokens: 60_000,
+      chunkTokens: 15_000,
     });
   });
 
