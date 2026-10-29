@@ -1,5 +1,6 @@
 import type { z } from 'zod';
-import { assertRedactedSession, type RedactedSession } from '../redact/session.js';
+import { assertLlmSource, type DigestInput } from '../digest/input.js';
+import type { RedactedSession } from '../redact/session.js';
 
 export interface LlmMessage {
   role: 'user' | 'assistant';
@@ -7,8 +8,8 @@ export interface LlmMessage {
 }
 
 export interface LlmRequest {
-  /** Provenance: every client hard-checks that this is a real redactSession() result (DECISIONS.md D16, D23). */
-  readonly source: RedactedSession;
+  /** Provenance: every client hard-checks that this is a real redactSession() or digestInput() result (DECISIONS.md D16, D23, D49). */
+  readonly source: RedactedSession | DigestInput;
   readonly system: string;
   readonly messages: readonly LlmMessage[];
   /** Structured-output schema for the reply. */
@@ -32,7 +33,7 @@ export interface LlmClient {
   complete(request: LlmRequest): Promise<LlmResponse>;
 }
 
-/** First line of every LlmClient.complete(): throws unless the request comes from a RedactedSession. */
+/** First line of every LlmClient.complete(): throws unless the request comes from a RedactedSession or a DigestInput. */
 export function guardRequest(request: LlmRequest): void {
-  assertRedactedSession(request.source);
+  assertLlmSource(request.source);
 }
