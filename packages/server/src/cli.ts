@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { parseArgs } from 'node:util';
 import { PGlite } from '@electric-sql/pglite';
-import { normalizeRemoteUrl, type SummaryStore, type TokenStore } from '@digest/core';
+import { normalizeRemoteUrl, type SharedStore } from '@digest/core';
 import pg from 'pg';
 import { createHandler } from './http.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
@@ -20,7 +20,7 @@ const USAGE = `usage: digest-server serve [--port 8787] [--data <dir>]
        digest-server token --repo <repo URL or host/path> --developer <id> --name <display name> [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
-export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SummaryStore & TokenStore; close: () => Promise<void> }> {
+export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
   if (databaseUrl) {
     // Migrations need one connection; the pool serves requests.
     const client = new pg.Client({ connectionString: databaseUrl });
@@ -35,7 +35,7 @@ export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string
   return { store: new PostgresSummaryStore(db), close: () => db.close() };
 }
 
-export async function startServer({ store, port, host = '127.0.0.1', log }: { store: SummaryStore & TokenStore; port: number; host?: string; log?: (line: string) => void }) {
+export async function startServer({ store, port, host = '127.0.0.1', log }: { store: SharedStore; port: number; host?: string; log?: (line: string) => void }) {
   const server = createServer(createHandler(store, log ? { log } : {}));
   await new Promise<void>((listening) => server.listen(port, host, listening));
   const address = server.address() as AddressInfo;
