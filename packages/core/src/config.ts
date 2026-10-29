@@ -31,9 +31,17 @@ export const SummarizeConfigSchema = z
   })
   .strict();
 
+export const ReviewConfigSchema = z
+  .object({
+    /** Approve new summaries automatically, marked approvedBy "auto"; for solo or trusted setups. Off by default. */
+    autoApprove: z.boolean().optional(),
+  })
+  .strict();
+
 export const DigestConfigSchema = z.object({
   redaction: RedactionConfigSchema.default({}),
   summarize: SummarizeConfigSchema.default({}),
+  review: ReviewConfigSchema.default({}),
 });
 export type DigestConfig = z.infer<typeof DigestConfigSchema>;
 
@@ -41,7 +49,7 @@ const CONFIG_FILE = join('.digest', 'config.json');
 
 export function readConfig(repoRoot: string): DigestConfig {
   const file = join(repoRoot, CONFIG_FILE);
-  if (!existsSync(file)) return { redaction: {}, summarize: {} };
+  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {} };
   try {
     return DigestConfigSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
   } catch (err) {

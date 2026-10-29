@@ -183,4 +183,59 @@ describe('digest summarize', () => {
     await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
     expect(llm.requests[0]!.messages[0]!.content).not.toContain('login');
   });
+
+  describe('with reviewed summaries', () => {
+    const draftFile = (repo: string) => join(repo, '.digest/summaries/claude-code-c1a5e001-0000-4000-8000-000000000001.json');
+    const summarised = async (repo: string, env: Record<string, string>) => {
+      await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+    };
+
+    it.each([
+      ['approved', 'approve'],
+      ['edited', 'edit'],
+    ])('never re-summarises a summary the developer has %s, even by id', async (label, action) => {
+      const { repo, env } = fixtureRepo();
+      await summarised(repo, env);
+      if (action === 'approve') await run(['approve', 'c1a5e001', '--repo', repo], env);
+      else writeFileSync(draftFile(repo), JSON.stringify({ ...JSON.parse(readFileSync(draftFile(repo), 'utf8')), editedByDeveloper: true, goal: 'Edited.' }));
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ summarize: { chunkTokens: 20_000 } })); // a cache miss
+      const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
+      const byId = await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
+      expect(byId.stdout).toMatch(new RegExp(`^c1a5e001 +kept: ${label} summaries are never re-summarised$`, 'm'));
+      const all = await run(['summarize', '--all', '--yes', '--repo', repo], env, { llm });
+      expect(all.stdout).toMatch(/^c1a5e001 +kept/m);
+      expect(llm.requests.some((r) => r.messages[0]!.content.includes('Add rate limiting'))).toBe(false);
+      expect(JSON.parse(readFileSync(draftFile(repo), 'utf8')).status).toBe(action === 'approve' ? 'approved' : 'draft');
+    });
+
+    it('skips rejected summaries with --all, and re-summarises one only when asked for it by id', async () => {
+      const { repo, env } = fixtureRepo();
+      await summarised(repo, env);
+      await run(['reject', 'c1a5e001', '--repo', repo], env);
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ summarize: { chunkTokens: 20_000 } }));
+      const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
+      const all = await run(['summarize', '--all', '--yes', '--estimate', '--repo', repo], env, { llm });
+      expect(all.stdout).toMatch(/^5 sessions to summarise/m);
+      expect((await run(['summarize', '--all', '--yes', '--repo', repo], env, { llm })).stdout).toMatch(/^c1a5e001 +skipped: rejected$/m);
+      expect(JSON.parse(readFileSync(draftFile(repo), 'utf8')).status).toBe('rejected');
+      await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
+      expect(JSON.parse(readFileSync(draftFile(repo), 'utf8')).status).toBe('draft');
+    });
+
+    it('auto-approves new summaries when the config says so, marked as automatic', async () => {
+      const { repo, env } = fixtureRepo();
+      mkdirSync(join(repo, '.digest'));
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ review: { autoApprove: true } }));
+      const { stdout } = await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+      expect(stdout).toMatch(/^c1a5e001 +summarised .* approved automatically$/m);
+      expect(JSON.parse(readFileSync(draftFile(repo), 'utf8'))).toMatchObject({ status: 'approved', approvedBy: 'auto' });
+      expect((await run(['review', '--list', '--repo', repo], env)).stdout).toContain('approved automatically');
+    });
+
+    it('leaves new summaries as drafts by default', async () => {
+      const { repo, env } = fixtureRepo();
+      await summarised(repo, env);
+      expect(JSON.parse(readFileSync(draftFile(repo), 'utf8'))).toMatchObject({ status: 'draft', approvedBy: null });
+    });
+  });
 });
