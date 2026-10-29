@@ -49,3 +49,11 @@ describe('estimateCostUsd', () => {
     expect(estimateCostUsd('some-future-model', { inputTokens: 1, outputTokens: 1 })).toBeNull();
   });
 });
+
+describe('review settings', () => {
+  it('has auto-approve off by default and reads it from .digest/config.json', () => {
+    expect(readConfig(mkdtempSync(join(tmpdir(), 'digest-nocfg-'))).review).toEqual({});
+    expect(readConfig(repoWithConfig({ review: { autoApprove: true } })).review).toEqual({ autoApprove: true });
+    expect(() => readConfig(repoWithConfig({ review: { autoaprove: true } }))).toThrow(/\.digest\/config\.json/);
+  });
+});

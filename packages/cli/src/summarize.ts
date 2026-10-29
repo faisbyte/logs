@@ -1,5 +1,10 @@
 import {
   AnthropicLlmClient,
+  approve,
+  isReviewed,
+  readSummaryFile,
+  saveSummary,
+  summaryPath,
   cacheKey,
   contentHash,
   estimateSummaryCost,
@@ -18,6 +23,7 @@ import {
   writeState,
   type LlmClient,
   type ParsedSession,
+  type SessionSummary,
 } from '@digest/core';
 import type { CliContext } from './cli.js';
 import { findSession, repoSessions, shortIdLength, writableRepoRoot } from './sessions.js';
@@ -55,12 +61,23 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
   }
 
   const idLength = shortIdLength(selected.map((s) => s.sourceSessionId));
+  const shortId = (s: ParsedSession) => s.sourceSessionId.slice(0, idLength);
+  const current = (s: ParsedSession) => readSummaryFile(summaryPath(repoRoot, { agent: s.agent, sessionId: s.sourceSessionId }));
+  // Reviewed summaries are never regenerated; rejected ones only when asked for by id (DECISIONS.md D37).
+  const held = selected.flatMap((session) => {
+    const existing = current(session);
+    if (existing && isReviewed(existing)) return [{ session, note: `kept: ${existing.status === 'approved' ? 'approved' : 'edited'} summaries are never re-summarised` }];
+    if (existing?.status === 'rejected' && options.all) return [{ session, note: 'skipped: rejected' }];
+    return [];
+  });
+  selected = selected.filter((s) => !held.some((h) => h.session === s));
+
   const plan = selected.map((session) => {
     // Repo-relative files and commits come from the parsed session and git, before redaction (DECISIONS.md D29).
     const redacted = redactSession(prepareSessionForRepo(session, repoRoot), config.redaction);
     const key = cacheKey({ sessionId: session.sourceSessionId, contentHash: contentHash(redacted, settings.chunkTokens), promptVersion: PROMPT_VERSION, model: settings.model });
     const cached = readCachedSummary(repoRoot, key) !== null;
-    return { session, redacted, cached, estimate: cached ? null : estimateSummaryCost(redacted, settings), id: session.sourceSessionId.slice(0, idLength) };
+    return { session, redacted, cached, estimate: cached ? null : estimateSummaryCost(redacted, settings), id: shortId(session) };
   });
   const toSend = plan.filter((p) => !p.cached);
   const total = (field: 'inputTokens' | 'outputTokens') => toSend.reduce((n, p) => n + p.estimate![field], 0);
@@ -83,19 +100,27 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
 
   const llm: LlmClient | null = toSend.length ? (ctx.llm ?? AnthropicLlmClient.fromEnv(ctx.env, settings.model, settings.effort)) : null;
   let state = readState(repoRoot);
+  for (const h of held) ctx.stdout(`${shortId(h.session)}  ${h.note}\n`);
+  // With review.autoApprove on, a fresh draft is approved at once, marked as automatic (DECISIONS.md D37).
+  const autoApprove = (session: ParsedSession) => {
+    const draft = config.review.autoApprove ? current(session) : null;
+    if (draft?.status !== 'draft') return '';
+    saveSummary(repoRoot, approve(draft, { by: 'auto' }).summary as SessionSummary);
+    return '  approved automatically';
+  };
   const done = { inputTokens: 0, outputTokens: 0, cost: 0 as number | null, summarised: 0, failed: 0 };
 
   for (const p of plan) {
     const markDone = () => (state = markProcessed(state, sessionKey(p.session), fingerprintFile(p.session.sourcePath), new Date()));
     if (p.cached) {
-      ctx.stdout(`${p.id}  cached\n`);
+      ctx.stdout(`${p.id}  cached${autoApprove(p.session)}\n`);
       markDone();
       continue;
     }
     try {
       const { summary } = await summarizeCached(repoRoot, p.redacted, llm!, settings);
       const { inputTokens, outputTokens, costUsd } = summary.usage;
-      ctx.stdout(`${p.id}  summarised  ${tokens(inputTokens)} in / ${tokens(outputTokens)} out tokens  ${dollars(costUsd)}\n`);
+      ctx.stdout(`${p.id}  summarised  ${tokens(inputTokens)} in / ${tokens(outputTokens)} out tokens  ${dollars(costUsd)}${autoApprove(p.session)}\n`);
       done.inputTokens += inputTokens;
       done.outputTokens += outputTokens;
       done.cost = done.cost === null || costUsd === null ? null : done.cost + costUsd;

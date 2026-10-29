@@ -329,3 +329,21 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Decision:** The merge prompt tells the model to leave out any follow-up that a later part's "What was done" shows was finished. Parts get no extra instruction about other parts, apart from the decision and follow-up ids they already receive (D33).
 - **Alternatives:** A note to each part saying it is one stretch of a longer session (v6, reverted: part 1 then called its own work "existing"); leave stale follow-ups for the developer to delete during review.
 - **Why:** Only the merge sees every part's narrative, so it can tell that "ko onboarding still needs translating" from part 2 was done in part 3. This is prompt-only, so it isn't guaranteed. The review step (Phase 4) remains the backstop.
+
+## D37. Review commands, what re-summarising leaves alone, and auto-approve
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **Commands:**
+    - `digest review` steps through drafts only: approve, edit, reject, skip or quit. Quitting leaves the current draft for next time.
+    - `digest review --list` shows every summary with its status.
+    - `digest approve <id>`, `digest reject <id>` and `digest reopen <id>` do the same transitions without a terminal.
+    - Interactive review needs a terminal. Without one, the command points at the non-interactive commands.
+    - The editor is `$VISUAL`, then `$EDITOR`, then `vi`. The edit file's path is passed to the shell as an argument, never interpolated.
+  - **Re-summarising:**
+    - Approved summaries and developer-edited ones are never re-summarised, not even by id. They are left out of the estimate and reported as `kept`. `writeSummary` refuses to overwrite them as a second line of defence.
+    - Rejected summaries are skipped by `--all`. Naming one by id re-summarises it into a new draft, a deliberate step rather than an automatic one.
+  - **Reopen:** works for rejected summaries as well as approved ones. A reopened summary is a draft again and still needs `approve()` before it can be uploaded.
+  - **Auto-approve:** `.digest/config.json` → `review.autoApprove` (default off) approves each new draft right after `summarize`, with `approvedBy: "auto"`. The review list and display say "approved automatically".
+- **Alternatives:** Never re-summarise a rejected summary, even by id; treat an edited draft as replaceable until it is approved.
+- **Why:** The spec says rejected summaries are never re-summarised *automatically* and reviewed work is never overwritten. Asking by id is a manual choice. An edit is the developer's own work, so losing it to a prompt-version bump would be worse than keeping a stale draft.
