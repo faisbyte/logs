@@ -6,13 +6,9 @@ Developers approve every summary before it's shared, and raw transcripts stay on
 
 **Status:** Phase 5: shared store.
 
-## Requirements
-
-- Node.js 22+
-- pnpm 10 (pinned in `package.json`; `corepack install -g pnpm@10.34.9` installs it)
-- git (for repo detection and commit lookup)
-
 ## Setup
+
+Needs Node.js 22+, pnpm 10 (`corepack install -g pnpm@10.34.9`) and git.
 
 ```sh
 pnpm install
@@ -52,20 +48,15 @@ node packages/server/dist/main.js token --data ./server-data --repo git@github.c
 node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE_URL for Postgres; PORT defaults to 8787
 ```
 
-Developers set `"share": {"url": "http://localhost:8787"}` in `.digest/config.json` and put their token in `.digest/token` (or `DIGEST_TOKEN`). `--data` is a local PGlite database that one process at a time can open, so stop the server before issuing tokens.
+Developers set `"share": {"url": "http://localhost:8787"}` in `.digest/config.json` and put their token in `.digest/token` (or `DIGEST_TOKEN`).
+PGlite mode (`--data`) is single-process: stop the server before running the `token` command, then start it again.
 
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
 Summarising sends redacted, condensed session text to the Anthropic API using your own `ANTHROPIC_API_KEY`; pushing sends only approved summaries' shared fields to your digest server. Raw transcripts never leave the machine, and `.digest/` (local state) is gitignored.
-
-## Layout
-
-- `packages/core`: schemas, session parsers, repo filter, truncation, state tracker
-- `packages/cli`: the `digest` command-line tool
-- `packages/server`: the digest server (HTTP API on Postgres or PGlite)
-- `fixtures/`: synthetic session files for tests (no real content)
 
 ## More detail
 
 - [PROJECT_PLAN.md](PROJECT_PLAN.md): goals, architecture, phases
 - [DECISIONS.md](DECISIONS.md): architectural decisions and why they were made
+- [docs/development.md](docs/development.md): package layout, tests, and how to run the real-Postgres test
 - [docs/formats.md](docs/formats.md): Claude Code and Codex session file formats, as observed

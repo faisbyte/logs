@@ -1,6 +1,6 @@
 // Opt-in: the same contract against a real Postgres through node-postgres. Use a throwaway database;
 // every test truncates the summaries and tokens tables.
-//   DIGEST_TEST_DATABASE_URL=postgres://localhost/digest_test pnpm exec vitest run packages/server/test/postgres-real.test.ts
+// How to run it against a Docker postgres:16: docs/development.md.
 import pg from 'pg';
 import { afterAll, describe } from 'vitest';
 import { summaryStoreContract } from '../../core/test/shared/store-contract.js';

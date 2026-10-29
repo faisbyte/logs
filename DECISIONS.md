@@ -459,4 +459,5 @@ Option A. The requirement that stakeholders read reports without repo access, pl
     - The client maps HTTP answers back to push outcomes.
 - **Alternatives:** A web framework (Fastify or Hono) for four routes; an HTTP endpoint for issuing tokens, which adds an admin-auth surface Phase 5 doesn't need; SQLite.
 - **Why:** Postgres was chosen in D39. PGlite gives the real Postgres dialect in tests and local runs with nothing to install. Keeping token issuing off the network means no admin endpoint exists to attack.
+- **Verified (2026-10-29):** the opt-in real-Postgres test passed 14/14 contract tests against a throwaway `postgres:16` Docker container (mapped to port 5433, because 5432 was already taken). Steps are in [docs/development.md](docs/development.md).
 - **Not yet:** read-only stakeholder tokens and roles (Phase 7 and Phase 10), retraction (the `retracted_at` column is already there), TLS (put the server behind a reverse proxy), and Docker Compose (Phase 10). With PGlite, one process holds the data directory, so stop the server before issuing tokens.
