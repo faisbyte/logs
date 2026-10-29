@@ -36,3 +36,4 @@ export {
   type UploadPayload,
 } from './review/approval.js';
 export { findSummary, isReviewed, listSummaries, readSummaryFile, saveOriginal, saveSummary, summaryPath } from './review/store.js';
+export { editSummary, parseEdit, toEditable, type EditResult } from './review/edit.js';
