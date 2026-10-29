@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { RedactedSession } from '../redact/session.js';
 import { AgentSchema } from '../schema.js';
+import { extractTickets } from '../tickets/extract.js';
 
 // Strict objects: structured outputs require additionalProperties: false, and the model must not be
 // able to add fields (files, tickets, branch, timestamps come from parsed metadata).
@@ -49,8 +50,7 @@ export function postCheck(summary: object): string[] {
   return issues;
 }
 
-const TICKET = /\b[A-Z][A-Z0-9]{1,9}-\d+\b/g;
-export const ticketRefsFrom = (branches: readonly string[]) => [...new Set(branches.flatMap((b) => b.match(TICKET) ?? []))];
+export const ticketRefsFrom = (branches: readonly string[]) => extractTickets({ branches, commitMessages: [] }).ticketRefs;
 
 export const UsageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
