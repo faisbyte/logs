@@ -308,3 +308,17 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Alternatives:** A `status === 'approved'` check at upload time only, which is easy to forget and easy to forge; a separate approvals file signed with a local key, which is heavier and protects against nothing extra, because the developer owns the machine.
 - **Why:** The plan's "Done when" for Phase 4 is that nothing can be uploaded without an explicit approval. It follows the `RedactedSession` pattern (D16): the compiler blocks the accidental paths, and a runtime check blocks forced casts. The hash covers the case where a summary is changed after it was approved.
 
+## D35. Summaries are edited as YAML in $EDITOR
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **Format:** `edit` writes the editable fields as YAML under `.digest/edit/` and opens it in `$EDITOR`. A comment header names the session, what will be shared, the allowed values, and how to cancel.
+  - **Editable:** every text field, `outcome`, `aiInvolvement` and `ticketRefs`. `filesTouched` entries can be deleted but not added.
+  - **Validation:** a saved file is parsed with the `yaml` package and validated by a strict zod schema. Unknown keys, empty text and invalid values are errors.
+  - **Errors:** the file reopens with each error as a `# ERROR:` comment at the top, and old error comments are dropped.
+  - **Cancelling:** closing the editor without saving, or saving the file unchanged, changes nothing, even after errors.
+  - **Redaction:** every edited string is redacted again with the repo's redaction settings, and the command reports what was redacted.
+  - **Recording the edit:** a real change sets `editedByDeveloper: true`. The first time a summary is edited, the model's output is saved to `.digest/originals/`.
+  - **Who can edit:** only drafts. An approved or rejected summary must be reopened first, so an approval always covers exactly what was approved.
+- **Alternatives:** Structured markdown, with `## Decisions` sections and bullet lists, parsed by a custom parser. It's friendlier to write, but it needs its own grammar for nested items such as a decision's reason, and its error messages would be ours to invent.
+- **Why:** YAML maps directly onto the summary's shape, so validation is just the schema. Long text folds onto readable lines, and the `yaml` package reports syntax errors with line numbers. The one cost is a small, widely used dependency.
