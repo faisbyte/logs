@@ -294,3 +294,17 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Alternatives:** Ignore reversals that come from a different work period; ask the merge to judge which follow-ups are stale.
 - **Why:** In the v3 run, part 2 of `70aeaa9c` "reversed" part 1's light-theme decision because it didn't see the theme applied in its own part, so an adopted decision showed up as rejected. In the `eval.early` golden, the judge flagged follow-ups from early parts ("screens not yet translated") that later parts had finished. Coverage made this worse by guaranteeing every part a follow-up. A quote check is cheap and deterministic, and resolving by id mirrors the reversal mechanism that already works.
 
+## D34. Approval is a brand: ApprovedSummary, and one upload gate
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **States:** `draft → approved | rejected`. `reopen()` returns an approved or rejected summary to draft, unless it has been pushed (`pushedAt`). `approve()` and `reject()` accept drafts only.
+  - **Brand:** `ApprovedSummary` is a class with a `#brand` field, exported as a type only, so the compiler rejects raw drafts, look-alike objects and spread copies. Its summary is deep-frozen, so it can't be edited after approval, at compile time or at runtime.
+  - **Producers:**
+    - `approve()` is the only function that approves. It records `approvedAt`, `approvedBy` (`developer` or `auto`) and `approvalHash`, a sha256 of the shared fields.
+    - `verifyApproval()` re-checks an approval read back from disk. The status must be approved, every approval field must be set, and the hash must still match, so a hand-edited JSON file doesn't pass. It can't approve anything itself.
+  - **Upload gate:** Phase 5 must build its request body with `uploadPayload(approved)`, which takes only an `ApprovedSummary`, re-asserts the brand and the hash at runtime, and returns only `SHARED_FIELDS` plus session id, agent and approval details.
+  - **Shared fields:** `SHARED_FIELDS` is the single list used by both the review header and the upload payload.
+- **Alternatives:** A `status === 'approved'` check at upload time only, which is easy to forget and easy to forge; a separate approvals file signed with a local key, which is heavier and protects against nothing extra, because the developer owns the machine.
+- **Why:** The plan's "Done when" for Phase 4 is that nothing can be uploaded without an explicit approval. It follows the `RedactedSession` pattern (D16): the compiler blocks the accidental paths, and a runtime check blocks forced casts. The hash covers the case where a summary is changed after it was approved.
+

@@ -79,6 +79,11 @@ export const SessionSummarySchema = z.object({
   endedAt: z.string(),
   editedByDeveloper: z.boolean(),
   approvedAt: z.string().nullable(),
+  // Review state (DECISIONS.md D34). Defaults keep drafts written before Phase 4 readable.
+  approvedBy: z.enum(['developer', 'auto']).nullable().default(null),
+  /** sha256 of the shared fields at approval time; a later change voids the approval. */
+  approvalHash: z.string().nullable().default(null),
+  pushedAt: z.string().nullable().default(null),
   generatedAt: z.string(),
   promptVersion: z.string(),
   model: z.string(),
@@ -112,6 +117,9 @@ export function buildSessionSummary(
     endedAt: s.endedAt,
     editedByDeveloper: false,
     approvedAt: null,
+    approvedBy: null,
+    approvalHash: null,
+    pushedAt: null,
     generatedAt: meta.generatedAt,
     promptVersion: meta.promptVersion,
     model: meta.model,
