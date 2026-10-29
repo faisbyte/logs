@@ -68,5 +68,6 @@ Summarising sends redacted, condensed session text to the Anthropic API using yo
 - [PROJECT_PLAN.md](PROJECT_PLAN.md): goals, architecture, phases
 - [DECISIONS.md](DECISIONS.md): architectural decisions and why they were made
 - [docs/digests.md](docs/digests.md): the digest server's environment, scheduling with cron, and the report API
+- [docs/po-feedback-checklist.md](docs/po-feedback-checklist.md): how to test a digest with a product owner or scrum master
 - [docs/development.md](docs/development.md): package layout, tests, and how to run the real-Postgres test
 - [docs/formats.md](docs/formats.md): Claude Code and Codex session file formats, as observed
