@@ -347,3 +347,11 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
   - **Auto-approve:** `.digest/config.json` → `review.autoApprove` (default off) approves each new draft right after `summarize`, with `approvedBy: "auto"`. The review list and display say "approved automatically".
 - **Alternatives:** Never re-summarise a rejected summary, even by id; treat an edited draft as replaceable until it is approved.
 - **Why:** The spec says rejected summaries are never re-summarised *automatically* and reviewed work is never overwritten. Asking by id is a manual choice. An edit is the developer's own work, so losing it to a prompt-version bump would be worse than keeping a stale draft.
+
+## D38. Near-duplicate follow-ups are removed in code after the merge
+
+- **Date:** 2026-10-29
+- **Decision:** After the merge, follow-ups are compared using a Dice coefficient over their content words (lowercased, punctuation and filler words removed). Pairs scoring above 0.5 count as one item. Of each group, the longest text is kept, at the group's first position. This applies to sessions summarised in parts, and the prompt version is `summarize-v8`. Stale follow-ups (work that a later part finished) are left to the developer's review, with no further prompt rule.
+- **Calibration:** On the v7 real-session run, the two near-duplicate pairs (a re-knit check worded twice, and a hook-gating fix worded twice) scored 0.57 and 0.59. The closest pair of distinct items scored 0.33.
+- **Alternatives:** Ask the merge model to merge rewordings, which it already fails to do reliably; use embedding similarity, which needs a model call or a dependency for a short list.
+- **Why:** It's deterministic, testable and cheap. Keeping the longer text keeps the more specific wording.

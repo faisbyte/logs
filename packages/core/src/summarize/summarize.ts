@@ -1,6 +1,7 @@
 import { isEmptySession } from '../empty.js';
 import { assertRedactedSession, type RedactedSession } from '../redact/session.js';
 import { chunkSession, condenseSession } from './condense.js';
+import { dropNearDuplicates } from './dedupe.js';
 import type { z } from 'zod';
 import type { LlmClient, LlmMessage, LlmUsage } from './llm.js';
 import { chunkMessage, mergeMessage, mergeSystemPrompt, PROMPT_VERSION, systemPrompt } from './prompt.js';
@@ -183,8 +184,8 @@ async function mergeParts(
     outcome: parts.at(-1)!.outcome,
     decisions: coverParts(merge.decisionIds, decisions).map(({ decision, reason }) => ({ decision, reason })),
     rejectedApproaches: coverParts(merge.rejectedApproachIds, rejectedApproaches).map(({ approach, reason }) => ({ approach, reason })),
-    // Not topped up: an early part's open item is often finished by a later one.
-    risksOrFollowUps: followUps.filter((f) => merge.followUpIds.includes(f.id)).map((f) => f.text),
+    // Not topped up: an early part's open item is often finished by a later one. Rewordings collapse to one (D38).
+    risksOrFollowUps: dropNearDuplicates(followUps.filter((f) => merge.followUpIds.includes(f.id)).map((f) => f.text)),
     reversedDecisions: [],
     resolvedFollowUps: [],
   };
