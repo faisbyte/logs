@@ -356,10 +356,10 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 - **Alternatives:** Ask the merge model to merge rewordings, which it already fails to do reliably; use embedding similarity, which needs a model call or a dependency for a short list.
 - **Why:** It's deterministic, testable and cheap. Keeping the longer text keeps the more specific wording.
 
-## D39. Shared store: server with Postgres, or JSON on an orphan git branch (PROPOSED, awaiting the owner's choice)
+## D39. Shared store: server with Postgres, or JSON on an orphan git branch
 
 - **Date:** 2026-10-29
-- **Status:** Proposed. Neither option is built yet. The storage-agnostic parts are built first (D40): the `SummaryStore` interface, an in-memory store, contract tests, and `digest push`.
+- **Status:** Accepted 2026-10-29: Option A, a server with Postgres (built as D43). The storage-agnostic parts came first (D40).
 
 ### Option A: a small HTTP server backed by Postgres
 
@@ -434,3 +434,29 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Stopping:** it stops without pushing if summarising fails or is declined, or if the developer quits the review. Skipped and rejected drafts don't stop it, since they are simply not pushed.
 - **Alternatives:** Push whatever was approved even after a quit; carry on after a failed session.
 - **Why:** The spec says quitting the review stops the sync, and a quit means "not now". Reusing the commands keeps one implementation of each rule.
+
+## D43. The digest server: node:http, Postgres, PGlite for local runs and tests
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **Package:** `packages/server` uses `node:http` with no web framework.
+  - **Endpoints:**
+    - `POST /v1/summaries` takes `{repoId, payload}` and goes through `receivePush`. It answers 201 created, 200 unchanged, 409 conflict, 422 rejected, 401 or 403 for token problems, 400 for bad JSON and 413 for bodies over 256 KB.
+    - `GET /v1/summaries` filters by branch, ticket, developer and date range.
+    - `GET /v1/team-report?from&to` is the combined report across every developer.
+    - `GET /healthz`.
+  - **Auth:** every endpoint except `/healthz` needs `Authorization: Bearer <token>`, and a token can only push or read its own repo.
+  - **Logs:** one line per request with method, path and status. Never headers, query strings or bodies.
+  - **Storage:** `PostgresSummaryStore` passes the same contract tests as the in-memory store.
+    - It uses real Postgres through `pg` when `DATABASE_URL` is set, otherwise PGlite (in-process Postgres) in a `--data` directory.
+    - Tests and CI use PGlite, so they need no database service. An opt-in test runs the contract against real Postgres (`DIGEST_TEST_DATABASE_URL`).
+    - Numbered migrations run on start, one transaction each.
+    - Pushes use `insert … on conflict do nothing`, so two concurrent pushes of a session can't both win.
+  - **Tokens:** `digest-server token --repo --developer --name` issues one. It prints the token once and stores only a sha256 of it; issuing again revokes the old one. Token issuing is a server-side admin command, not an HTTP endpoint.
+  - **Client:**
+    - `share.url` in `.digest/config.json` points at the server.
+    - The token comes from `DIGEST_TOKEN` or `.digest/token`, both gitignored, and is never printed.
+    - The client maps HTTP answers back to push outcomes.
+- **Alternatives:** A web framework (Fastify or Hono) for four routes; an HTTP endpoint for issuing tokens, which adds an admin-auth surface Phase 5 doesn't need; SQLite.
+- **Why:** Postgres was chosen in D39. PGlite gives the real Postgres dialect in tests and local runs with nothing to install. Keeping token issuing off the network means no admin endpoint exists to attack.
+- **Not yet:** read-only stakeholder tokens and roles (Phase 7 and Phase 10), retraction (the `retracted_at` column is already there), TLS (put the server behind a reverse proxy), and Docker Compose (Phase 10). With PGlite, one process holds the data directory, so stop the server before issuing tokens.
