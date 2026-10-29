@@ -47,7 +47,7 @@ describe('fake-LLM pipeline against the goldens', () => {
       const content = request.messages[0]!.content;
       if (request.system.startsWith('You are merging')) return pickAll(request, { goal: reply.goal, whatWasDone: reply.whatWasDone, aiInvolvement: reply.aiInvolvement });
       if (/Transcript \(part 1 of/.test(content)) return JSON.stringify({ ...reply, decisions: [{ decision: 'Put a Redis cache in front of search', reason: 'Queries run per keystroke.' }], rejectedApproaches: [], risksOrFollowUps: [] });
-      if (content.includes('USER: No Redis')) return JSON.stringify({ ...reply, rejectedApproaches: [], reversedDecisions: [{ id: 'D1', reason: "Ops won't run another service." }] });
+      if (content.includes('USER: No Redis')) return JSON.stringify({ ...reply, rejectedApproaches: [], reversedDecisions: [{ id: 'D1', reason: "Ops won't run another service.", evidence: 'No Redis' }] });
       return JSON.stringify({ ...reply, decisions: [], rejectedApproaches: [], risksOrFollowUps: [] });
     }, 'claude-haiku-5-5');
 

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LlmSummarySchema, MergeSchema } from './schema.js';
 
 // Bump on any change to the text below, to the schema or to how parts are merged: it is part of the summary cache key.
-export const PROMPT_VERSION = 'summarize-v3';
+export const PROMPT_VERSION = 'summarize-v4';
 
 // PROJECT_PLAN.md Section 6.1, verbatim apart from {schema}.
 const SECTION_6_1 = `You are summarising one AI coding session for a team log.
@@ -27,7 +27,8 @@ const NOTES = `Notes on the input and the remaining fields:
 - "goal": one sentence on what the developer set out to do.
 - "outcome": "completed" if the goal was met, "partial" if only some of it was done or work was left unfinished, "abandoned" if the task or approach was dropped.
 - Write about the session's work only: never mention the transcript, its parts, the metadata, summarising, or a team log.
-- "reversedDecisions": long sessions arrive in parts. When decisions from earlier parts are listed with ids and this part reverses or abandons one, give its id and the reason here and leave it out of every other field. Otherwise return an empty list.`;
+- "reversedDecisions": long sessions arrive in parts, and decisions from earlier parts are listed with ids. Only list a decision here when this part of the transcript explicitly drops, replaces or undoes it; a decision this part doesn't mention or apply is not reversed. Give its id, the reason, and "evidence": a short phrase copied word for word from this part of the transcript where it is dropped. Leave a reversed decision out of every other field. Otherwise return an empty list.
+- "resolvedFollowUps": follow-ups from earlier parts are listed with ids too. List the id of each one this part completes or makes moot. Otherwise return an empty list.`;
 
 export function systemPrompt(): string {
   const schema = JSON.stringify(z.toJSONSchema(LlmSummarySchema), null, 2);
@@ -40,13 +41,20 @@ export interface ChunkMessageInput {
   part: number;
   parts: number;
   earlierDecisions: { id: string; decision: string }[];
+  earlierFollowUps?: { id: string; text: string }[];
 }
 
-export function chunkMessage({ metadata, chunk, part, parts, earlierDecisions }: ChunkMessageInput): string {
-  const message = `Session metadata:\n${metadata}\n\nTranscript (part ${part} of ${parts}):\n${chunk}`;
-  if (earlierDecisions.length === 0) return message;
-  const listed = earlierDecisions.map((d) => `${d.id}: ${d.decision}`).join('\n');
-  return `${message}\n\nDecisions recorded in earlier parts:\n${listed}\nIf this part reverses or abandons any of them, list its id in "reversedDecisions" with the reason, and leave it out of "decisions".`;
+export function chunkMessage({ metadata, chunk, part, parts, earlierDecisions, earlierFollowUps = [] }: ChunkMessageInput): string {
+  const sections = [`Session metadata:\n${metadata}\n\nTranscript (part ${part} of ${parts}):\n${chunk}`];
+  if (earlierDecisions.length) {
+    const listed = earlierDecisions.map((d) => `${d.id}: ${d.decision}`).join('\n');
+    sections.push(`Decisions recorded in earlier parts:\n${listed}\nIf this part explicitly drops, replaces or undoes any of them, list its id in "reversedDecisions" with the reason and a quote, and leave it out of "decisions".`);
+  }
+  if (earlierFollowUps.length) {
+    const listed = earlierFollowUps.map((f) => `${f.id}: ${f.text}`).join('\n');
+    sections.push(`Follow-ups recorded in earlier parts:\n${listed}\nIf this part completes or makes any of them moot, list its id in "resolvedFollowUps".`);
+  }
+  return sections.join('\n\n');
 }
 
 const MERGE = `You are merging summaries of consecutive parts of one AI coding session into one summary of the whole session.

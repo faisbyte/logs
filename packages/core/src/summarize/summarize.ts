@@ -128,6 +128,16 @@ interface Decided {
   reason: string;
 }
 
+interface FollowUp {
+  id: string;
+  part: number;
+  text: string;
+}
+
+const normalise = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').trim();
+/** A reversal counts only when its quote appears in the part that made it (DECISIONS.md D33). */
+const quotedIn = (chunk: string, evidence: string) => normalise(evidence).length >= 3 && normalise(chunk).includes(normalise(evidence));
+
 /** Distills parts into one summary (DECISIONS.md D24, D27, D32): the model picks at most 6 candidates per list by id. */
 async function mergeParts(
   llm: LlmClient,
@@ -135,6 +145,7 @@ async function mergeParts(
   parts: (LlmSummary & { period: number })[],
   decided: Decided[],
   reversed: Map<string, { reason: string; part: number }>,
+  openFollowUps: FollowUp[],
   log: CallLog,
   trace: SummaryTrace,
 ): Promise<LlmSummary> {
@@ -149,10 +160,7 @@ async function mergeParts(
     ],
     (r) => r.approach,
   ).map((r, i) => ({ id: `R${i + 1}`, period: periodOf(r.part), ...r }));
-  const followUps = unique(
-    parts.flatMap((p, i) => p.risksOrFollowUps.map((text) => ({ part: i + 1, text }))),
-    (f) => f.text,
-  ).map((f, i) => ({ id: `F${i + 1}`, period: periodOf(f.part), ...f }));
+  const followUps = openFollowUps.map((f) => ({ ...f, period: periodOf(f.part) }));
 
   const offered = (ids: string[], from: { id: string }[], field: string) => {
     const known = new Set(from.map((c) => c.id));
@@ -175,8 +183,10 @@ async function mergeParts(
     outcome: parts.at(-1)!.outcome,
     decisions: coverParts(merge.decisionIds, decisions).map(({ decision, reason }) => ({ decision, reason })),
     rejectedApproaches: coverParts(merge.rejectedApproachIds, rejectedApproaches).map(({ approach, reason }) => ({ approach, reason })),
-    risksOrFollowUps: coverParts(merge.followUpIds, followUps).map((f) => f.text),
+    // Not topped up: an early part's open item is often finished by a later one.
+    risksOrFollowUps: followUps.filter((f) => merge.followUpIds.includes(f.id)).map((f) => f.text),
     reversedDecisions: [],
+    resolvedFollowUps: [],
   };
 }
 
@@ -195,18 +205,31 @@ export async function summarizeSession(redacted: RedactedSession, llm: LlmClient
   // Parts are summarised in order; each sees earlier decisions by id and may reverse them (DECISIONS.md D24).
   const decided: Decided[] = [];
   const reversed = new Map<string, { reason: string; part: number }>();
+  const followUps: FollowUp[] = [];
+  const resolved = new Set<string>();
   const parts: (LlmSummary & { period: number })[] = [];
   for (const [i, { text: chunk, period }] of chunks.entries()) {
     const open = decided.filter((d) => !reversed.has(d.id));
-    const message = chunkMessage({ metadata, chunk, part: i + 1, parts: chunks.length, earlierDecisions: open.map(({ id, decision }) => ({ id, decision })) });
+    const pending = followUps.filter((f) => !resolved.has(f.id));
+    const message = chunkMessage({
+      metadata,
+      chunk,
+      part: i + 1,
+      parts: chunks.length,
+      earlierDecisions: open.map(({ id, decision }) => ({ id, decision })),
+      earlierFollowUps: pending.map(({ id, text }) => ({ id, text })),
+    });
     const part = await validatedCall(llm, redacted, LlmSummarySchema, system, message, { ...log, call: `part ${i + 1} of ${chunks.length}` });
     trace.parts.push({ part: i + 1, period, output: part });
-    for (const r of part.reversedDecisions) if (open.some((d) => d.id === r.id)) reversed.set(r.id, { reason: r.reason, part: i + 1 });
+    for (const r of part.reversedDecisions) if (open.some((d) => d.id === r.id) && quotedIn(chunk, r.evidence)) reversed.set(r.id, { reason: r.reason, part: i + 1 });
+    for (const id of part.resolvedFollowUps) if (pending.some((f) => f.id === id)) resolved.add(id);
+    // Exact duplicates of an open follow-up keep its first, earliest occurrence; a resolved one raised again is new.
+    for (const text of part.risksOrFollowUps) if (!followUps.some((f) => f.text === text && !resolved.has(f.id))) followUps.push({ id: `F${followUps.length + 1}`, part: i + 1, text });
     for (const d of part.decisions) decided.push({ id: `D${decided.length + 1}`, part: i + 1, ...d });
     parts.push({ ...part, period });
   }
 
-  const summary = parts.length === 1 ? parts[0]! : await mergeParts(llm, redacted, parts, decided, reversed, log, trace);
+  const summary = parts.length === 1 ? parts[0]! : await mergeParts(llm, redacted, parts, decided, reversed, followUps.filter((f) => !resolved.has(f.id)), log, trace);
 
   return buildSessionSummary(summary, redacted, {
     model: llm.model,

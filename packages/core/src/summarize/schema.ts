@@ -15,8 +15,10 @@ export const LlmSummarySchema = z.strictObject({
   rejectedApproaches: z.array(z.strictObject({ approach: text, reason: z.string() })),
   risksOrFollowUps: z.array(text),
   aiInvolvement: z.enum(['light', 'moderate', 'heavy']),
-  /** Ids of decisions from earlier parts of a long session that this part reverses. */
-  reversedDecisions: z.array(z.strictObject({ id: z.string(), reason: z.string() })),
+  /** Ids of decisions from earlier parts of a long session that this part reverses, quoting where it does. */
+  reversedDecisions: z.array(z.strictObject({ id: z.string(), reason: z.string(), evidence: z.string() })),
+  /** Ids of follow-ups from earlier parts that this part completes or makes moot. */
+  resolvedFollowUps: z.array(z.string()),
 });
 export type LlmSummary = z.infer<typeof LlmSummarySchema>;
 

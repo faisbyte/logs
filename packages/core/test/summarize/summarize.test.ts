@@ -5,7 +5,8 @@ import { redactSession, type RedactedSession } from '../../src/redact/session.js
 import { chunkTurns, condenseSession, estimateTokens } from '../../src/summarize/condense.js';
 import { FakeLlmClient } from '../../src/summarize/fake-llm.js';
 import type { LlmRequest } from '../../src/summarize/llm.js';
-import { mergeSystemPrompt, PROMPT_VERSION } from '../../src/summarize/prompt.js';
+import { mergeSystemPrompt, PROMPT_VERSION, systemPrompt } from '../../src/summarize/prompt.js';
+import type { LlmSummary } from '../../src/summarize/schema.js';
 import { coverParts, summarizeSession } from '../../src/summarize/summarize.js';
 import { claude, codex } from '../fixtures.js';
 import { llmSummary, pickAll } from './helpers.js';
@@ -114,7 +115,7 @@ describe('summarizeSession (long sessions in chunks)', () => {
         outcome: 'partial',
         whatWasDone: 'Removed the cache and wrote a trigram migration.',
         decisions: [{ decision: 'Use a Postgres trigram index', reason: 'No extra service to run.' }],
-        reversedDecisions: [{ id: 'D1', reason: "Ops won't run another service." }],
+        reversedDecisions: [{ id: 'D1', reason: "Ops won't run another service.", evidence: 'No Redis' }],
         risksOrFollowUps: ['The trigram migration is unfinished and a ranking test fails.'],
       }),
     );
@@ -152,7 +153,7 @@ describe('summarizeSession (long sessions in chunks)', () => {
 
   it('ignores reversals of ids that were never recorded', async () => {
     const llm = new FakeLlmClient((request) =>
-      request.system.startsWith('You are merging') ? pickAll(request) : json(llmSummary({ reversedDecisions: [{ id: 'D99', reason: 'x' }] })),
+      request.system.startsWith('You are merging') ? pickAll(request) : json(llmSummary({ reversedDecisions: [{ id: 'D99', reason: 'x', evidence: 'USER' }] })),
     );
     const summary = await summarizeSession(messy, llm, { ...options, chunkTokens });
     expect(summary.rejectedApproaches).toEqual([]);
@@ -283,10 +284,16 @@ describe('summarizeSession (the merge covers every part)', () => {
     const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r)));
     const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });
     expect(llm.requests.filter((r) => !isMerge(r))).toHaveLength(4);
-    for (const list of [summary.decisions.map((d) => d.decision), summary.rejectedApproaches.map((r) => r.approach), summary.risksOrFollowUps]) {
+    for (const list of [summary.decisions.map((d) => d.decision), summary.rejectedApproaches.map((r) => r.approach)]) {
       expect(fromParts(list)).toEqual([1, 2, 3, 4]);
       expect(list.length).toBeLessThanOrEqual(6);
     }
+  });
+
+  it("doesn't top up follow-ups: an early part's open item may be finished later", async () => {
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r)));
+    const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });
+    expect(fromParts(summary.risksOrFollowUps)).toEqual([2, 3, 4]);
   });
 
   it('only guarantees picks for parts that offered candidates', async () => {
@@ -328,5 +335,52 @@ describe('coverParts', () => {
 
   it('ignores repeated picks', () => {
     expect(coverParts(['D1', 'D1'], candidates.slice(0, 2)).map((c) => c.id)).toEqual(['D1', 'D2']);
+  });
+});
+
+describe('summarizeSession (reversals need evidence, follow-ups can be resolved)', () => {
+  const messy = redacted(claude.messy);
+  const chunkTokens = estimateTokens(condenseSession(messy).turns[0]!);
+  const isMerge = (r: LlmRequest) => r.system.startsWith('You are merging');
+  const partNo = (r: LlmRequest) => Number(/Transcript \(part (\d+) of/.exec(r.messages[0]!.content)![1]);
+  const firstPart = llmSummary({ decisions: [{ decision: 'Put a Redis cache in front of search', reason: 'Per-keystroke queries.' }], risksOrFollowUps: ['Write the cache invalidation tests.'] });
+
+  async function run(later: (request: LlmRequest) => Partial<LlmSummary>) {
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? pickAll(r) : json(partNo(r) === 1 ? firstPart : llmSummary({ decisions: [], risksOrFollowUps: [], ...later(r) }))));
+    return { summary: await summarizeSession(messy, llm, { ...options, chunkTokens }), llm };
+  }
+
+  it('tells parts to reverse only what their own transcript abandons, quoting it', () => {
+    expect(systemPrompt()).toContain('Only list a decision here when this part of the transcript explicitly drops, replaces or undoes it');
+    expect(systemPrompt()).toContain('"evidence"');
+  });
+
+  it("ignores a reversal whose evidence isn't in that part's transcript", async () => {
+    const { summary } = await run(() => ({ reversedDecisions: [{ id: 'D1', reason: 'Not carried into this work.', evidence: 'kept the existing cache-free design' }] }));
+    expect(summary.decisions.map((d) => d.decision)).toContain('Put a Redis cache in front of search');
+    expect(summary.rejectedApproaches).toEqual([]);
+  });
+
+  it('accepts a reversal quoted from its own part, ignoring case and spacing', async () => {
+    const { summary } = await run((r) => (r.messages[0]!.content.includes('USER: No Redis') ? { reversedDecisions: [{ id: 'D1', reason: 'Ops said no.', evidence: '  no   REDIS ' }] } : {}));
+    expect(summary.decisions.map((d) => d.decision)).not.toContain('Put a Redis cache in front of search');
+    expect(summary.rejectedApproaches.map((r) => r.approach)).toContain('Put a Redis cache in front of search');
+  });
+
+  it('lists earlier follow-ups by id to later parts', async () => {
+    const { llm } = await run(() => ({}));
+    expect(llm.requests[1]!.messages[0]!.content).toContain('Follow-ups recorded in earlier parts:\nF1: Write the cache invalidation tests.');
+    expect(systemPrompt()).toContain('"resolvedFollowUps"');
+  });
+
+  it('drops a follow-up a later part resolves, before the merge sees it', async () => {
+    const { summary, llm } = await run(() => ({ resolvedFollowUps: ['F1', 'F99'] }));
+    expect(llm.requests.at(-1)!.messages[0]!.content).not.toContain('Write the cache invalidation tests.');
+    expect(summary.risksOrFollowUps).toEqual([]);
+  });
+
+  it('keeps a resolved follow-up that a later part raises again', async () => {
+    const { summary } = await run((r) => (partNo(r) === 2 ? { resolvedFollowUps: ['F1'] } : { risksOrFollowUps: ['Write the cache invalidation tests.'] }));
+    expect(summary.risksOrFollowUps).toEqual(['Write the cache invalidation tests.']);
   });
 });

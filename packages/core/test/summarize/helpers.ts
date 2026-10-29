@@ -10,6 +10,7 @@ export const llmSummary = (overrides: Partial<LlmSummary> = {}): LlmSummary => (
   risksOrFollowUps: ['The limiter will not hold across multiple instances.'],
   aiInvolvement: 'heavy',
   reversedDecisions: [],
+  resolvedFollowUps: [],
   ...overrides,
 });
 
