@@ -70,12 +70,21 @@ export const TicketsConfigSchema = z
   .strict();
 export type TicketsConfig = z.infer<typeof TicketsConfigSchema>;
 
+export const ReportConfigSchema = z
+  .object({
+    /** The model `digest report` writes with; Sonnet 5.5 by default (DECISIONS.md D48). */
+    model: z.string().min(1).optional(),
+    effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+  })
+  .strict();
+
 export const DigestConfigSchema = z.object({
   redaction: RedactionConfigSchema.default({}),
   summarize: SummarizeConfigSchema.default({}),
   review: ReviewConfigSchema.default({}),
   share: ShareConfigSchema.default({}),
   tickets: TicketsConfigSchema.default({}),
+  report: ReportConfigSchema.default({}),
 });
 export type DigestConfig = z.infer<typeof DigestConfigSchema>;
 
@@ -83,7 +92,7 @@ const CONFIG_FILE = join('.digest', 'config.json');
 
 export function readConfig(repoRoot: string): DigestConfig {
   const file = join(repoRoot, CONFIG_FILE);
-  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {}, share: {}, tickets: {} };
+  if (!existsSync(file)) return { redaction: {}, summarize: {}, review: {}, share: {}, tickets: {}, report: {} };
   try {
     return DigestConfigSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
   } catch (err) {

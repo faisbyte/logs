@@ -1,5 +1,6 @@
 import type { UploadPayload } from './payload.js';
-import type { LinkOutcome, PushOutcome, PushTarget, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { StoredDigest } from './digests.js';
+import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, TicketsOutcome, UnlinkOutcome } from './target.js';
 import type { TicketReport } from './ticket-report.js';
 import type { SummaryRef } from './tickets.js';
 
@@ -47,6 +48,19 @@ export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof
       const no = refused(response, body);
       if (no) return no;
       throw unexpected(response, body);
+    },
+    async previews(repoId): Promise<PreviewsOutcome> {
+      const [response, body] = await call(`/v1/digests?${new URLSearchParams({ repoId })}`);
+      const no = refused(response, body);
+      if (no) return no;
+      if (response.status !== 200) throw unexpected(response, body);
+      const digests: StoredDigest[] = [];
+      for (const d of (body as unknown as { digests: StoredDigest[] }).digests.filter((x) => x.status === 'preview')) {
+        const [one, full] = await call(`/v1/digests/${encodeURIComponent(d.id)}?${new URLSearchParams({ repoId })}`);
+        if (one.status !== 200) throw unexpected(one, full);
+        digests.push((full as unknown as { digest: StoredDigest }).digest);
+      }
+      return { status: 'ok', digests };
     },
     async push(repoId: string, payload: UploadPayload): Promise<PushOutcome> {
       const [response, body] = await call('/v1/summaries', { method: 'POST', body: { repoId, payload } });

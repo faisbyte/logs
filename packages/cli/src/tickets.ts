@@ -10,7 +10,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 
 type Connection = { repoRoot: string; target: PushTarget; repoId: string; fail: (message: string) => number };
 
-function connect(command: string, repo: string | undefined, ctx: CliContext): Connection | { exit: number } {
+export function connect(command: string, repo: string | undefined, ctx: CliContext): Connection | { exit: number } {
   const fail = (message: string) => (ctx.stderr(`digest ${command}: ${message}\n`), 1);
   const root = resolveRepoRoot(repo, ctx);
   if ('error' in root) return { exit: fail(root.error) };
@@ -62,17 +62,24 @@ function formatGroup(g: SprintGroup): string[] {
 
 const isoDay = (value: string | undefined) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value && !Number.isNaN(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}T/.test(value) ? new Date(value).toISOString() : null);
 
+/** --from and --to (dates or date-times; --to is not included), or --sprint. */
+export function periodOption(options: { from?: string; to?: string; sprint?: string }): { filter: TicketReportFilter } | { error: string } {
+  if (options.sprint !== undefined && options.from === undefined && options.to === undefined) return { filter: { sprint: options.sprint } };
+  if (options.sprint === undefined && options.from !== undefined && options.to !== undefined) {
+    const [from, to] = [isoDay(options.from), isoDay(options.to)];
+    if (!from || !to) return { error: '--from and --to must be dates such as 2026-03-01, or ISO date-times; --to is not included.' };
+    return { filter: { from, to } };
+  }
+  return { error: 'pass --from and --to, or --sprint.' };
+}
+
 export async function ticketsCommand(options: { repo?: string; from?: string; to?: string; sprint?: string }, ctx: CliContext): Promise<number> {
   const c = connect('tickets', options.repo, ctx);
   if ('exit' in c) return c.exit;
   const { target, repoId, fail } = c;
-  let filter: TicketReportFilter;
-  if (options.sprint !== undefined && options.from === undefined && options.to === undefined) filter = { sprint: options.sprint };
-  else if (options.sprint === undefined && options.from !== undefined && options.to !== undefined) {
-    const [from, to] = [isoDay(options.from), isoDay(options.to)];
-    if (!from || !to) return fail('--from and --to must be dates such as 2026-03-01, or ISO date-times; --to is not included.');
-    filter = { from, to };
-  } else return fail('pass --from and --to, or --sprint.');
+  const period = periodOption(options);
+  if ('error' in period) return fail(period.error);
+  const { filter } = period;
 
   const result = await target.tickets(repoId, filter);
   if (result.status !== 'ok') return fail(`the store refused the token: ${result.reason}`);
