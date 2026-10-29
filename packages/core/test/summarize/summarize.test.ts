@@ -5,8 +5,8 @@ import { redactSession, type RedactedSession } from '../../src/redact/session.js
 import { chunkTurns, condenseSession, estimateTokens } from '../../src/summarize/condense.js';
 import { FakeLlmClient } from '../../src/summarize/fake-llm.js';
 import type { LlmRequest } from '../../src/summarize/llm.js';
-import { PROMPT_VERSION } from '../../src/summarize/prompt.js';
-import { summarizeSession } from '../../src/summarize/summarize.js';
+import { mergeSystemPrompt, PROMPT_VERSION } from '../../src/summarize/prompt.js';
+import { coverParts, summarizeSession } from '../../src/summarize/summarize.js';
 import { claude, codex } from '../fixtures.js';
 import { llmSummary, pickAll } from './helpers.js';
 
@@ -229,5 +229,104 @@ describe('summarizeSession (merging distills rather than concatenates)', () => {
       return partReply(request, request.messages[0]!.content.includes(`(part ${parts} of`) ? 'abandoned' : 'completed');
     });
     expect((await summarizeSession(long, llm, { ...options, chunkTokens })).outcome).toBe('abandoned');
+  });
+});
+
+describe('summarizeSession (the merge covers every part)', () => {
+  const long = redacted(claude.long);
+  const isMerge = (request: LlmRequest) => request.system.startsWith('You are merging');
+  const partOf = (request: LlmRequest) => /Transcript \(part (\d+) of/.exec(request.messages[0]!.content)![1]!;
+  const partReply = (request: LlmRequest, has: (part: number) => boolean = () => true) => {
+    const part = partOf(request);
+    const items = (prefix: string) => (has(Number(part)) ? [1, 2].map((i) => `${prefix} ${i} from part ${part}`) : []);
+    return json(
+      llmSummary({
+        decisions: items('Decision').map((decision) => ({ decision, reason: 'because' })),
+        rejectedApproaches: items('Approach').map((approach) => ({ approach, reason: 'because' })),
+        risksOrFollowUps: items('Follow-up'),
+      }),
+    );
+  };
+  // A recency-biased merge: picks only the last 6 candidates of each list.
+  const latestSix = (request: LlmRequest) => {
+    const ids = (prefix: string) => [...request.messages[0]!.content.matchAll(new RegExp(`^(${prefix}\\d+) `, 'gm'))].map((m) => m[1]!).slice(-6);
+    return json({ goal: 'g', whatWasDone: 'w', aiInvolvement: 'heavy', decisionIds: ids('D'), rejectedApproachIds: ids('R'), followUpIds: ids('F') });
+  };
+  const fromParts = (items: string[]) => [...new Set(items.map((t) => /from part (\d+)/.exec(t)![1]))].map(Number).sort((a, b) => a - b);
+
+  /** The long fixture with its second half moved 20 hours later: two work periods. */
+  function twoPeriods(): RedactedSession {
+    const s = parseClaudeCodeFile(claude.long)!;
+    const half = s.transcript.indexOf(s.transcript.filter((e) => e.kind === 'user')[30]!);
+    const shift = (iso: string) => new Date(Date.parse(iso) + 20 * 3_600_000).toISOString();
+    return redactSession({ ...s, endedAt: shift(s.endedAt), transcript: s.transcript.map((e, i) => (i >= half ? { ...e, timestamp: shift(e.timestamp) } : e)) }, { home: false });
+  }
+
+  it('labels each part with its work period and each candidate with its part', async () => {
+    const session = twoPeriods();
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r)));
+    await summarizeSession(session, llm, { ...options, chunkTokens: 2_000 });
+    const merge = llm.requests.at(-1)!.messages[0]!.content;
+    expect(merge).toMatch(/^Part 1 of \d+ \(work period 1 of 2\):/m);
+    expect(merge).toMatch(/^Part \d+ of \d+ \(work period 2 of 2\):/m);
+    expect(merge).toContain('D1 (part 1): Decision 1 from part 1 (reason: because)');
+    expect(merge).toContain('R1 (part 1): Approach 1 from part 1 (reason: because)');
+    expect(merge).toContain('F1 (part 1): Follow-up 1 from part 1');
+  });
+
+  it('tells the merge to cover every work period and to pick from every part', () => {
+    expect(mergeSystemPrompt()).toContain('"goal" and "whatWasDone" must cover every work period');
+    expect(mergeSystemPrompt()).toContain('at least one id from each part that has candidates in that list');
+  });
+
+  it('gives every part with candidates at least one pick in each list, still at most 6', async () => {
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r)));
+    const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });
+    expect(llm.requests.filter((r) => !isMerge(r))).toHaveLength(4);
+    for (const list of [summary.decisions.map((d) => d.decision), summary.rejectedApproaches.map((r) => r.approach), summary.risksOrFollowUps]) {
+      expect(fromParts(list)).toEqual([1, 2, 3, 4]);
+      expect(list.length).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('only guarantees picks for parts that offered candidates', async () => {
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r, (part) => part === 1 || part === 4)));
+    const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });
+    expect(fromParts(summary.decisions.map((d) => d.decision))).toEqual([1, 4]);
+  });
+
+  it("keeps the model's picks, in session order, when they already cover every part", async () => {
+    const firstOfEach = (request: LlmRequest) => {
+      const ids = (prefix: string) => [...request.messages[0]!.content.matchAll(new RegExp(`^(${prefix}\\d+) .*?: \\w+ 1 from`, 'gm'))].map((m) => m[1]!).reverse();
+      return json({ goal: 'g', whatWasDone: 'w', aiInvolvement: 'heavy', decisionIds: ids('D'), rejectedApproachIds: ids('R'), followUpIds: ids('F') });
+    };
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? firstOfEach(r) : partReply(r)));
+    const summary = await summarizeSession(long, llm, { ...options, chunkTokens: 2_000 });
+    expect(summary.decisions.map((d) => d.decision)).toEqual([1, 2, 3, 4].map((p) => `Decision 1 from part ${p}`));
+  });
+
+  it('covers each work period instead when more parts offer candidates than a list has slots', async () => {
+    const session = twoPeriods();
+    const llm = new FakeLlmClient((r) => (isMerge(r) ? latestSix(r) : partReply(r)));
+    const summary = await summarizeSession(session, llm, { ...options, chunkTokens: 1_000 });
+    const parts = llm.requests.filter((r) => !isMerge(r)).length;
+    expect(parts).toBeGreaterThan(6);
+    const firstPeriodParts = llm.requests.filter((r) => !isMerge(r) && !r.messages[0]!.content.includes('[resumed after')).length;
+    const decisions = fromParts(summary.decisions.map((d) => d.decision));
+    expect(decisions.some((p) => p <= firstPeriodParts)).toBe(true);
+    expect(decisions.some((p) => p > firstPeriodParts)).toBe(true);
+    expect(summary.decisions.length).toBeLessThanOrEqual(6);
+  });
+});
+
+describe('coverParts', () => {
+  const candidates = Array.from({ length: 8 }, (_, i) => ({ id: `D${i + 1}`, part: i + 1, period: i + 1 }));
+
+  it("leaves the model's picks alone when even the work periods outnumber the slots", () => {
+    expect(coverParts(['D8', 'D7'], candidates).map((c) => c.id)).toEqual(['D7', 'D8']);
+  });
+
+  it('ignores repeated picks', () => {
+    expect(coverParts(['D1', 'D1'], candidates.slice(0, 2)).map((c) => c.id)).toEqual(['D1', 'D2']);
   });
 });

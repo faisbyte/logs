@@ -1,10 +1,10 @@
 import { isEmptySession } from '../empty.js';
 import { assertRedactedSession, type RedactedSession } from '../redact/session.js';
-import { chunkTurns, condenseSession } from './condense.js';
+import { chunkSession, condenseSession } from './condense.js';
 import type { z } from 'zod';
 import type { LlmClient, LlmMessage, LlmUsage } from './llm.js';
 import { chunkMessage, mergeMessage, mergeSystemPrompt, PROMPT_VERSION, systemPrompt } from './prompt.js';
-import { buildSessionSummary, LlmSummarySchema, MergeSchema, postCheck, type LlmSummary, type Merge, type SessionSummary, type Usage } from './schema.js';
+import { buildSessionSummary, LlmSummarySchema, MAX_MERGED_ITEMS, MergeSchema, postCheck, type LlmSummary, type Merge, type SessionSummary, type Usage } from './schema.js';
 import { estimateCostUsd } from './settings.js';
 
 export class SummarizeError extends Error {}
@@ -76,22 +76,66 @@ function totalUsage(model: string, usages: LlmUsage[]): Usage {
   };
 }
 
-/** Distills parts into one summary (DECISIONS.md D24, D27): the model picks at most 6 candidates per list by id. */
+interface Candidate {
+  id: string;
+  part: number;
+  period: number;
+}
+
+/**
+ * The merge's picks, topped up so every part that offered candidates keeps at least one, or every work period
+ * when more parts offered candidates than the list has slots (DECISIONS.md D32). A top-up beyond the cap replaces
+ * the lowest-ranked pick of the best-covered part. Returned in session order.
+ */
+export function coverParts<T extends Candidate>(ids: readonly string[], candidates: readonly T[], max = MAX_MERGED_ITEMS): T[] {
+  const picked = [...new Set(ids)].map((id) => candidates.find((c) => c.id === id)!);
+  const unit = new Set(candidates.map((c) => c.part)).size <= max ? (c: T) => c.part : (c: T) => c.period;
+  const units = [...new Set(candidates.map(unit))];
+  if (units.length <= max) {
+    for (const u of units) {
+      if (picked.some((c) => unit(c) === u)) continue;
+      if (picked.length >= max) {
+        const count = (v: number) => picked.filter((c) => unit(c) === v).length;
+        const crowded = picked.map(unit).reduce((a, b) => (count(b) > count(a) ? b : a));
+        picked.splice(picked.findLastIndex((c) => unit(c) === crowded), 1);
+      }
+      picked.push(candidates.find((c) => unit(c) === u)!);
+    }
+  }
+  return picked.sort((a, b) => candidates.indexOf(a) - candidates.indexOf(b));
+}
+
+interface Decided {
+  id: string;
+  part: number;
+  decision: string;
+  reason: string;
+}
+
+/** Distills parts into one summary (DECISIONS.md D24, D27, D32): the model picks at most 6 candidates per list by id. */
 async function mergeParts(
   llm: LlmClient,
   redacted: RedactedSession,
-  parts: LlmSummary[],
-  decided: { id: string; decision: string; reason: string }[],
-  reversed: Map<string, string>,
+  parts: (LlmSummary & { period: number })[],
+  decided: Decided[],
+  reversed: Map<string, { reason: string; part: number }>,
   usages: LlmUsage[],
 ): Promise<LlmSummary> {
-  const unique = <T>(items: T[], key: (t: T) => string) => [...new Map(items.map((t) => [key(t), t])).values()];
-  const decisions = decided.filter((d) => !reversed.has(d.id));
+  // Exact duplicates keep their first, earliest occurrence.
+  const unique = <T>(items: T[], key: (t: T) => string) => items.filter((t, i) => items.findIndex((u) => key(u) === key(t)) === i);
+  const periodOf = (part: number) => parts[part - 1]!.period;
+  const decisions = decided.filter((d) => !reversed.has(d.id)).map((d) => ({ ...d, period: periodOf(d.part) }));
   const rejectedApproaches = unique(
-    [...parts.flatMap((p) => p.rejectedApproaches), ...decided.filter((d) => reversed.has(d.id)).map((d) => ({ approach: d.decision, reason: reversed.get(d.id)! }))],
+    [
+      ...parts.flatMap((p, i) => p.rejectedApproaches.map((r) => ({ part: i + 1, ...r }))),
+      ...decided.filter((d) => reversed.has(d.id)).map((d) => ({ part: reversed.get(d.id)!.part, approach: d.decision, reason: reversed.get(d.id)!.reason })),
+    ],
     (r) => r.approach,
-  ).map((r, i) => ({ id: `R${i + 1}`, ...r }));
-  const followUps = unique(parts.flatMap((p) => p.risksOrFollowUps), (f) => f).map((text, i) => ({ id: `F${i + 1}`, text }));
+  ).map((r, i) => ({ id: `R${i + 1}`, period: periodOf(r.part), ...r }));
+  const followUps = unique(
+    parts.flatMap((p, i) => p.risksOrFollowUps.map((text) => ({ part: i + 1, text }))),
+    (f) => f.text,
+  ).map((f, i) => ({ id: `F${i + 1}`, period: periodOf(f.part), ...f }));
 
   const offered = (ids: string[], from: { id: string }[], field: string) => {
     const known = new Set(from.map((c) => c.id));
@@ -105,16 +149,15 @@ async function mergeParts(
   const message = mergeMessage({ parts, decisions, rejectedApproaches, followUps });
   const merge = await validatedCall(llm, redacted, MergeSchema, mergeSystemPrompt(), message, usages, check);
 
-  const pick = <T extends { id: string }>(ids: string[], from: T[]) => unique(ids, (id) => id).map((id) => from.find((c) => c.id === id)!);
   return {
     goal: merge.goal,
     whatWasDone: merge.whatWasDone,
     aiInvolvement: merge.aiInvolvement,
     // The end state of the session decides the outcome.
     outcome: parts.at(-1)!.outcome,
-    decisions: pick(merge.decisionIds, decisions).map(({ decision, reason }) => ({ decision, reason })),
-    rejectedApproaches: pick(merge.rejectedApproachIds, rejectedApproaches).map(({ approach, reason }) => ({ approach, reason })),
-    risksOrFollowUps: pick(merge.followUpIds, followUps).map((f) => f.text),
+    decisions: coverParts(merge.decisionIds, decisions).map(({ decision, reason }) => ({ decision, reason })),
+    rejectedApproaches: coverParts(merge.rejectedApproachIds, rejectedApproaches).map(({ approach, reason }) => ({ approach, reason })),
+    risksOrFollowUps: coverParts(merge.followUpIds, followUps).map((f) => f.text),
     reversedDecisions: [],
   };
 }
@@ -126,21 +169,21 @@ export async function summarizeSession(redacted: RedactedSession, llm: LlmClient
   if (isEmptySession(s as Parameters<typeof isEmptySession>[0])) throw new SummarizeError(`Session ${s.sourceSessionId} is empty; nothing to summarise.`);
 
   const { metadata, turns, segmentStarts } = condenseSession(redacted);
-  const chunks = chunkTurns(turns, options.chunkTokens, segmentStarts);
+  const chunks = chunkSession(turns, options.chunkTokens, segmentStarts);
   const usages: LlmUsage[] = [];
   const system = systemPrompt();
 
   // Parts are summarised in order; each sees earlier decisions by id and may reverse them (DECISIONS.md D24).
-  const decided: { id: string; decision: string; reason: string }[] = [];
-  const reversed = new Map<string, string>();
-  const parts: LlmSummary[] = [];
-  for (const [i, chunk] of chunks.entries()) {
+  const decided: Decided[] = [];
+  const reversed = new Map<string, { reason: string; part: number }>();
+  const parts: (LlmSummary & { period: number })[] = [];
+  for (const [i, { text: chunk, period }] of chunks.entries()) {
     const open = decided.filter((d) => !reversed.has(d.id));
     const message = chunkMessage({ metadata, chunk, part: i + 1, parts: chunks.length, earlierDecisions: open.map(({ id, decision }) => ({ id, decision })) });
     const part = await validatedCall(llm, redacted, LlmSummarySchema, system, message, usages);
-    for (const r of part.reversedDecisions) if (open.some((d) => d.id === r.id)) reversed.set(r.id, r.reason);
-    for (const d of part.decisions) decided.push({ id: `D${decided.length + 1}`, ...d });
-    parts.push(part);
+    for (const r of part.reversedDecisions) if (open.some((d) => d.id === r.id)) reversed.set(r.id, { reason: r.reason, part: i + 1 });
+    for (const d of part.decisions) decided.push({ id: `D${decided.length + 1}`, part: i + 1, ...d });
+    parts.push({ ...part, period });
   }
 
   const summary = parts.length === 1 ? parts[0]! : await mergeParts(llm, redacted, parts, decided, reversed, usages);

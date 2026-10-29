@@ -3,7 +3,7 @@ import { chunkMessage, mergeSystemPrompt, PROMPT_VERSION, systemPrompt } from '.
 
 describe('summariser prompt', () => {
   it('is versioned', () => {
-    expect(PROMPT_VERSION).toBe('summarize-v2');
+    expect(PROMPT_VERSION).toBe('summarize-v3');
   });
 
   it('contains the Section 6.1 prompt from PROJECT_PLAN.md verbatim, with the schema filled in', () => {

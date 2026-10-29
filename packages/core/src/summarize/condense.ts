@@ -124,23 +124,32 @@ export function condenseSession(redacted: RedactedSession): CondensedSession {
   return { metadata: metadataFor(s, rel, segmentStarts.length), turns: texts, segmentStarts };
 }
 
+export interface Chunk {
+  text: string;
+  /** 1-based work period the chunk belongs to. */
+  period: number;
+}
+
 /**
  * Packs whole turns into chunks of at most `budgetTokens`, never across a work-period boundary;
  * a turn larger than the budget is split by line.
  */
-export function chunkTurns(turns: string[], budgetTokens: number, segmentStarts: number[] = [0]): string[] {
+export function chunkSession(turns: string[], budgetTokens: number, segmentStarts: number[] = [0]): Chunk[] {
   const maxChars = Math.floor(budgetTokens * 2.5);
-  const starts = new Set(segmentStarts);
+  const periodOf = (turn: number) => segmentStarts.filter((start) => start <= turn).length;
   const pieces = turns.flatMap((turn, i) => {
     const lines = estimateTokens(turn) <= budgetTokens ? [turn] : turn.split('\n').flatMap((line) => (line.length <= maxChars ? [line] : (line.match(new RegExp(`[\\s\\S]{1,${maxChars}}`, 'g')) ?? [])));
-    return lines.map((text, j) => ({ text, newPeriod: j === 0 && i > 0 && starts.has(i) }));
+    return lines.map((text) => ({ text, period: Math.max(1, periodOf(i)) }));
   });
 
-  const chunks: string[] = [];
-  for (const { text, newPeriod } of pieces) {
+  const chunks: Chunk[] = [];
+  for (const { text, period } of pieces) {
     const last = chunks.at(-1);
-    if (last !== undefined && !newPeriod && estimateTokens(`${last}\n${text}`) <= budgetTokens) chunks[chunks.length - 1] = `${last}\n${text}`;
-    else chunks.push(text);
+    if (last !== undefined && last.period === period && estimateTokens(`${last.text}\n${text}`) <= budgetTokens) last.text = `${last.text}\n${text}`;
+    else chunks.push({ text, period });
   }
   return chunks;
 }
+
+export const chunkTurns = (turns: string[], budgetTokens: number, segmentStarts: number[] = [0]): string[] =>
+  chunkSession(turns, budgetTokens, segmentStarts).map((c) => c.text);
