@@ -509,6 +509,11 @@ Option A. The requirement that stakeholders read reports without repo access, pl
     - Saving with an existing name replaces that sprint. Overlapping sprints are refused, so every date falls in at most one.
   - **Tracker tickets:** title and sprint name per key, replaced on each refresh (D47).
   - **Postgres:** migration 2 adds `ticket_links` (with a foreign key to `summaries`), `sprints` and `tracker_tickets`. The same `TicketStore` contract runs on the in-memory store, on PGlite and on the opt-in real Postgres.
+  - **Atomic overlap check (2026-10-30):**
+    - Migration 3 adds `exclude using gist (repo_id with =, name with <>, tstzrange(starts_at, ends_at) with &&)`, so two concurrent saves of overlapping sprints can't both win. The loser gets the usual "overlaps" answer.
+    - It needs the `btree_gist` extension. That ships with Postgres and is allowed on the common managed services; PGlite loads it from `@electric-sql/pglite/contrib`.
+    - The in-memory store was already atomic.
+    - A contract test runs two overlapping saves at once on every store.
 - **Alternatives:**
   - Bake sprint or title into the summary at push time; it goes stale.
   - Allow overlapping sprints and pick one.
@@ -516,9 +521,8 @@ Option A. The requirement that stakeholders read reports without repo access, pl
 - **Why:**
   - Pushed summaries stay what the developer approved.
   - Sprint membership and titles change after the fact.
-- **Not yet:**
-  - The overlap check isn't atomic under concurrent admin commands.
-  - Manual-link history isn't kept (Phase 10's audit log).
+- **Verified (2026-10-30):** the opt-in real-Postgres test passed 23/23 contract tests (14 SummaryStore, 9 TicketStore) against a throwaway `postgres:16` Docker container on port 5433. After migration 3 it passed 25/25, with the 2 new sprint tests.
+- **Not yet:** manual-link history isn't kept (Phase 10's audit log).
 
 ## D46. Grouping: tracker sprint first, then the sprint containing the session's start
 

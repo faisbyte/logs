@@ -53,6 +53,7 @@ node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE
 
 Developers set `"share": {"url": "http://localhost:8787"}` in `.digest/config.json` and put their token in `.digest/token` (or `DIGEST_TOKEN`).
 PGlite mode (`--data`) is single-process: stop the server before running `token` or `sprint`, then start it again.
+`digest tickets --from/--to` (and `GET /v1/tickets`) selects every session overlapping the range, then files each under the sprint containing its start, so a session that began in the previous sprint shows under that sprint.
 
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
 Summarising sends redacted, condensed session text to the Anthropic API using your own `ANTHROPIC_API_KEY`; pushing sends only approved summaries' shared fields to your digest server. Raw transcripts never leave the machine, and `.digest/` (local state) is gitignored.

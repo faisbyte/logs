@@ -1,11 +1,11 @@
-import { PGlite } from '@electric-sql/pglite';
 import { afterAll, describe, expect, it } from 'vitest';
 import { summaryStoreContract } from '../../core/test/shared/store-contract.js';
 import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
+import { openPGlite } from '../src/pglite.js';
 import { migrate, PostgresSummaryStore } from '../src/postgres-store.js';
 
 // One in-process Postgres for the file; each test starts from empty tables.
-const db = new PGlite();
+const db = openPGlite();
 const ready = migrate(db);
 afterAll(() => db.close());
 
@@ -22,6 +22,6 @@ describe('migrations', () => {
     await ready;
     await migrate(db);
     const { rows } = await db.query<{ version: number }>('select version from schema_migrations order by version');
-    expect(rows.map((r) => r.version)).toEqual([1, 2]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3]);
   });
 });

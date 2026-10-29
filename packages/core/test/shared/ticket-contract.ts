@@ -79,6 +79,22 @@ export function ticketStoreContract(name: string, make: () => Promise<SharedStor
         expect((await store.sprints(REPO)).map((s) => s.name)).toEqual(['Sprint 1']);
       });
 
+      it('lets only one of two concurrent overlapping sprints be saved', async () => {
+        const results = await Promise.all([
+          store.saveSprint(REPO, sprint('Sprint A', '2026-03-02', '2026-03-16')),
+          store.saveSprint(REPO, sprint('Sprint B', '2026-03-09', '2026-03-23')),
+        ]);
+        expect(results.map((r) => r.status).sort()).toEqual(['invalid', 'saved']);
+        expect(results.find((r) => r.status === 'invalid')).toMatchObject({ reason: expect.stringMatching(/overlaps Sprint [AB]/) });
+        expect(await store.sprints(REPO)).toHaveLength(1);
+      });
+
+      it('still lets a sprint be replaced by name with overlapping dates', async () => {
+        await store.saveSprint(REPO, sprint('Sprint 1', '2026-03-02', '2026-03-16'));
+        expect(await store.saveSprint(REPO, sprint('Sprint 1', '2026-03-03', '2026-03-17'))).toEqual({ status: 'saved' });
+        expect(await store.sprints(REPO)).toEqual([sprint('Sprint 1', '2026-03-03', '2026-03-17')]);
+      });
+
       it('removes a sprint by name', async () => {
         await store.saveSprint(REPO, sprint('Sprint 1', '2026-03-02', '2026-03-16'));
         expect(await store.removeSprint(REPO, 'Sprint 1')).toBe(true);
