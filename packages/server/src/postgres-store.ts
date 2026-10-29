@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import {
   byFrom,
+  checkNewDigest,
   decideLink,
+  defaultRepoSettings,
   decidePush,
   decideSprint,
   decideUnlink,
@@ -8,7 +11,15 @@ import {
   newToken,
   teamReportFrom,
   UploadPayloadSchema,
+  type DigestKind,
+  type DigestPatch,
+  type DigestStatus,
+  type DigestStore,
   type LinkResult,
+  type NewDigest,
+  type RepoSettings,
+  type ReportKey,
+  type StoredDigest,
   type ManualTicketLink,
   type Identity,
   type PushIdentity,
@@ -101,6 +112,35 @@ const MIGRATIONS: string[][] = [
     'alter table tokens drop constraint tokens_repo_id_developer_id_key',
     'alter table tokens add constraint tokens_repo_role_person unique (repo_id, role, developer_id)',
   ],
+  [
+    // Phase 7 (DECISIONS.md D52): digests, the LLM spend behind the monthly cap, and per-repo digest settings.
+    `create table digests (
+      id uuid primary key,
+      repo_id text not null,
+      kind text not null check (kind in ('report', 'scheduled')),
+      period_key text not null,
+      period_label text not null,
+      period_from timestamptz,
+      period_to timestamptz,
+      input_hash text not null,
+      prompt_version text not null,
+      model text not null,
+      markdown text not null,
+      summary_count integer not null,
+      developer_count integer not null,
+      cost_usd double precision,
+      status text not null check (status in ('ready', 'preview', 'sent')),
+      preview_until timestamptz,
+      created_at timestamptz not null,
+      deliveries jsonb not null default '{}',
+      sent_at timestamptz
+    )`,
+    "create unique index digests_one_per_scheduled_period on digests (repo_id, period_key) where kind = 'scheduled'",
+    "create unique index digests_report_cache on digests (repo_id, period_key, input_hash, prompt_version, model) where kind = 'report'",
+    'create table llm_spend (repo_id text not null, usd double precision not null, at timestamptz not null)',
+    'create index llm_spend_repo_at on llm_spend (repo_id, at)',
+    'create table repo_settings (repo_id text primary key, settings jsonb not null)',
+  ],
 ];
 
 /**
@@ -148,7 +188,52 @@ const toStored = (r: SummaryRow): StoredSummary => ({
   summary: UploadPayloadSchema.parse(typeof r.payload === 'string' ? JSON.parse(r.payload) : r.payload),
 });
 
-export class PostgresSummaryStore implements SharedStore {
+interface DigestRow {
+  id: string;
+  repo_id: string;
+  kind: DigestKind;
+  period_key: string;
+  period_label: string;
+  period_from: Date | string | null;
+  period_to: Date | string | null;
+  input_hash: string;
+  prompt_version: string;
+  model: string;
+  markdown: string;
+  summary_count: number;
+  developer_count: number;
+  cost_usd: number | null;
+  status: DigestStatus;
+  preview_until: Date | string | null;
+  created_at: Date | string;
+  deliveries: Record<string, string> | string;
+  sent_at: Date | string | null;
+}
+
+const isoOrNull = (value: Date | string | null) => (value === null ? null : iso(value));
+const toDigest = (r: DigestRow): StoredDigest => ({
+  repoId: r.repo_id,
+  kind: r.kind,
+  periodKey: r.period_key,
+  periodLabel: r.period_label,
+  from: isoOrNull(r.period_from),
+  to: isoOrNull(r.period_to),
+  inputHash: r.input_hash,
+  promptVersion: r.prompt_version,
+  model: r.model,
+  markdown: r.markdown,
+  summaryCount: r.summary_count,
+  developerCount: r.developer_count,
+  costUsd: r.cost_usd === null ? null : Number(r.cost_usd),
+  status: r.status,
+  previewUntil: isoOrNull(r.preview_until),
+  createdAt: iso(r.created_at),
+  id: r.id,
+  deliveries: typeof r.deliveries === 'string' ? JSON.parse(r.deliveries) : r.deliveries,
+  sentAt: isoOrNull(r.sent_at),
+});
+
+export class PostgresSummaryStore implements SharedStore, DigestStore {
   readonly #sql: Sql;
   readonly #now: () => Date;
 
@@ -297,5 +382,93 @@ export class PostgresSummaryStore implements SharedStore {
   async trackerTickets(repoId: string): Promise<TrackerTicket[]> {
     const { rows } = await this.#sql.query<{ ticket_key: string; title: string | null; sprint: string | null }>('select ticket_key, title, sprint from tracker_tickets where repo_id = $1', [repoId]);
     return rows.map((r) => ({ key: r.ticket_key, title: r.title, sprint: r.sprint })).sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  async saveDigest(digest: NewDigest): Promise<StoredDigest> {
+    checkNewDigest(digest);
+    const d = digest;
+    const { rows } = await this.#sql.query<DigestRow>(
+      `insert into digests (id, repo_id, kind, period_key, period_label, period_from, period_to, input_hash, prompt_version, model,
+         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       on conflict do nothing returning *`,
+      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt],
+    );
+    if (rows[0]) return toDigest(rows[0]);
+    // The scheduled period or cached report already exists: keep that one.
+    const existing = d.kind === 'scheduled' ? await this.scheduledDigest(d.repoId, d.periodKey) : await this.findReport(d.repoId, d);
+    if (!existing) throw new Error('digest insert conflicted, but no matching digest was found');
+    return existing;
+  }
+
+  async getDigest(repoId: string, id: string): Promise<StoredDigest | null> {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+    const { rows } = await this.#sql.query<DigestRow>('select * from digests where repo_id = $1 and id = $2', [repoId, id]);
+    return rows[0] ? toDigest(rows[0]) : null;
+  }
+
+  async findReport(repoId: string, key: ReportKey): Promise<StoredDigest | null> {
+    const { rows } = await this.#sql.query<DigestRow>(
+      "select * from digests where repo_id = $1 and kind = 'report' and period_key = $2 and input_hash = $3 and prompt_version = $4 and model = $5",
+      [repoId, key.periodKey, key.inputHash, key.promptVersion, key.model],
+    );
+    return rows[0] ? toDigest(rows[0]) : null;
+  }
+
+  async scheduledDigest(repoId: string, periodKey: string): Promise<StoredDigest | null> {
+    const { rows } = await this.#sql.query<DigestRow>("select * from digests where repo_id = $1 and kind = 'scheduled' and period_key = $2", [repoId, periodKey]);
+    return rows[0] ? toDigest(rows[0]) : null;
+  }
+
+  async digests(repoId: string, filter: { kinds?: DigestKind[]; statuses?: DigestStatus[] } = {}): Promise<StoredDigest[]> {
+    const { rows } = await this.#sql.query<DigestRow>(
+      `select * from digests where repo_id = $1
+         and ($2::text[] is null or kind = any($2::text[]))
+         and ($3::text[] is null or status = any($3::text[]))
+       order by created_at desc, id desc`,
+      [repoId, filter.kinds ?? null, filter.statuses ?? null],
+    );
+    return rows.map(toDigest);
+  }
+
+  async updateDigest(repoId: string, id: string, patch: DigestPatch): Promise<void> {
+    await this.#sql.query(
+      `update digests set
+         status = coalesce($3, status),
+         sent_at = coalesce($4, sent_at),
+         preview_until = coalesce($5, preview_until),
+         deliveries = deliveries || $6::jsonb
+       where repo_id = $1 and id = $2`,
+      [repoId, id, patch.status ?? null, patch.sentAt ?? null, patch.previewUntil ?? null, JSON.stringify(patch.deliveries ?? {})],
+    );
+  }
+
+  async recordSpend(repoId: string, usd: number, at: string): Promise<void> {
+    await this.#sql.query('insert into llm_spend (repo_id, usd, at) values ($1, $2, $3)', [repoId, usd, at]);
+  }
+
+  async spendSince(repoId: string, since: string): Promise<number> {
+    const { rows } = await this.#sql.query<{ total: number | string | null }>('select sum(usd) as total from llm_spend where repo_id = $1 and at >= $2', [repoId, since]);
+    return Number(rows[0]?.total ?? 0);
+  }
+
+  async repoSettings(repoId: string): Promise<RepoSettings> {
+    const { rows } = await this.#sql.query<{ settings: RepoSettings | string }>('select settings from repo_settings where repo_id = $1', [repoId]);
+    const stored = rows[0] ? (typeof rows[0].settings === 'string' ? JSON.parse(rows[0].settings) : rows[0].settings) : {};
+    return { ...defaultRepoSettings(repoId), ...stored, repoId };
+  }
+
+  async saveRepoSettings(repoId: string, patch: Partial<Omit<RepoSettings, 'repoId'>>): Promise<RepoSettings> {
+    const next = { ...(await this.repoSettings(repoId)), ...patch, repoId };
+    await this.#sql.query(
+      'insert into repo_settings (repo_id, settings) values ($1, $2::jsonb) on conflict (repo_id) do update set settings = excluded.settings',
+      [repoId, JSON.stringify(next)],
+    );
+    return next;
+  }
+
+  async scheduledRepos(): Promise<string[]> {
+    const { rows } = await this.#sql.query<{ repo_id: string }>("select repo_id from repo_settings where settings->>'schedule' <> 'off' order by repo_id");
+    return rows.map((r) => r.repo_id);
   }
 }
