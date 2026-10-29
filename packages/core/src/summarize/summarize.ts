@@ -9,9 +9,24 @@ import { estimateCostUsd } from './settings.js';
 
 export class SummarizeError extends Error {}
 
+/** What happened on the way to a summary, for the local usage log: each part's output, the merge's picks, every retry. */
+export interface SummaryTrace {
+  parts: { part: number; period: number; output: LlmSummary }[];
+  merge: Merge | null;
+  retries: { call: string; errors: string }[];
+}
+
 export interface SummarizeOptions {
   chunkTokens: number;
   now?: () => Date;
+  /** Filled in as the session is summarised. */
+  trace?: SummaryTrace;
+}
+
+/** The calls made for one session: their usage, and the errors behind any retries. */
+interface CallLog {
+  usages: LlmUsage[];
+  retries: SummaryTrace['retries'];
 }
 
 // Room for adaptive thinking plus the JSON reply, while staying non-streaming.
@@ -46,18 +61,19 @@ async function validatedCall<T extends object>(
   schema: z.ZodType<T>,
   system: string,
   user: string,
-  usages: LlmUsage[],
+  log: CallLog & { call: string },
   check: (value: T) => string[] = () => [],
 ): Promise<T> {
   const sessionId = source.session.sourceSessionId;
   let messages: LlmMessage[] = [{ role: 'user', content: user }];
   for (let attempt = 1; ; attempt++) {
     const response = await llm.complete({ source, system, messages, schema, maxTokens: MAX_TOKENS });
-    usages.push(response.usage);
+    log.usages.push(response.usage);
     if (response.stopReason === 'refusal') throw new SummarizeError(`The model refused to summarise ${sessionId}.`);
     const result = validate(schema, response.text, response.stopReason, check);
     if ('value' in result) return result.value;
     if (attempt === 2) throw new SummarizeError(`Summary for ${sessionId} failed validation twice: ${result.errors}`);
+    log.retries.push({ call: log.call, errors: result.errors });
     messages = [
       ...messages,
       { role: 'assistant', content: response.text || '(empty reply)' },
@@ -119,7 +135,8 @@ async function mergeParts(
   parts: (LlmSummary & { period: number })[],
   decided: Decided[],
   reversed: Map<string, { reason: string; part: number }>,
-  usages: LlmUsage[],
+  log: CallLog,
+  trace: SummaryTrace,
 ): Promise<LlmSummary> {
   // Exact duplicates keep their first, earliest occurrence.
   const unique = <T>(items: T[], key: (t: T) => string) => items.filter((t, i) => items.findIndex((u) => key(u) === key(t)) === i);
@@ -147,7 +164,8 @@ async function mergeParts(
     ...offered(m.followUpIds, followUps, 'followUpIds'),
   ];
   const message = mergeMessage({ parts, decisions, rejectedApproaches, followUps });
-  const merge = await validatedCall(llm, redacted, MergeSchema, mergeSystemPrompt(), message, usages, check);
+  const merge = await validatedCall(llm, redacted, MergeSchema, mergeSystemPrompt(), message, { ...log, call: 'merge' }, check);
+  trace.merge = merge;
 
   return {
     goal: merge.goal,
@@ -170,7 +188,8 @@ export async function summarizeSession(redacted: RedactedSession, llm: LlmClient
 
   const { metadata, turns, segmentStarts } = condenseSession(redacted);
   const chunks = chunkSession(turns, options.chunkTokens, segmentStarts);
-  const usages: LlmUsage[] = [];
+  const trace: SummaryTrace = options.trace ?? { parts: [], merge: null, retries: [] };
+  const log: CallLog = { usages: [], retries: trace.retries };
   const system = systemPrompt();
 
   // Parts are summarised in order; each sees earlier decisions by id and may reverse them (DECISIONS.md D24).
@@ -180,18 +199,19 @@ export async function summarizeSession(redacted: RedactedSession, llm: LlmClient
   for (const [i, { text: chunk, period }] of chunks.entries()) {
     const open = decided.filter((d) => !reversed.has(d.id));
     const message = chunkMessage({ metadata, chunk, part: i + 1, parts: chunks.length, earlierDecisions: open.map(({ id, decision }) => ({ id, decision })) });
-    const part = await validatedCall(llm, redacted, LlmSummarySchema, system, message, usages);
+    const part = await validatedCall(llm, redacted, LlmSummarySchema, system, message, { ...log, call: `part ${i + 1} of ${chunks.length}` });
+    trace.parts.push({ part: i + 1, period, output: part });
     for (const r of part.reversedDecisions) if (open.some((d) => d.id === r.id)) reversed.set(r.id, { reason: r.reason, part: i + 1 });
     for (const d of part.decisions) decided.push({ id: `D${decided.length + 1}`, part: i + 1, ...d });
     parts.push({ ...part, period });
   }
 
-  const summary = parts.length === 1 ? parts[0]! : await mergeParts(llm, redacted, parts, decided, reversed, usages);
+  const summary = parts.length === 1 ? parts[0]! : await mergeParts(llm, redacted, parts, decided, reversed, log, trace);
 
   return buildSessionSummary(summary, redacted, {
     model: llm.model,
     promptVersion: PROMPT_VERSION,
     generatedAt: (options.now ?? (() => new Date()))().toISOString(),
-    usage: totalUsage(llm.model, usages),
+    usage: totalUsage(llm.model, log.usages),
   });
 }

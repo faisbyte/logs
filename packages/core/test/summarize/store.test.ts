@@ -10,7 +10,7 @@ import { PROMPT_VERSION } from '../../src/summarize/prompt.js';
 import { cacheKey, contentHash, readCachedSummary, summarizeCached, writeSummary } from '../../src/summarize/store.js';
 import { summarizeSession } from '../../src/summarize/summarize.js';
 import { claude } from '../fixtures.js';
-import { llmSummary } from './helpers.js';
+import { llmSummary, pickAll } from './helpers.js';
 
 const tempRepo = () => mkdtempSync(join(tmpdir(), 'digest-store-'));
 const parsed = parseClaudeCodeFile(claude.basic)!;
@@ -105,6 +105,25 @@ describe('summarizeCached', () => {
     expect(lines[0]).toMatchObject({ sessionId: 'c1a5e001-0000-4000-8000-000000000001', model: 'claude-haiku-5-5', promptVersion: PROMPT_VERSION, requests: 1 });
     expect(lines[0].inputTokens).toBeGreaterThan(0);
     expect(lines[0].costUsd).toBeGreaterThan(0);
+  });
+
+  it('logs the validation error behind every retry', async () => {
+    const repo = tempRepo();
+    await summarizeCached(repo, redacted, new FakeLlmClient(['not json', reply], 'claude-haiku-5-5'), settings, now);
+    const [line] = readFileSync(join(repo, '.digest/usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect(line.retries).toEqual([{ call: 'part 1 of 1', errors: 'the reply was not valid JSON' }]);
+  });
+
+  it("logs each part's output and the merge's picks for a session summarised in parts", async () => {
+    const repo = tempRepo();
+    const long = redactSession(parseClaudeCodeFile(claude.long)!, { home: false });
+    const llm = new FakeLlmClient((request) => (request.system.startsWith('You are merging') ? pickAll(request) : reply), 'claude-haiku-5-5');
+    await summarizeCached(repo, long, llm, { ...settings, chunkTokens: 3_000 }, now);
+    const [line] = readFileSync(join(repo, '.digest/usage.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    expect(line.parts).toHaveLength(3);
+    expect(line.parts[0]).toEqual({ part: 1, period: 1, output: JSON.parse(reply) });
+    expect(line.merge).toMatchObject({ goal: 'Speed up search.', decisionIds: ['D1', 'D2', 'D3'] });
+    expect(line.retries).toEqual([]);
   });
 
   it('does not write anything when summarising fails', async () => {
