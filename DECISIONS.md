@@ -391,3 +391,25 @@ Architectural decisions, oldest first. Each entry: date, decision, alternatives 
 ### Recommendation
 
 Option A. The requirement that stakeholders read reports without repo access, plus server-side validation and Phase 10's retraction and audit log, all point to a server. Option B suits a solo developer who never shares reports outside the repo, and it could come back later as a second `SummaryStore` implementation behind the same contract tests.
+
+## D40. The storage-agnostic shared-store design
+
+- **Date:** 2026-10-29
+- **Decision:**
+  - **Payload:** a push carries exactly what `uploadPayload()` returns, defined once as `UploadPayloadSchema` (strict, with length caps).
+    - The receiving side runs `validatePush()`: the same schema, plus checks for transcript markers (role lines, condensed `TOOL` lines, JSONL event shapes) and the secret detectors.
+    - PII, home paths and deny-list hits aren't checked, because they depend on the developer's own settings.
+    - Errors name the field and the problem, never the value.
+  - **Interfaces:** `SummaryStore` (push, list, teamReport) and `TokenStore` (issueToken, authenticate). The push rules and query semantics are shared code (`decidePush`, `matchesQuery`). A contract test suite pins them for every implementation. `InMemorySummaryStore` is the reference implementation and the test double.
+  - **Identity:** a pushed summary is keyed by (repo, agent, session id).
+    - The same content again returns `unchanged`. Different content, or the same session from another developer, returns `conflict`, because pushed summaries are immutable.
+    - Every stored summary has `retractedAt` (always `null` for now), and queries skip retracted ones, which leaves room for author retraction in Phase 10.
+  - **Repo identity:** the `origin` remote URL, normalised to lowercase `host/path` with no scheme, user, credentials, port or `.git`. The raw URL is never printed, since it may contain credentials.
+  - **Auth:**
+    - One token per developer per repo (`dgt_` plus 32 random bytes, base64url). Issuing a new one replaces the old.
+    - Only a sha256 of each token is stored. The token is returned once and never logged.
+    - The pusher's identity comes from the token, never from the payload.
+  - **Queries:** `list` filters by repo plus optional branch, ticket, developer and date range. A session matches the range `[from, to)` if it overlaps it.
+  - **Team report:** `teamReport` returns every developer's summaries for a date range, with `summaryCount` and `developerCount`. It deliberately has no per-developer counts: the Phase 7 per-developer breakdown is off by default (the "no judgement of individual developers" rule). Each summary still carries its author's name, so a combined list shows who did what.
+- **Alternatives:** Trust the client's validation; key summaries by developer as well, which would let two developers push the same session; use last-write-wins on re-push.
+- **Why:** These rules are the same whichever store D39 picks, so they're built and tested once. Idempotent, immutable pushes make `digest push` safe to re-run, and a retraction field from the start avoids a migration later.
