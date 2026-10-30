@@ -64,9 +64,16 @@ describe('prepareSessionForRepo', () => {
     expect(prepareSessionForRepo(relocated(dir, ['/tmp/elsewhere.ts']), dir).filesTouched).toEqual(['README.md', 'src/limiter.ts']);
   });
 
-  it('keeps transcript files when there are some', () => {
+  it('combines the files the transcript shows edited with the files its commits changed (DECISIONS.md D62)', () => {
     const dir = gitRepo();
-    expect(prepareSessionForRepo(relocated(dir, [`${dir}/src/limiter.ts`]), dir).filesTouched).toEqual(['src/limiter.ts']);
+    expect(prepareSessionForRepo(relocated(dir, [`${dir}/src/limiter.ts`, `${dir}/src/uncommitted.ts`]), dir).filesTouched).toEqual(['README.md', 'src/limiter.ts', 'src/uncommitted.ts']);
+  });
+
+  it('counts files changed through shell commands, which the transcript does not list, through the commits', () => {
+    // A period that edited one file with an Edit tool and many through scripts, then committed them.
+    const dir = gitRepo();
+    const files = prepareSessionForRepo(relocated(dir, [`${dir}/src/limiter.ts`]), dir).filesTouched;
+    expect(files).toContain('README.md');
   });
 
   it('normalises subagent files the same way', () => {

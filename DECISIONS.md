@@ -793,3 +793,15 @@ Option A. The requirement that stakeholders read reports without repo access, pl
     - Without a terminal, `approve` needs `--yes`. Answering no in review stays on the summary, so it can be edited.
   - **Active sessions:** `sprintdigest summarize` warns for each session or period whose last activity is under `summarize.activeWarningHours` ago (default 2, 0 turns it off): "the session looks active and its follow-ups may go stale". It warns but doesn't block.
 - **Why:** the first real review pushed three summaries without tickets, and one summarised mid-session with follow-ups that were already done.
+
+## D62. Files touched: transcript edits plus the files the commits changed
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - A session's or period's `filesTouched` is now the union of two sources: the files its transcript shows edited, and the files changed by the commits made in its time window, kept to repo-relative paths (D29).
+  - Before, commits were used only when the transcript showed no files at all.
+- **Why:**
+  - The parsers see only edit tools (Edit, Write, apply_patch), and much real editing happens through shell commands.
+  - In `fe5d7843.p2`, which built Phases 4 and 5, only 3 files came from edit tools, while its 35 commits changed 85.
+  - The period split didn't lose files; the transcript never had them. Whole-session summaries had the same gap.
+- **Effect:** summaries made before this fix keep their old lists; re-summarise them to pick up the full one.
