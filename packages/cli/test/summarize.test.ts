@@ -126,6 +126,30 @@ describe('sprintdigest summarize', () => {
     });
   });
 
+  describe('a session that still looks active (DECISIONS.md D61)', () => {
+    const at = (iso: string) => () => new Date(iso);
+    const WARNING = /^c1a5e001  warning: last activity 59 minutes ago, so the session looks active and its follow-ups may go stale\. Summarise it again when the work is done\.$/m;
+
+    it('warns when the last activity was under 2 hours ago, before the estimate and the summary', async () => {
+      const { repo, env } = fixtureRepo();
+      expect((await run(['summarize', 'c1a5e001', '--estimate', '--repo', repo], env, { now: at('2026-03-02T10:00:00.000Z') })).stdout).toMatch(WARNING);
+      const done = await run(['summarize', 'c1a5e001', '--repo', repo], env, { now: at('2026-03-02T10:00:00.000Z'), llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+      expect(done.stdout).toMatch(WARNING);
+      expect(done.stdout).toMatch(/^c1a5e001 +summarised/m);
+    });
+
+    it('stays quiet for older sessions, and follows summarize.activeWarningHours (0 turns it off)', async () => {
+      const { repo, env } = fixtureRepo();
+      const later = at('2026-03-02T12:00:00.000Z');
+      expect((await run(['summarize', 'c1a5e001', '--estimate', '--repo', repo], env, { now: later })).stdout).not.toContain('warning');
+      mkdirSync(join(repo, '.digest'), { recursive: true });
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ summarize: { activeWarningHours: 4 } }));
+      expect((await run(['summarize', 'c1a5e001', '--estimate', '--repo', repo], env, { now: later })).stdout).toContain('looks active');
+      writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ summarize: { activeWarningHours: 0 } }));
+      expect((await run(['summarize', 'c1a5e001', '--estimate', '--repo', repo], env, { now: at('2026-03-02T09:01:00.000Z') })).stdout).not.toContain('warning');
+    });
+  });
+
   it('saves files relative to the repo root, even for a session launched in a subdirectory', async () => {
     const { repo, env } = fixtureRepo();
     await run(['summarize', 'c1a5e003', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });

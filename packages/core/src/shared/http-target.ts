@@ -1,8 +1,8 @@
 import type { UploadPayload } from './payload.js';
 import type { StoredDigest } from './digests.js';
-import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, RetractOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
 import type { TicketReport } from './ticket-report.js';
-import type { SummaryRef } from './tickets.js';
+import type { Sprint, SummaryRef } from './tickets.js';
 
 // The client side of `sprintdigest push` against a digest server (DECISIONS.md D43). The token travels only in the
 // Authorization header and never appears in errors.
@@ -45,6 +45,13 @@ export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof
       const params = new URLSearchParams({ repoId, ...filter });
       const [response, body] = await call(`/v1/tickets?${params}`);
       if (response.status === 200) return { status: 'ok', report: body as unknown as TicketReport };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
+    async sprints(repoId): Promise<SprintsOutcome> {
+      const [response, body] = await call(`/v1/sprints?${new URLSearchParams({ repoId })}`);
+      if (response.status === 200) return { status: 'ok', sprints: (body as unknown as { sprints: Sprint[] }).sprints };
       const no = refused(response, body);
       if (no) return no;
       throw unexpected(response, body);
