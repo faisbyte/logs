@@ -805,3 +805,17 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - In `fe5d7843.p2`, which built Phases 4 and 5, only 3 files came from edit tools, while its 35 commits changed 85.
   - The period split didn't lose files; the transcript never had them. Whole-session summaries had the same gap.
 - **Effect:** summaries made before this fix keep their old lists; re-summarise them to pick up the full one.
+
+## D63. Slack digests use Block Kit, with a plain-text fallback
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Blocks:**
+    - The title becomes a header block.
+    - Each ticket and section becomes a divider, then a header.
+    - Paragraphs and lists become mrkdwn sections, split under 3,000 characters.
+    - The coverage line becomes a context block.
+    - Headers are cut to 150 characters.
+  - **Fallback:** the message's `text` (the title and the overview, escaped) is what notifications show.
+  - **Limit:** past Slack's 50 blocks, the message falls back to D55's text-only mrkdwn.
+- **Why:** in mrkdwn, section titles and bold lead-ins looked the same, and the sections ran together.

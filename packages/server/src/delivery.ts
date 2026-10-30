@@ -61,6 +61,68 @@ export function toSlackMrkdwn(markdown: string): string {
   return text.length <= SLACK_LIMIT ? text : `${text.slice(0, SLACK_LIMIT - CUT.length).trimEnd()}${CUT}`;
 }
 
+type Block = Record<string, unknown>;
+export interface SlackPayload {
+  /** What notifications show; also the whole message when there are no blocks. */
+  text: string;
+  blocks?: Block[];
+}
+
+const MAX_BLOCKS = 50;
+const MAX_SECTION = 3_000;
+const MAX_HEADER = 150;
+const slackEscape = (text: string) => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+const slackInline = (text: string) => slackEscape(text).replace(/\*\*([^*]+)\*\*/g, '*$1*');
+const cut = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
+
+/** Splits text into pieces of at most `max` characters, at line ends, or spaces for very long lines. */
+function pieces(text: string, max: number): string[] {
+  const out: string[] = [];
+  let current = '';
+  for (const word of text.split(/(?<=\n)|(?<= )/)) {
+    if (current.length + word.length > max && current) {
+      out.push(current.trimEnd());
+      current = '';
+    }
+    current += word.length > max ? word.slice(0, max) : word;
+  }
+  if (current.trim()) out.push(current.trimEnd());
+  return out;
+}
+
+/**
+ * Block Kit for a digest (DECISIONS.md D63): a header per section after a divider, text and lists as mrkdwn
+ * sections, the coverage line as context. Past Slack's 50 blocks it falls back to the text-only message.
+ */
+export function toSlackPayload(markdown: string): SlackPayload {
+  const groups = markdown.split(/\n\s*\n/).map((g) => g.trim()).filter(Boolean);
+  const blocks: Block[] = [];
+  let title = '';
+  let first = '';
+  const header = (text: string) => ({ type: 'header', text: { type: 'plain_text', text: cut(text.replace(/\*\*/g, ''), MAX_HEADER), emoji: true } });
+  const section = (text: string) => pieces(text, MAX_SECTION).map((t) => ({ type: 'section', text: { type: 'mrkdwn', text: t } }));
+  for (const group of groups) {
+    const lines = group.split('\n');
+    const h1 = /^# (.*)$/.exec(group);
+    const h2 = /^#{2,6} (.*)$/.exec(group);
+    if (h1 && lines.length === 1) {
+      title ||= h1[1]!;
+      blocks.push(header(h1[1]!));
+    } else if (h2 && lines.length === 1) {
+      blocks.push({ type: 'divider' }, header(h2[1]!));
+    } else if (lines.every((l) => l.startsWith('- '))) {
+      blocks.push(...section(lines.map((l) => `• ${slackInline(l.slice(2))}`).join('\n')));
+    } else if (lines.length === 1 && /^_.+_$/.test(group)) {
+      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: cut(slackEscape(group), MAX_SECTION) }] });
+    } else {
+      first ||= group;
+      blocks.push(...section(slackInline(group)));
+    }
+  }
+  if (blocks.length > MAX_BLOCKS) return { text: toSlackMrkdwn(markdown) };
+  return { text: cut(slackEscape([title, first].filter(Boolean).join('\n')), MAX_SECTION), blocks };
+}
+
 export class SlackWebhookDelivery implements Delivery {
   readonly channel = 'slack';
   readonly #url: string;
@@ -74,7 +136,7 @@ export class SlackWebhookDelivery implements Delivery {
   async send(message: DeliveryMessage): Promise<void> {
     let response: Response;
     try {
-      response = await this.#fetch(this.#url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: toSlackMrkdwn(message.markdown) }) });
+      response = await this.#fetch(this.#url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(toSlackPayload(message.markdown)) });
     } catch {
       throw new DeliveryError('slack: could not reach Slack.');
     }

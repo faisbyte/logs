@@ -1,7 +1,7 @@
 import { defaultRepoSettings } from '@digest/core';
 import nodemailer from 'nodemailer';
 import { describe, expect, it } from 'vitest';
-import { deliveriesFor, markdownToHtml, plainText, SlackWebhookDelivery, SmtpDelivery, toSlackMrkdwn } from '../src/delivery.js';
+import { deliveriesFor, markdownToHtml, plainText, SlackWebhookDelivery, SmtpDelivery, toSlackMrkdwn, toSlackPayload } from '../src/delivery.js';
 
 // Delivering a digest (DECISIONS.md D55): Slack incoming webhook and SMTP. Webhook URLs and SMTP passwords are
 // secrets: they live in the server's environment and never appear in errors or logs.
@@ -58,13 +58,41 @@ describe('rendering', () => {
   });
 });
 
+describe('toSlackPayload (Block Kit, DECISIONS.md D63)', () => {
+  it('gives each section a header block after a divider, text as mrkdwn sections, and the coverage line as context', () => {
+    expect(toSlackPayload(markdown)).toEqual({
+      text: 'AI work update: Sprint 1 (2026-03-02 to 2026-03-15)\nLogin is safer &lt;script&gt;alert(1)&lt;/script&gt; now.',
+      blocks: [
+        { type: 'header', text: { type: 'plain_text', text: 'AI work update: Sprint 1 (2026-03-02 to 2026-03-15)', emoji: true } },
+        { type: 'section', text: { type: 'mrkdwn', text: 'Login is safer &lt;script&gt;alert(1)&lt;/script&gt; now.' } },
+        { type: 'divider' },
+        { type: 'header', text: { type: 'plain_text', text: 'PROJ-142: Rate limit login', emoji: true } },
+        { type: 'section', text: { type: 'mrkdwn', text: '*AI involvement: heavy.* The AI wrote most of it.' } },
+        { type: 'section', text: { type: 'mrkdwn', text: '• Keep the limiter in memory.' } },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: '_Based on 3 summaries that 2 developers chose to share._' }] },
+      ],
+    });
+  });
+
+  it('keeps headers under 150 characters and sections under 3,000', () => {
+    const long = toSlackPayload(`# ${'T'.repeat(200)}\n\n${'word '.repeat(1_000)}\n`);
+    expect((long.blocks![0] as { text: { text: string } }).text.text.length).toBeLessThanOrEqual(150);
+    for (const b of long.blocks!.slice(1)) expect((b as { text: { text: string } }).text.text.length).toBeLessThanOrEqual(3_000);
+  });
+
+  it("falls back to a text-only message past Slack's 50-block limit", () => {
+    const many = ['# Big', '', ...Array.from({ length: 30 }, (_, i) => `## Ticket ${i}\n\nDone.\n`)].join('\n');
+    expect(toSlackPayload(many)).toEqual({ text: toSlackMrkdwn(many) });
+  });
+});
+
 describe('SlackWebhookDelivery', () => {
   it('posts the mrkdwn text to the webhook', async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fetchImpl = (async (url: string, init: RequestInit) => (calls.push({ url, init }), new Response('ok', { status: 200 }))) as typeof fetch;
     await new SlackWebhookDelivery(fakeHook, fetchImpl).send(message);
     expect(calls[0]!.url).toBe(fakeHook);
-    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ text: toSlackMrkdwn(markdown) });
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual(toSlackPayload(markdown));
   });
 
   it('fails clearly without ever showing the webhook URL', async () => {
