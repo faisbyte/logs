@@ -23,16 +23,17 @@ export function repoFiles(session: Pick<ParsedSession, 'filesTouched' | 'cwd'>, 
 }
 
 /**
- * The session as it relates to `repoRoot`: commits made during it, and repo-relative files touched,
- * falling back to the files those commits changed when the transcript shows none.
+ * The session as it relates to `repoRoot`: commits made during it, and repo-relative files touched. Those are the
+ * files the transcript shows edited plus the files its commits changed: edits made through shell commands only
+ * show up in the commits (DECISIONS.md D62).
  */
 export function prepareSessionForRepo(session: ParsedSession, repoRoot: string): ParsedSession {
   const commitShas = commitsDuring(repoRoot, session);
-  const files = repoFiles(session, repoRoot);
+  const files = [...new Set([...repoFiles(session, repoRoot), ...filesInCommits(repoRoot, commitShas)])].sort();
   return {
     ...session,
     commitShas,
-    filesTouched: files.length || !commitShas.length ? files : filesInCommits(repoRoot, commitShas),
+    filesTouched: files,
     subagents: session.subagents.map((a) => ({ ...a, filesTouched: repoFiles({ filesTouched: a.filesTouched, cwd: session.cwd }, repoRoot) })),
   };
 }
