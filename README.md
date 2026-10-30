@@ -32,7 +32,7 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 |---|---|
 | `digest list` (`--json`) | Show this repo's Claude Code and Codex sessions: time, turns, tools, files, commits, branch, status |
 | `digest redact <sessionId>` | Redact a session and print counts per placeholder type (never the values); honours `.digest/config.json` |
-| `digest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation) |
+| `digest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation, `--by-period` writes one draft per work period) |
 | `digest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
 | `digest review --list` | List every summary with its status (draft, approved, rejected, edited) |
 | `digest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |

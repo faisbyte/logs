@@ -723,3 +723,24 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - A single developer can't show coverage across people.
   - The repo has only one Claude Code session (the long build session), so ticket sections draw on one summary.
 - **Still outstanding:** a real test with several developers on a team repo, over a normal sprint. Until then, the "Done when" counts as met for one developer only.
+
+## D58. `digest summarize --by-period`: one summary per work period, as a flag
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Splitting:** with `--by-period`, a session is cut into its work periods at the summariser's 6-hour gap (D28).
+  - **Each period is summarised as a session of its own,** with:
+    - the id `<session id>.p<n>` (shown as `fe5d7843.p2`), which ties it back to the session;
+    - its own start and end (the first period keeps the session's start), turns, tool calls, files, and the commits made in its own time window;
+    - the subagents its Task calls name;
+    - its own draft, review, approval and push.
+  - **Sprints:** a session that crosses a sprint boundary has each period counted in the sprint it happened in (tested).
+  - **State:** `.digest/state.json` still tracks the whole session.
+- **It's a flag, not the default.** Whether to make it the default will be decided after the developer's own review of the dogfood sprint (D57).
+- **Alternatives:**
+  - One summary tagged with every ticket, which repeats one story under each ticket.
+  - One umbrella ticket.
+- **Limits:**
+  - `gitBranches` is the session's, not each period's.
+  - A subagent with no matching Task call goes to the first period.
+  - A session already summarised whole and then by period has both drafts. Reject the one you don't want.
