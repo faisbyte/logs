@@ -712,3 +712,14 @@ Option A. The requirement that stakeholders read reports without repo access, pl
 - **Why:**
   - The deterministic checks (D50) can't see invented outcomes; a reader can.
   - Keeping it opt-in keeps CI free of API calls and cost.
+
+## D57. Phase 7's "Done when" is met with a single-developer dogfood sprint first
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - There is no team repo yet, so the first real test of the digest uses this repo (`logs`). There is one developer, and the sprint covers the days the project was built (Sprint 1, 2026-10-28 up to 2026-10-31).
+  - The developer reviews, edits, tags and approves the summaries themselves before anything is pushed. The digest is then shown to a non-technical reader using `docs/po-feedback-checklist.md`.
+- **Limits:**
+  - A single developer can't show coverage across people.
+  - The repo has only one Claude Code session (the long build session), so ticket sections draw on one summary.
+- **Still outstanding:** a real test with several developers on a team repo, over a normal sprint. Until then, the "Done when" counts as met for one developer only.
