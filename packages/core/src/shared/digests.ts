@@ -6,7 +6,8 @@ import { assertDeliverable } from '../digest/generate.js';
 
 export type DigestKind = 'report' | 'scheduled';
 /** report: ready on demand; scheduled: preview (developers only), then sent. */
-export type DigestStatus = 'ready' | 'preview' | 'sent';
+/** withdrawn: sent, then a summary it included was retracted (D60); kept, never shown to readers. */
+export type DigestStatus = 'ready' | 'preview' | 'sent' | 'withdrawn';
 
 export interface NewDigest {
   repoId: string;
@@ -27,10 +28,13 @@ export interface NewDigest {
   /** When a scheduled digest in preview may be sent. */
   previewUntil: string | null;
   createdAt: string;
+  /** The summaries it was written from ("agent/sessionId"), so a retraction can withdraw it (D60). */
+  summaryKeys?: string[];
 }
 
 export interface StoredDigest extends NewDigest {
   id: string;
+  summaryKeys: string[];
   /** Channel → when it was delivered there. */
   deliveries: Record<string, string>;
   sentAt: string | null;

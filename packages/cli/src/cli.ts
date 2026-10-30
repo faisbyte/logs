@@ -6,6 +6,7 @@ import { initCommand } from './init.js';
 import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
 import { previewCommand, reportCommand } from './report.js';
+import { retractCommand } from './retract.js';
 import { linkCommand, ticketsCommand } from './tickets.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
@@ -150,6 +151,13 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .option('--sprint <name>', 'one sprint by name instead of a date range')
     .option(...repoOption)
     .action((options: { from?: string; to?: string; sprint?: string; repo?: string }) => guarded('tickets', () => ticketsCommand(options, ctx)));
+
+  program
+    .command('retract')
+    .argument('<sessionId>', 'session id or a unique prefix of it (see sprintdigest review --list)')
+    .description('Withdraw a summary you pushed from the shared store; it becomes a draft again here')
+    .option(...repoOption)
+    .action((sessionId: string, options: { repo?: string }) => guarded('retract', () => retractCommand(sessionId, options, ctx)));
 
   program
     .command('report')

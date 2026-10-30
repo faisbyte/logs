@@ -22,7 +22,7 @@ describe.skipIf(!url)('real Postgres', () => {
   });
   afterAll(() => pool?.end());
   const fresh = async () => {
-    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings');
+    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions');
     return new PostgresSummaryStore(pool);
   };
   summaryStoreContract('PostgresSummaryStore (node-postgres)', fresh);

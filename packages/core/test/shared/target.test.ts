@@ -26,4 +26,13 @@ describe('localPushTarget: ticket links and the tickets view behind the token', 
     expect(await other.unlink(REPO, ref, 'OPS-7')).toMatchObject({ status: 'forbidden' });
     expect(await other.tickets(REPO, { sprint: 'S1' })).toMatchObject({ status: 'forbidden' });
   });
+
+  it('retracts as the identity the token belongs to (DECISIONS.md D60)', async () => {
+    const store = new InMemorySummaryStore();
+    const target = localPushTarget(store, (await store.issueToken(alice)).token);
+    await target.push(REPO, payloadFor());
+    expect(await target.retract(REPO, ref)).toMatchObject({ status: 'retracted' });
+    const reader = localPushTarget(store, (await store.issueToken(alice, 'reader')).token);
+    expect(await reader.retract(REPO, ref)).toMatchObject({ status: 'forbidden' });
+  });
 });

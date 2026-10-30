@@ -765,3 +765,21 @@ Option A. The requirement that stakeholders read reports without repo access, pl
     - GitHub repo names.
   - These registry checks see package names, not every binary a package ships; that's exactly how `digest` slipped through.
 - **Alternatives:** `agentdigest` (one GitHub repo uses it), `sprintlog` (31 repos; reads as plain logging).
+
+## D60. Developers can retract their own pushed summaries (moved forward from Phase 10)
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Command:** `sprintdigest retract <id>` calls `POST /v1/retractions`.
+    - Developer tokens only, and only the developer who pushed the summary: anyone else gets 403.
+    - Retracting twice answers "already".
+  - **On the server:**
+    - The summary row is kept and marked `retracted_at`. A `retractions` table keeps the history: who, when, and the payload hash.
+    - Retracted summaries leave every list, ticket view, team report and digest input, so readers never see them.
+    - Stored digests record the summaries they were written from (`summary_keys`, migration 6). On retraction:
+      - cached reports and unsent scheduled digests that included it are deleted, so the next request writes them again;
+      - digests already sent are kept but marked `withdrawn`, which hides them from readers.
+  - **Locally:** the summary goes back to draft (approval and `pushedAt` cleared), so it can be edited, re-summarised by id, approved and pushed again.
+  - **Re-pushing:** a new push of a retracted session from the same developer replaces the stored summary. Another developer's push is still a conflict.
+- **Why:** pushed summaries are immutable (D40), so a stale or wrong one needs a way out that its author controls. The first real review needed it.
+- **Not yet:** deleting retracted content entirely (Phase 10's delete-my-data).

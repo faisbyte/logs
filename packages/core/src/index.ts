@@ -43,6 +43,8 @@ export { ensureDigestDir } from './digest-dir.js';
 export { normalizeRemoteUrl, repoIdentity } from './shared/repo-id.js';
 export {
   decidePush,
+  decideRetract,
+  digestSummaryKey,
   hashToken,
   matchesQuery,
   newToken,
@@ -54,6 +56,8 @@ export {
   READER_REFUSAL,
   type Role,
   type PushResult,
+  type Retraction,
+  type RetractResult,
   type ReceiveResult,
   type StoredSummary,
   type SummaryQuery,
@@ -79,11 +83,11 @@ export {
   type TrackerTicket,
   type UnlinkResult,
 } from './shared/tickets.js';
-export { groupByTicket, linksOf, ticketReport, type SprintGroup, type TicketGroup, type TicketReport, type TicketReportFilter } from './shared/ticket-report.js';
+export { groupByTicket, linksOf, reportSummaryKeys, ticketReport, type SprintGroup, type TicketGroup, type TicketReport, type TicketReportFilter } from './shared/ticket-report.js';
 export { FakeTracker, refreshTracker, type Tracker } from './shared/tracker.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
-export { localPushTarget, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
+export { localPushTarget, type RetractOutcome, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
 export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type DigestPeriod, type DigestTicket, type DigestWork } from './digest/input.js';
 export { assertDeliverable, checkDigest, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';

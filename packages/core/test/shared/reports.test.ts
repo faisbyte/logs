@@ -77,4 +77,16 @@ describe('onDemandReport', () => {
     expect(periodKey(range)).toBe('range:2026-03-01T00:00:00.000Z/2026-04-01T00:00:00.000Z');
     expect(monthStart(new Date('2026-03-31T23:59:59.000Z'))).toBe('2026-03-01T00:00:00.000Z');
   });
+
+  it('records which summaries a report used, so retracting one invalidates the cached report (DECISIONS.md D60)', async () => {
+    const { store, llm, deps } = await setup([JSON.stringify(output), JSON.stringify({ ...output, tickets: [] })]);
+    await store.push(alice, payloadFor({ sessionId: 'other', ticketRefs: [], branch: 'main', goal: 'Tidy logs.' }));
+    const first = await onDemandReport(deps, REPO, range);
+    expect((first as { digest: { summaryKeys: string[] } }).digest.summaryKeys.sort()).toEqual([`claude-code/${payloadFor().sessionId}`, 'claude-code/other'].sort());
+    await store.retract(alice, { agent: 'claude-code', sessionId: payloadFor().sessionId });
+    const again = await onDemandReport(deps, REPO, range);
+    expect(again).toMatchObject({ status: 'ok', cached: false, digest: { summaryCount: 1, summaryKeys: ['claude-code/other'] } });
+    expect(llm.requests).toHaveLength(2);
+    expect(await store.getDigest(REPO, (first as { digest: { id: string } }).digest.id)).toBeNull();
+  });
 });

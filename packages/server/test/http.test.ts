@@ -226,4 +226,19 @@ describe('digest server HTTP API', () => {
       expect((await keyless.call('/v1/reports', { method: 'POST', token: keyless.token, body: { repoId: REPO, from: '2026-03-01' } })).status).toBe(400);
     });
   });
+
+  it('retracts a pushed summary for its developer only: 200, then already; 403 for another developer or a reader; 404 if unknown (DECISIONS.md D60)', async () => {
+    const { store, push, call, token, bobToken } = await start();
+    await push(payloadFor());
+    const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+    const retract = (as: string, sessionId = payloadFor().sessionId) => call('/v1/retractions', { method: 'POST', token: as, body: { repoId: REPO, agent: 'claude-code', sessionId } });
+    expect((await retract(bobToken)).status).toBe(403);
+    expect((await retract(reader)).status).toBe(403);
+    expect((await retract(token, 'unknown')).status).toBe(404);
+    const done = await retract(token);
+    expect(done.status).toBe(200);
+    expect(await done.json()).toMatchObject({ status: 'retracted', retractedAt: expect.any(String) });
+    expect(await (await retract(token)).json()).toMatchObject({ status: 'already' });
+    expect((await (await call(`/v1/summaries?repoId=${encodeURIComponent(REPO)}`, { token })).json()).summaries).toEqual([]);
+  });
 });

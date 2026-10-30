@@ -1,5 +1,5 @@
 import type { UploadPayload } from './payload.js';
-import { READER_REFUSAL, receivePush, type PushIdentity } from './store.js';
+import { READER_REFUSAL, receivePush, type PushIdentity, type RetractResult } from './store.js';
 import { ticketReport, type TicketReport, type TicketReportFilter } from './ticket-report.js';
 import type { StoredDigest } from './digests.js';
 import type { LinkResult, SharedStore, SummaryRef, UnlinkResult } from './tickets.js';
@@ -16,6 +16,7 @@ type Refused = { status: 'unauthorized' | 'forbidden'; reason: string };
 export type LinkOutcome = LinkResult | Refused;
 export type UnlinkOutcome = UnlinkResult | Refused;
 export type TicketsOutcome = { status: 'ok'; report: TicketReport } | Refused;
+export type RetractOutcome = RetractResult | Refused;
 export type PreviewsOutcome = { status: 'ok'; digests: StoredDigest[] } | Refused;
 
 export interface PushTarget {
@@ -25,6 +26,8 @@ export interface PushTarget {
   unlink(repoId: string, ref: SummaryRef, ticket: string): Promise<UnlinkOutcome>;
   /** Summaries grouped by sprint, then ticket (D46). */
   tickets(repoId: string, filter: TicketReportFilter): Promise<TicketsOutcome>;
+  /** Withdraw a pushed summary; only the developer who pushed it can (D60). */
+  retract(repoId: string, ref: SummaryRef): Promise<RetractOutcome>;
   /** Scheduled digests waiting in developer preview, with their text (D54). */
   previews(repoId: string): Promise<PreviewsOutcome>;
 }
@@ -52,6 +55,10 @@ export function localPushTarget(store: SharedStore, token: string): PushTarget {
     async tickets(repoId, filter) {
       const identity = await as(repoId);
       return refused(identity) ? identity : { status: 'ok', report: await ticketReport(store, repoId, filter) };
+    },
+    async retract(repoId, ref) {
+      const identity = await as(repoId);
+      return refused(identity) ? identity : store.retract(identity, ref);
     },
     async previews(repoId) {
       const identity = await as(repoId);

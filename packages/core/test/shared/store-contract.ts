@@ -1,7 +1,7 @@
 import { inspect } from 'node:util';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { approve, uploadPayload } from '../../src/review/approval.js';
-import type { SummaryStore, TokenStore } from '../../src/shared/store.js';
+import type { SharedStore } from '../../src/shared/tickets.js';
 import type { SessionSummary } from '../../src/summarize/schema.js';
 import { draftSummary } from '../review/helpers.js';
 
@@ -13,9 +13,9 @@ export const payloadFor = (overrides: Partial<SessionSummary> = {}) => uploadPay
 const alice = { repoId: REPO, developerId: 'alice', developerName: 'Alice' };
 const bob = { repoId: REPO, developerId: 'bob', developerName: 'Bob' };
 
-export function summaryStoreContract(name: string, make: () => Promise<SummaryStore & TokenStore> | (SummaryStore & TokenStore)) {
+export function summaryStoreContract(name: string, make: () => Promise<SharedStore> | SharedStore) {
   describe(`${name}: SummaryStore contract`, () => {
-    let store: SummaryStore & TokenStore;
+    let store: SharedStore;
     beforeEach(async () => {
       store = await make();
     });
@@ -110,6 +110,50 @@ export function summaryStoreContract(name: string, make: () => Promise<SummarySt
 
       it('reports zero coverage for an empty range', async () => {
         expect(await store.teamReport({ repoId: REPO, from: '2020-01-01T00:00:00.000Z', to: '2020-02-01T00:00:00.000Z' })).toMatchObject({ summaryCount: 0, developerCount: 0, summaries: [] });
+      });
+    });
+
+    describe('retract (DECISIONS.md D60)', () => {
+      const ref = { agent: 'claude-code', sessionId: payloadFor().sessionId } as const;
+      const key = `claude-code/${payloadFor().sessionId}`;
+
+      it('lets the developer who pushed a summary retract it: it leaves every list and report, and the record and time are kept', async () => {
+        await store.push(alice, payloadFor());
+        const result = await store.retract(alice, ref);
+        expect(result).toEqual({ status: 'retracted', retractedAt: expect.any(String) });
+        expect(await store.list({ repoId: REPO })).toEqual([]);
+        expect(await store.teamReport({ repoId: REPO, from: '2026-01-01T00:00:00.000Z', to: '2027-01-01T00:00:00.000Z' })).toMatchObject({ summaryCount: 0 });
+        expect(await store.retractions(REPO)).toEqual([{ repoId: REPO, ...ref, developerId: 'alice', payloadHash: expect.stringMatching(/^[0-9a-f]{64}$/), retractedAt: (result as { retractedAt: string }).retractedAt }]);
+        expect(await store.retract(alice, ref)).toEqual({ status: 'already', retractedAt: (result as { retractedAt: string }).retractedAt });
+      });
+
+      it("refuses another developer's token and an unknown session", async () => {
+        await store.push(alice, payloadFor());
+        expect(await store.retract(bob, ref)).toMatchObject({ status: 'forbidden', reason: expect.stringMatching(/only the developer who pushed/) });
+        expect(await store.retract(alice, { ...ref, sessionId: 'unknown' })).toMatchObject({ status: 'not-found' });
+        expect(await store.list({ repoId: REPO })).toHaveLength(1);
+      });
+
+      it('takes a new push of a retracted session from its developer, replacing it', async () => {
+        await store.push(alice, payloadFor());
+        await store.retract(alice, ref);
+        expect(await store.push(bob, payloadFor({ goal: 'Taken over.' }))).toMatchObject({ status: 'conflict' });
+        expect(await store.push(alice, payloadFor({ goal: 'Corrected.' }))).toMatchObject({ status: 'created' });
+        expect((await store.list({ repoId: REPO })).map((s) => [s.summary.goal, s.retractedAt])).toEqual([['Corrected.', null]]);
+        expect(await store.retractions(REPO)).toHaveLength(1);
+      });
+
+      it('withdraws digests that included it: cached reports and unsent digests go, sent ones are kept but withdrawn', async () => {
+        await store.push(alice, payloadFor());
+        const base = { repoId: REPO, periodLabel: 'p', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v1', model: 'm', markdown: '# p\n', summaryCount: 1, developerCount: 1, costUsd: 0, previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z' };
+        const cached = await store.saveDigest({ ...base, kind: 'report', periodKey: 'sprint:Sprint 1', status: 'ready', summaryKeys: [key] });
+        await store.saveDigest({ ...base, kind: 'scheduled', periodKey: 'week:1', status: 'preview', summaryKeys: [key] });
+        const sent = await store.saveDigest({ ...base, kind: 'scheduled', periodKey: 'week:2', status: 'sent', summaryKeys: [key] });
+        const other = await store.saveDigest({ ...base, kind: 'report', periodKey: 'sprint:Sprint 2', status: 'ready', summaryKeys: ['claude-code/other'] });
+        await store.retract(alice, ref);
+        expect((await store.digests(REPO)).map((d) => [d.id, d.status]).sort()).toEqual([[other.id, 'ready'], [sent.id, 'withdrawn']].sort());
+        expect(await store.findReport(REPO, { periodKey: 'sprint:Sprint 1', inputHash: 'h', promptVersion: 'digest-v1', model: 'm' })).toBeNull();
+        expect(await store.getDigest(REPO, cached.id)).toBeNull();
       });
     });
 

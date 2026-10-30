@@ -78,4 +78,17 @@ describe('httpPushTarget', () => {
       await expect(stub(400, { error: 'pass from and to, or sprint' }).target.tickets('r/x', { sprint: 'S' })).rejects.toThrow(/answered 400: pass from and to, or sprint/);
     });
   });
+
+  it.each([
+    [200, { status: 'retracted', retractedAt: '2026-10-30T12:00:00.000Z' }, { status: 'retracted', retractedAt: '2026-10-30T12:00:00.000Z' }],
+    [200, { status: 'already', retractedAt: '2026-10-30T12:00:00.000Z' }, { status: 'already', retractedAt: '2026-10-30T12:00:00.000Z' }],
+    [403, { status: 'forbidden', reason: 'only the developer who pushed a summary can retract it' }, { status: 'forbidden', reason: 'only the developer who pushed a summary can retract it' }],
+    [404, { status: 'not-found', reason: 'no pushed summary' }, { status: 'not-found', reason: 'no pushed summary' }],
+    [401, { error: 'unknown or revoked token' }, { status: 'unauthorized', reason: 'unknown or revoked token' }],
+  ])('maps HTTP %i on a retraction (DECISIONS.md D60)', async (status, body, expected) => {
+    const { calls, target } = stub(status, body);
+    expect(await target.retract('github.com/acme/webapp', { agent: 'claude-code', sessionId: 'c1a5e001' })).toEqual(expected);
+    expect(calls[0]!.url).toBe('https://digest.example.com/v1/retractions');
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp', agent: 'claude-code', sessionId: 'c1a5e001' });
+  });
 });

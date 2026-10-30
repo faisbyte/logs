@@ -1,6 +1,6 @@
 import type { UploadPayload } from './payload.js';
 import type { StoredDigest } from './digests.js';
-import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, RetractOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
 import type { TicketReport } from './ticket-report.js';
 import type { SummaryRef } from './tickets.js';
 
@@ -45,6 +45,15 @@ export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof
       const params = new URLSearchParams({ repoId, ...filter });
       const [response, body] = await call(`/v1/tickets?${params}`);
       if (response.status === 200) return { status: 'ok', report: body as unknown as TicketReport };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
+    async retract(repoId, ref): Promise<RetractOutcome> {
+      const [response, body] = await call('/v1/retractions', { method: 'POST', body: { repoId, agent: ref.agent, sessionId: ref.sessionId } });
+      const b = body as Body & { retractedAt?: string };
+      if ((b.status === 'retracted' || b.status === 'already') && b.retractedAt) return { status: b.status, retractedAt: b.retractedAt };
+      if ((b.status === 'not-found' || b.status === 'forbidden') && b.reason) return { status: b.status, reason: b.reason };
       const no = refused(response, body);
       if (no) return no;
       throw unexpected(response, body);

@@ -5,6 +5,8 @@ import {
   decideLink,
   defaultRepoSettings,
   decidePush,
+  decideRetract,
+  digestSummaryKey,
   decideSprint,
   decideUnlink,
   hashToken,
@@ -19,6 +21,8 @@ import {
   type NewDigest,
   type RepoSettings,
   type ReportKey,
+  type Retraction,
+  type RetractResult,
   type StoredDigest,
   type ManualTicketLink,
   type Identity,
@@ -141,6 +145,20 @@ const MIGRATIONS: string[][] = [
     'create index llm_spend_repo_at on llm_spend (repo_id, at)',
     'create table repo_settings (repo_id text primary key, settings jsonb not null)',
   ],
+  [
+    // Retraction by the pusher (DECISIONS.md D60): its history, and which digests a summary went into.
+    `create table retractions (
+      repo_id text not null,
+      agent text not null,
+      session_id text not null,
+      developer_id text not null,
+      payload_hash text not null,
+      retracted_at timestamptz not null
+    )`,
+    "alter table digests add column summary_keys jsonb not null default '[]'",
+    'alter table digests drop constraint digests_status_check',
+    "alter table digests add constraint digests_status_check check (status in ('ready', 'preview', 'sent', 'withdrawn'))",
+  ],
 ];
 
 /**
@@ -208,6 +226,7 @@ interface DigestRow {
   created_at: Date | string;
   deliveries: Record<string, string> | string;
   sent_at: Date | string | null;
+  summary_keys: string[] | string;
 }
 
 const isoOrNull = (value: Date | string | null) => (value === null ? null : iso(value));
@@ -231,6 +250,7 @@ const toDigest = (r: DigestRow): StoredDigest => ({
   id: r.id,
   deliveries: typeof r.deliveries === 'string' ? JSON.parse(r.deliveries) : r.deliveries,
   sentAt: isoOrNull(r.sent_at),
+  summaryKeys: typeof r.summary_keys === 'string' ? JSON.parse(r.summary_keys) : r.summary_keys,
 });
 
 export class PostgresSummaryStore implements SharedStore, DigestStore {
@@ -253,6 +273,14 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const decision = decidePush(identity, payload, () => existing, this.#now());
     if (decision.status !== 'create') return decision;
     const s = decision.stored;
+    if (decision.replaces) {
+      const { rows } = await this.#sql.query(
+        `update summaries set developer_name = $4, pushed_at = $5, payload_hash = $6, branch = $7, started_at = $8, ended_at = $9, payload = $10::jsonb, retracted_at = null
+         where repo_id = $1 and agent = $2 and session_id = $3 and developer_id = $11 and retracted_at is not null returning session_id`,
+        [s.repoId, s.summary.agent, s.summary.sessionId, s.developerName, s.pushedAt, s.payloadHash, s.summary.branch, s.summary.startedAt, s.summary.endedAt, JSON.stringify(s.summary), s.developerId],
+      );
+      return rows.length ? { status: 'created', stored: s } : { status: 'conflict', reason: 'concurrent push; try again' };
+    }
     const { rows } = await this.#sql.query(
       `insert into summaries (repo_id, agent, session_id, developer_id, developer_name, pushed_at, payload_hash, branch, started_at, ended_at, payload)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
@@ -264,6 +292,38 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const winner = await this.#find(s.repoId, s.summary.agent, s.summary.sessionId);
     const again = decidePush(identity, payload, () => winner, this.#now());
     return again.status === 'create' ? { status: 'conflict', reason: 'concurrent push; try again' } : again;
+  }
+
+  async retract(identity: PushIdentity, ref: { agent: StoredSummary['summary']['agent']; sessionId: string }): Promise<RetractResult> {
+    const stored = await this.#find(identity.repoId, ref.agent, ref.sessionId);
+    const decision = decideRetract(identity, stored);
+    if (decision.status !== 'retract') return decision;
+    const retractedAt = this.#now().toISOString();
+    const { rows } = await this.#sql.query(
+      'update summaries set retracted_at = $5 where repo_id = $1 and agent = $2 and session_id = $3 and developer_id = $4 and retracted_at is null returning session_id',
+      [identity.repoId, ref.agent, ref.sessionId, identity.developerId, retractedAt],
+    );
+    if (!rows.length) return decideRetract(identity, await this.#find(identity.repoId, ref.agent, ref.sessionId)) as RetractResult;
+    await this.#sql.query('insert into retractions (repo_id, agent, session_id, developer_id, payload_hash, retracted_at) values ($1, $2, $3, $4, $5, $6)', [
+      identity.repoId,
+      ref.agent,
+      ref.sessionId,
+      identity.developerId,
+      stored!.payloadHash,
+      retractedAt,
+    ]);
+    const key = JSON.stringify([digestSummaryKey(ref)]);
+    await this.#sql.query("update digests set status = 'withdrawn' where repo_id = $1 and status = 'sent' and summary_keys @> $2::jsonb", [identity.repoId, key]);
+    await this.#sql.query("delete from digests where repo_id = $1 and status <> 'withdrawn' and summary_keys @> $2::jsonb", [identity.repoId, key]);
+    return { status: 'retracted', retractedAt };
+  }
+
+  async retractions(repoId: string): Promise<Retraction[]> {
+    const { rows } = await this.#sql.query<{ agent: Retraction['agent']; session_id: string; developer_id: string; payload_hash: string; retracted_at: Date | string }>(
+      'select agent, session_id, developer_id, payload_hash, retracted_at from retractions where repo_id = $1 order by retracted_at',
+      [repoId],
+    );
+    return rows.map((r) => ({ repoId, agent: r.agent, sessionId: r.session_id, developerId: r.developer_id, payloadHash: r.payload_hash, retractedAt: iso(r.retracted_at) }));
   }
 
   async list(q: SummaryQuery): Promise<StoredSummary[]> {
@@ -389,10 +449,10 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const d = digest;
     const { rows } = await this.#sql.query<DigestRow>(
       `insert into digests (id, repo_id, kind, period_key, period_label, period_from, period_to, input_hash, prompt_version, model,
-         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at, summary_keys)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb)
        on conflict do nothing returning *`,
-      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt],
+      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt, JSON.stringify(d.summaryKeys ?? [])],
     );
     if (rows[0]) return toDigest(rows[0]);
     // The scheduled period or cached report already exists: keep that one.
