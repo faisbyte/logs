@@ -19,6 +19,8 @@ import {
   redactSession,
   sessionKey,
   sessionTickets,
+  shortSessionId,
+  splitByPeriod,
   summarizeCached,
   summarizeSettings,
   writeState,
@@ -34,6 +36,8 @@ interface SummarizeOptions {
   all?: boolean;
   yes?: boolean;
   estimate?: boolean;
+  /** One summary per work period instead of one per session (DECISIONS.md D58). */
+  byPeriod?: boolean;
 }
 
 const tokens = (n: number) => n.toLocaleString('en-US');
@@ -62,7 +66,12 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
   }
 
   const idLength = shortIdLength(selected.map((s) => s.sourceSessionId));
-  const shortId = (s: ParsedSession) => s.sourceSessionId.slice(0, idLength);
+  // With --by-period each work period is summarised as a session of its own; state stays per session.
+  const origin = new Map<ParsedSession, ParsedSession>();
+  if (options.byPeriod) {
+    selected = selected.flatMap((session) => splitByPeriod(session).filter((p) => !isEmptySession(p)).map((p) => (origin.set(p, session), p)));
+  }
+  const shortId = (s: ParsedSession) => shortSessionId(s.sourceSessionId, idLength);
   const current = (s: ParsedSession) => readSummaryFile(summaryPath(repoRoot, { agent: s.agent, sessionId: s.sourceSessionId }));
   // Reviewed summaries are never regenerated; rejected ones only when asked for by id (DECISIONS.md D37).
   const held = selected.flatMap((session) => {
@@ -120,7 +129,8 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
   const done = { inputTokens: 0, outputTokens: 0, cost: 0 as number | null, summarised: 0, failed: 0 };
 
   for (const p of plan) {
-    const markDone = () => (state = markProcessed(state, sessionKey(p.session), fingerprintFile(p.session.sourcePath), new Date()));
+    const whole = origin.get(p.session) ?? p.session;
+    const markDone = () => (state = markProcessed(state, sessionKey(whole), fingerprintFile(whole.sourcePath), new Date()));
     if (p.cached) {
       tagTickets(p);
       ctx.stdout(`${p.id}  cached${autoApprove(p.session)}\n`);

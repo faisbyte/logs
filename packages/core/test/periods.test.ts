@@ -63,6 +63,11 @@ describe('splitByPeriod', () => {
     expect(p2).toMatchObject({ sourcePath: '/tmp/session.jsonl', gitBranch: 'main', cwd: '/work/acme-webapp' });
   });
 
+  it('starts the first period when the session started, even before its first transcript entry', () => {
+    const s = { ...twoPeriods(), startedAt: '2026-10-30T19:59:57.000Z' };
+    expect(splitByPeriod(s)[0]!.startedAt).toBe('2026-10-30T19:59:57.000Z');
+  });
+
   it('keeps a gap just under 6 hours in one period, and still names a single period p1', () => {
     const near = session([user('2026-10-30T08:00:00.000Z', 'a'), assistant('2026-10-30T09:00:00.000Z', 'b'), user('2026-10-30T14:59:00.000Z', 'c'), assistant('2026-10-30T15:00:00.000Z', 'd')]);
     expect(splitByPeriod(near).map((p) => [p.sourceSessionId, p.startedAt, p.endedAt])).toEqual([[`${ID}.p1`, '2026-10-30T08:00:00.000Z', '2026-10-30T15:00:00.000Z']]);

@@ -52,7 +52,7 @@ export function splitByPeriod(session: ParsedSession): ParsedSession[] {
     return {
       ...session,
       sourceSessionId: `${session.sourceSessionId}.p${i + 1}`,
-      startedAt: new Date(Math.min(...times)).toISOString(),
+      startedAt: i === 0 ? session.startedAt : new Date(Math.min(...times)).toISOString(),
       endedAt: new Date(Math.max(...times)).toISOString(),
       turnCount: transcript.filter((e) => e.kind === 'user').length,
       toolCallCount: tools.length + subagents[i]!.reduce((n, a) => n + a.toolCallCount, 0),

@@ -1,4 +1,4 @@
-import { listSummaries, repoIdentity, saveSummary, uploadPayload, verifyApproval, type SessionSummary } from '@digest/core';
+import { listSummaries, repoIdentity, saveSummary, shortSessionId, uploadPayload, verifyApproval, type SessionSummary } from '@digest/core';
 import type { CliContext } from './cli.js';
 import { resolvePushTarget } from './share.js';
 import { writableRepoRoot } from './sessions.js';
@@ -22,7 +22,7 @@ export async function pushCommand(options: { repo?: string }, ctx: CliContext): 
   const reviewNote = drafts ? ` ${plural(drafts, 'draft')} still ${drafts === 1 ? 'needs' : 'need'} review; rejected summaries are never pushed.` : '';
   if (waiting.length === 0) return (ctx.stdout(`Nothing to push: no approved summaries waiting.${reviewNote}\n`), 0);
 
-  const short = (s: SessionSummary) => s.sessionId.slice(0, 8);
+  const short = (s: SessionSummary) => shortSessionId(s.sessionId);
   let pushed = 0;
   let failed = 0;
   for (const summary of waiting) {

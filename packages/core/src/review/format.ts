@@ -1,3 +1,4 @@
+import { shortSessionId } from '../periods.js';
 import type { SessionSummary } from '../summarize/schema.js';
 import { SHARED_FIELDS } from './approval.js';
 
@@ -49,7 +50,7 @@ export function formatSummary(s: SessionSummary, { timeZone }: { timeZone?: stri
   return [
     SHARED_HEADER,
     '',
-    `${s.sessionId.slice(0, 8)}  ${s.agent}  ${s.branch ?? 'no branch'}  ${span}  ${statusText(s, timeZone)}`,
+    `${shortSessionId(s.sessionId)}  ${s.agent}  ${s.branch ?? 'no branch'}  ${span}  ${statusText(s, timeZone)}`,
     '',
     `Goal: ${s.goal}`,
     `Outcome: ${s.outcome}  ·  AI involvement: ${s.aiInvolvement}`,

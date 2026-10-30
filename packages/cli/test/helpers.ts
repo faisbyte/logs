@@ -29,6 +29,6 @@ export function fixtureRepo() {
 
 export const reply = (request: LlmRequest) =>
   request.system.startsWith('You are merging')
-    ? JSON.stringify({ goal: 'g', outcome: 'completed', whatWasDone: 'w', aiInvolvement: 'moderate' })
+    ? JSON.stringify({ goal: 'g', whatWasDone: 'w', aiInvolvement: 'moderate', decisionIds: [], rejectedApproachIds: [], followUpIds: [] })
     : JSON.stringify(llmSummary());
 
