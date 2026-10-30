@@ -121,6 +121,6 @@ export function deliveriesFor(
     if (!env.SMTP_URL || !env.DIGEST_EMAIL_FROM) problems.push('email: set SMTP_URL and DIGEST_EMAIL_FROM on the server');
     else deliveries.push(new SmtpDelivery(deps.transport ?? nodemailer.createTransport(env.SMTP_URL), env.DIGEST_EMAIL_FROM, settings.emailTo));
   }
-  if (!settings.slackWebhookEnv && !settings.emailTo.length) problems.push('no delivery is set up: use digest-server repo --slack-env or --email');
+  if (!settings.slackWebhookEnv && !settings.emailTo.length) problems.push('no delivery is set up: use sprintdigest-server repo --slack-env or --email');
   return { deliveries, problems };
 }

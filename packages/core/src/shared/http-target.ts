@@ -4,7 +4,7 @@ import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, TicketsOutc
 import type { TicketReport } from './ticket-report.js';
 import type { SummaryRef } from './tickets.js';
 
-// The client side of `digest push` against a digest server (DECISIONS.md D43). The token travels only in the
+// The client side of `sprintdigest push` against a digest server (DECISIONS.md D43). The token travels only in the
 // Authorization header and never appears in errors.
 
 const OUTCOMES: Record<number, PushOutcome['status']> = { 201: 'created', 200: 'unchanged', 409: 'conflict', 422: 'rejected', 401: 'unauthorized', 403: 'forbidden' };

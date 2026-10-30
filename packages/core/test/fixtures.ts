@@ -20,7 +20,7 @@ export const codex = {
   other: `${CODEX_SESSIONS}/2026/03/08/rollout-2026-03-08T13-00-00-019c0005-0000-7000-8000-000000000005.jsonl`,
 };
 
-/** Eval-only sessions, outside the discovered folders so they don't change what `digest list` finds. */
+/** Eval-only sessions, outside the discovered folders so they don't change what `sprintdigest list` finds. */
 export const evalOnly = {
   early: `${FIXTURES}eval/claude-code/c1a5e005-0000-4000-8000-000000000005.jsonl`,
 };

@@ -13,7 +13,7 @@ const envFile = (contents: string) => {
 describe('loadDotEnv', () => {
   it('fills variables from the file', () => {
     const env: Record<string, string | undefined> = {};
-    loadDotEnv(envFile('# key for digest summarize\nANTHROPIC_API_KEY=from-file\n'), env);
+    loadDotEnv(envFile('# key for sprintdigest summarize\nANTHROPIC_API_KEY=from-file\n'), env);
     expect(env.ANTHROPIC_API_KEY).toBe('from-file');
   });
 

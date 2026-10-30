@@ -8,7 +8,7 @@ import { summarizeCommand } from './summarize.js';
 
 /** discover → summarise → review → push, stopping at the first step that fails or is declined (DECISIONS.md D42). */
 export async function syncCommand(options: { repo?: string }, ctx: CliContext): Promise<number> {
-  const fail = (message: string) => (ctx.stderr(`digest sync: ${message}\n`), 1);
+  const fail = (message: string) => (ctx.stderr(`sprintdigest sync: ${message}\n`), 1);
   // Everything that would stop the run later is checked before any money is spent.
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
@@ -16,7 +16,7 @@ export async function syncCommand(options: { repo?: string }, ctx: CliContext): 
   if ('error' in target) return fail(target.error);
   const identity = repoIdentity(writable.root);
   if ('error' in identity) return fail(identity.error);
-  if (!ctx.ask) return fail('the review step needs a terminal. Run digest summarize, digest approve and digest push instead.');
+  if (!ctx.ask) return fail('the review step needs a terminal. Run sprintdigest summarize, sprintdigest approve and sprintdigest push instead.');
   const repo = writable.root;
 
   ctx.stdout('Step 1 of 3: summarise new sessions\n');

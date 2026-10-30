@@ -6,7 +6,7 @@ import { findSession, repoSessions, resolveRepoRoot } from './sessions.js';
 export function redactCommand(sessionId: string, options: { repo?: string }, ctx: CliContext): number {
   const resolved = resolveRepoRoot(options.repo, ctx);
   if ('error' in resolved) {
-    ctx.stderr(`digest redact: ${resolved.error}\n`);
+    ctx.stderr(`sprintdigest redact: ${resolved.error}\n`);
     return 1;
   }
   const repoRoot = resolved.root;
@@ -14,7 +14,7 @@ export function redactCommand(sessionId: string, options: { repo?: string }, ctx
   const config = readConfig(repoRoot);
   const found = findSession(repoSessions(repoRoot, ctx).sessions, sessionId, repoRoot);
   if ('error' in found) {
-    ctx.stderr(`digest redact: ${found.error}\n`);
+    ctx.stderr(`sprintdigest redact: ${found.error}\n`);
     return 1;
   }
   const { session } = found;

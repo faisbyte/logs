@@ -9,7 +9,7 @@ import { openPGlite } from './pglite.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
 import { sendDue } from './schedule.js';
 
-// digest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
+// sprintdigest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
 // `sprint` keeps a repo's named date ranges (D45).
 // Storage is Postgres from DATABASE_URL, or a local PGlite directory (--data) for running on one machine.
 
@@ -21,12 +21,12 @@ export interface ServerIo {
   fetch?: typeof fetch;
 }
 
-const USAGE = `usage: digest-server serve [--port 8787] [--data <dir>]
-       digest-server token --repo <repo URL or host/path> (--developer <id> | --reader <id>) --name <display name> [--data <dir>]
-       digest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
-       digest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
+const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
+       sprintdigest-server token --repo <repo URL or host/path> (--developer <id> | --reader <id>) --name <display name> [--data <dir>]
+       sprintdigest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
+       sprintdigest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
                           [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default] [--data <dir>]
-       digest-server digest send-due [--data <dir>]
+       sprintdigest-server digest send-due [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
 export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
@@ -163,7 +163,7 @@ function sprintDate(value: string): string | null {
 const showDate = (iso: string) => (iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso);
 
 async function sprintCommand(store: SharedStore, repoId: string, values: Args, io: ServerIo): Promise<number> {
-  const fail = (message: string) => (io.stderr(`digest-server: ${message}\n`), 1);
+  const fail = (message: string) => (io.stderr(`sprintdigest-server: ${message}\n`), 1);
   const name = values.name;
   if (values.remove) {
     if (!name) return fail('--remove needs --name.');
@@ -186,7 +186,7 @@ async function sprintCommand(store: SharedStore, repoId: string, values: Args, i
 }
 
 export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
-  const fail = (message: string) => (io.stderr(`digest-server: ${message}\n`), 1);
+  const fail = (message: string) => (io.stderr(`sprintdigest-server: ${message}\n`), 1);
   const [command, ...rest] = argv;
   let values: Args;
   let positionals: string[];
@@ -292,7 +292,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   }
   const server = await startServer({ store, port, host: io.env.HOST ?? '127.0.0.1', log: (line) => io.stdout(`${line}\n`), digests });
   if (!digests.llm) io.stdout('No ANTHROPIC_API_KEY: serving digests and reports already written, but not writing new ones.\n');
-  io.stdout(`digest-server listening on ${server.url}\n`);
+  io.stdout(`sprintdigest-server listening on ${server.url}\n`);
   await new Promise<void>((stop) => {
     for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => stop());
   });

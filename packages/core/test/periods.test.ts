@@ -9,7 +9,7 @@ import { FakeLlmClient } from '../src/summarize/fake-llm.js';
 import { summarizeSession } from '../src/summarize/summarize.js';
 import { llmSummary } from './summarize/helpers.js';
 
-// digest summarize --by-period (DECISIONS.md D58): one summary per work period, split at the existing 6-hour gap.
+// sprintdigest summarize --by-period (DECISIONS.md D58): one summary per work period, split at the existing 6-hour gap.
 
 const ID = 'f0000001-0000-4000-8000-000000000001';
 const user = (timestamp: string, text: string): TranscriptEntry => ({ kind: 'user', timestamp, text });

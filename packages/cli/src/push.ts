@@ -7,7 +7,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** Pushes approved, unpushed summaries. Only uploadPayload() output leaves the machine (DECISIONS.md D34, D40). */
 export async function pushCommand(options: { repo?: string }, ctx: CliContext): Promise<number> {
-  const fail = (message: string) => (ctx.stderr(`digest push: ${message}\n`), 1);
+  const fail = (message: string) => (ctx.stderr(`sprintdigest push: ${message}\n`), 1);
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
   const repoRoot = writable.root;

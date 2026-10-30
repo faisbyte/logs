@@ -37,7 +37,7 @@ async function init(repo: string) {
   return { exitCode, stdout, stderr };
 }
 
-describe('digest init', () => {
+describe('sprintdigest init', () => {
   it('installs an executable pre-push hook that only prints a reminder', async () => {
     const { repo, pushWithStderr } = repoWithRemote();
     const { exitCode, stdout } = await init(repo);
@@ -49,7 +49,7 @@ describe('digest init', () => {
     const lines = readFileSync(hook, 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('#'));
     expect(lines.map((l) => l.split(' ')[0])).toEqual(['echo', 'exit']);
     expect(lines.at(-1)).toBe('exit 0');
-    expect(pushWithStderr()).toContain('digest: when you are ready, run `digest sync` to summarise, review and share this work.');
+    expect(pushWithStderr()).toContain('digest: when you are ready, run `sprintdigest sync` to summarise, review and share this work.');
   });
 
   it('never blocks a push, even with no node or pnpm on the PATH', async () => {

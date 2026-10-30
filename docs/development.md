@@ -3,8 +3,8 @@
 ## Layout
 
 - `packages/core`: schemas, session parsers, repo filter, truncation, state tracker
-- `packages/cli`: the `digest` command-line tool
-- `packages/server`: the digest server (HTTP API on Postgres or PGlite)
+- `packages/cli`: the `sprintdigest` command-line tool
+- `packages/server`: `sprintdigest-server`, the digest server (HTTP API on Postgres or PGlite)
 - `fixtures/`: synthetic session files for tests (no real content)
 
 ## Tests

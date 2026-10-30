@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { draftSummary } from '../../core/test/review/helpers.js';
 import { runCli, type CliIo } from '../src/cli.js';
 
-// digest link, digest unlink and digest tickets (DECISIONS.md D45, D46).
+// sprintdigest link, sprintdigest unlink and sprintdigest tickets (DECISIONS.md D45, D46).
 
 const REPO_ID = 'github.com/acme/webapp';
 const alice = { repoId: REPO_ID, developerId: 'alice', developerName: 'Alice' };
@@ -33,7 +33,7 @@ async function setup() {
   return { store, pushTarget, repo };
 }
 
-describe('digest link and unlink', () => {
+describe('sprintdigest link and unlink', () => {
   it('links a pushed summary to another ticket, and removes that link again', async () => {
     const { store, pushTarget, repo } = await setup();
     expect(await run(['link', '11111111', 'OPS-7', '--repo', repo], { pushTarget })).toMatchObject({ exitCode: 0, stdout: 'Linked 11111111 to OPS-7.\n' });
@@ -52,11 +52,11 @@ describe('digest link and unlink', () => {
   it('points to review for a summary that has not been pushed yet', async () => {
     const { pushTarget, repo } = await setup();
     const result = await run(['link', '33333333', 'OPS-7', '--repo', repo], { pushTarget });
-    expect(result).toMatchObject({ exitCode: 1, stderr: expect.stringContaining('33333333 has not been pushed; add ticket keys while reviewing it (digest review) instead') });
+    expect(result).toMatchObject({ exitCode: 1, stderr: expect.stringContaining('33333333 has not been pushed; add ticket keys while reviewing it (sprintdigest review) instead') });
   });
 });
 
-describe('digest tickets', () => {
+describe('sprintdigest tickets', () => {
   it('prints summaries grouped by sprint, then ticket, with unlinked ones apart', async () => {
     const { store, pushTarget, repo } = await setup();
     await store.saveSprint(REPO_ID, { name: 'Sprint 1', from: '2026-03-02T00:00:00.000Z', to: '2026-03-16T00:00:00.000Z' });

@@ -744,3 +744,24 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - `gitBranches` is the session's, not each period's.
   - A subagent with no matching Task call goes to the first period.
   - A session already summarised whole and then by period has both drafts. Reject the one you don't want.
+
+## D59. The CLI is `sprintdigest`, the server `sprintdigest-server`
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - The binaries are renamed from `digest` and `digest-server` to `sprintdigest` and `sprintdigest-server`. This covers the `bin` entries, the CLI's name, every message that names a command, and the README and docs.
+  - **What stays:**
+    - the `.digest/` folder, so existing state, summaries and tokens keep working;
+    - the `DIGEST_*` environment variables;
+    - the internal `@digest/*` package names;
+    - the server's `digest send-due` subcommand;
+    - the pre-push hook's marker line, so `init` still recognises hooks installed earlier.
+  - Earlier entries in this log keep the old names, as history.
+- **Why:** `digest` collides with NSS's `digest` tool, which Homebrew's `nss` formula and conda install. It shadowed ours ("NSS_Init failed").
+  - On 2026-10-30, `sprintdigest` was free everywhere checked:
+    - `command -v` on this machine, including conda's paths;
+    - npm, Homebrew formulae and casks, conda-forge, PyPI and crates.io;
+    - Debian (no package, and no package shipping a `bin/sprintdigest`);
+    - GitHub repo names.
+  - These registry checks see package names, not every binary a package ships; that's exactly how `digest` slipped through.
+- **Alternatives:** `agentdigest` (one GitHub repo uses it), `sprintlog` (31 repos; reads as plain logging).

@@ -44,7 +44,7 @@ async function run(argv: string[], env: Record<string, string>) {
 
 const fragments = (secret: string) => Array.from({ length: Math.max(1, secret.length - 15) }, (_, i) => secret.slice(i, i + 16));
 
-describe('digest redact', () => {
+describe('sprintdigest redact', () => {
   const repo = tempDir('digest-redact-repo-');
   const env = sessionIn(repo);
 
@@ -95,6 +95,6 @@ describe('digest redact', () => {
     writeFileSync(join(broken, '.digest/config.json'), '{"redaction":{"denylist":[]}}');
     const { exitCode, stderr } = await run(['redact', 'c1a5e001', '--repo', broken], sessionIn(broken));
     expect(exitCode).toBe(1);
-    expect(stderr).toMatch(/^digest redact: Invalid \.digest\/config\.json/);
+    expect(stderr).toMatch(/^sprintdigest redact: Invalid \.digest\/config\.json/);
   });
 });

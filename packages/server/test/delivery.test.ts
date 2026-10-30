@@ -108,6 +108,6 @@ describe('deliveriesFor', () => {
       'email: set SMTP_URL and DIGEST_EMAIL_FROM on the server',
     ]);
     expect(deliveriesFor(settings, {}).problems).toEqual(['slack: SLACK_WEBHOOK_ACME is not set on the server', 'email: set SMTP_URL and DIGEST_EMAIL_FROM on the server']);
-    expect(deliveriesFor(defaultRepoSettings(REPO), env)).toEqual({ deliveries: [], problems: ['no delivery is set up: use digest-server repo --slack-env or --email'] });
+    expect(deliveriesFor(defaultRepoSettings(REPO), env)).toEqual({ deliveries: [], problems: ['no delivery is set up: use sprintdigest-server repo --slack-env or --email'] });
   });
 });

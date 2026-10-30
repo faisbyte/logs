@@ -16,12 +16,12 @@ pnpm build   # compile packages to dist/
 pnpm test    # build, then run all tests
 ```
 
-For `digest summarize`, put your Anthropic API key in `.env` (`cp .env.example .env`; gitignored) or export `ANTHROPIC_API_KEY`.
+For `sprintdigest summarize`, put your Anthropic API key in `.env` (`cp .env.example .env`; gitignored) or export `ANTHROPIC_API_KEY`.
 
-To run `digest` from any repo, alias the built binary (run this in this repo's root):
+To run `sprintdigest` from any repo, alias the built binary (run this in this repo's root):
 
 ```sh
-alias digest="node $PWD/packages/cli/dist/bin.js"
+alias sprintdigest="node $PWD/packages/cli/dist/bin.js"
 ```
 
 ## Commands
@@ -30,22 +30,22 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 
 | Command | What it does |
 |---|---|
-| `digest list` (`--json`) | Show this repo's Claude Code and Codex sessions: time, turns, tools, files, commits, branch, status |
-| `digest redact <sessionId>` | Redact a session and print counts per placeholder type (never the values); honours `.digest/config.json` |
-| `digest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation, `--by-period` writes one draft per work period) |
-| `digest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
-| `digest review --list` | List every summary with its status (draft, approved, rejected, edited) |
-| `digest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |
-| `digest push` | Push approved summaries to the shared store (only the shared fields; drafts and rejected summaries stay local) |
-| `digest sync` | Summarise new sessions (cost estimate first), review the drafts, then push what you approved |
-| `digest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
-| `digest link <id> <ticket>` / `unlink <id> <ticket>` | Link a pushed summary to another ticket, or remove such a link (ticket keys come from branch names, and from commit messages when `tickets.keys` is set in `.digest/config.json`) |
-| `digest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
-| `digest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
-| `digest preview` | Show scheduled digests waiting in developer preview before they are sent |
-| `digest --version` | Print the CLI version |
+| `sprintdigest list` (`--json`) | Show this repo's Claude Code and Codex sessions: time, turns, tools, files, commits, branch, status |
+| `sprintdigest redact <sessionId>` | Redact a session and print counts per placeholder type (never the values); honours `.digest/config.json` |
+| `sprintdigest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation, `--by-period` writes one draft per work period) |
+| `sprintdigest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
+| `sprintdigest review --list` | List every summary with its status (draft, approved, rejected, edited) |
+| `sprintdigest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |
+| `sprintdigest push` | Push approved summaries to the shared store (only the shared fields; drafts and rejected summaries stay local) |
+| `sprintdigest sync` | Summarise new sessions (cost estimate first), review the drafts, then push what you approved |
+| `sprintdigest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
+| `sprintdigest link <id> <ticket>` / `unlink <id> <ticket>` | Link a pushed summary to another ticket, or remove such a link (ticket keys come from branch names, and from commit messages when `tickets.keys` is set in `.digest/config.json`) |
+| `sprintdigest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
+| `sprintdigest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
+| `sprintdigest preview` | Show scheduled digests waiting in developer preview before they are sent |
+| `sprintdigest --version` | Print the CLI version |
 
-### Shared store (digest server)
+### Shared store (sprintdigest-server)
 
 ```sh
 node packages/server/dist/main.js token --data ./server-data --repo git@github.com:org/repo.git --developer alice --name Alice
@@ -58,7 +58,7 @@ node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE
 
 Developers set `"share": {"url": "http://localhost:8787"}` in `.digest/config.json` and put their token in `.digest/token` (or `DIGEST_TOKEN`).
 PGlite mode (`--data`) is single-process: stop the server before running `token` or `sprint`, then start it again.
-`digest tickets --from/--to` (and `GET /v1/tickets`) selects every session overlapping the range, then files each under the sprint containing its start, so a session that began in the previous sprint shows under that sprint.
+`sprintdigest tickets --from/--to` (and `GET /v1/tickets`) selects every session overlapping the range, then files each under the sprint containing its start, so a session that began in the previous sprint shows under that sprint.
 
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
 Summarising sends redacted, condensed session text to the Anthropic API using your own `ANTHROPIC_API_KEY`; pushing sends only approved summaries' shared fields to your digest server. Raw transcripts never leave the machine, and `.digest/` (local state) is gitignored.

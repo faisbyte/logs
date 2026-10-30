@@ -54,7 +54,7 @@ const repoRelative = (repoRoot: string, path: string) => (isInRepo({ cwd: path }
 export function listCommand(options: { repo?: string; json?: boolean; all?: boolean }, ctx: CliContext): number {
   const resolved = resolveRepoRoot(options.repo, ctx);
   if ('error' in resolved) {
-    ctx.stderr(`digest list: ${resolved.error}\n`);
+    ctx.stderr(`sprintdigest list: ${resolved.error}\n`);
     return 1;
   }
   const repoRoot = resolved.root;

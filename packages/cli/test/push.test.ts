@@ -37,7 +37,7 @@ async function setup() {
   return { store, target, repo };
 }
 
-describe('digest push', () => {
+describe('sprintdigest push', () => {
   it('pushes approved summaries only, and records that they were pushed', async () => {
     const { store, target, repo } = await setup();
     const { exitCode, stdout } = await run(['push', '--repo', repo], { pushTarget: target });

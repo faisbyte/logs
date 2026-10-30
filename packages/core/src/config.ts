@@ -72,7 +72,7 @@ export type TicketsConfig = z.infer<typeof TicketsConfigSchema>;
 
 export const ReportConfigSchema = z
   .object({
-    /** The model `digest report` writes with; Sonnet 5.5 by default (DECISIONS.md D48). */
+    /** The model `sprintdigest report` writes with; Sonnet 5.5 by default (DECISIONS.md D48). */
     model: z.string().min(1).optional(),
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   })

@@ -45,11 +45,11 @@ const dollars = (n: number | null) => (n === null ? 'cost unknown' : `$${n.toFix
 
 /** Summarises sessions into local drafts. Only redacted, condensed text is sent, with the developer's own key. */
 export async function summarizeCommand(sessionId: string | undefined, options: SummarizeOptions, ctx: CliContext): Promise<number> {
-  const fail = (message: string) => (ctx.stderr(`digest summarize: ${message}\n`), 1);
+  const fail = (message: string) => (ctx.stderr(`sprintdigest summarize: ${message}\n`), 1);
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
   const repoRoot = writable.root;
-  if (!sessionId === !options.all) return fail('pass a session id or --all (see digest list).');
+  if (!sessionId === !options.all) return fail('pass a session id or --all (see sprintdigest list).');
 
   const config = readConfig(repoRoot);
   const settings = summarizeSettings(config);

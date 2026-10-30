@@ -14,7 +14,7 @@ import {
 } from '@digest/core';
 import type { Delivery } from './delivery.js';
 
-// Scheduled digests (DECISIONS.md D54). `digest-server digest send-due`, run by cron, writes each due digest
+// Scheduled digests (DECISIONS.md D54). `sprintdigest-server digest send-due`, run by cron, writes each due digest
 // once (one per period, D52), holds it for the developer preview window if there is one, then delivers it,
 // retrying only the channels that failed. Running it again changes nothing.
 

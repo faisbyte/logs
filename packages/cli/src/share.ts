@@ -13,6 +13,6 @@ export function resolvePushTarget(ctx: CliContext, repoRoot: string): { target: 
   if (!url) return { error: 'no shared store is configured: set share.url in .digest/config.json to your digest server.' };
   const file = join(repoRoot, '.digest', 'token');
   const token = ctx.env.DIGEST_TOKEN?.trim() || (existsSync(file) ? readFileSync(file, 'utf8').trim() : '');
-  if (!token) return { error: 'no token for the shared store: put the token your digest-server admin gave you in .digest/token, or set DIGEST_TOKEN.' };
+  if (!token) return { error: 'no token for the shared store: put the token your sprintdigest-server admin gave you in .digest/token, or set DIGEST_TOKEN.' };
   return { target: httpPushTarget(url, token) };
 }

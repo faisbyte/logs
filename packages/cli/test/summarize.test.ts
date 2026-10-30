@@ -21,7 +21,7 @@ async function run(argv: string[], env: Record<string, string>, extra: Partial<C
   return { exitCode, stdout, stderr };
 }
 
-describe('digest summarize', () => {
+describe('sprintdigest summarize', () => {
   it('summarises one session into a draft and marks it processed', async () => {
     const { repo, env } = fixtureRepo();
     const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
