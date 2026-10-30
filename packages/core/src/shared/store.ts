@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import type { Agent } from '../schema.js';
 import { validatePush, type UploadPayload } from './payload.js';
 
 // The shared store (DECISIONS.md D39, D40). Implementations differ in where they keep data; the rules
@@ -56,11 +57,27 @@ export interface TeamReport {
   summaries: StoredSummary[];
 }
 
+/** A developer withdrew a pushed summary (DECISIONS.md D60). The summary stays stored, never served. */
+export interface Retraction {
+  repoId: string;
+  agent: Agent;
+  sessionId: string;
+  developerId: string;
+  payloadHash: string;
+  retractedAt: string;
+}
+
+export type RetractResult = { status: 'retracted' | 'already'; retractedAt: string } | { status: 'not-found' | 'forbidden'; reason: string };
+
 export interface SummaryStore {
   /** `payload` is untrusted input: it is validated with the shared schema and secret detectors first. */
   push(identity: PushIdentity, payload: unknown): Promise<PushResult>;
   list(query: SummaryQuery): Promise<StoredSummary[]>;
   teamReport(query: { repoId: string; from: string; to: string }): Promise<TeamReport>;
+  /** The pusher withdraws a summary: it leaves every list and report, and digests that included it are withdrawn. */
+  retract(identity: PushIdentity, ref: { agent: Agent; sessionId: string }): Promise<RetractResult>;
+  /** Oldest first. */
+  retractions(repoId: string): Promise<Retraction[]>;
 }
 
 export interface TokenStore {
@@ -81,7 +98,7 @@ export function decidePush(
   input: unknown,
   existing: (key: string) => StoredSummary | undefined,
   now: Date,
-): PushResult | { status: 'create'; key: string; stored: StoredSummary } {
+): PushResult | { status: 'create'; key: string; stored: StoredSummary; replaces?: boolean } {
   const validation = validatePush(input);
   if (!validation.ok) return { status: 'rejected', errors: validation.errors };
   const payload = validation.payload;
@@ -90,6 +107,8 @@ export function decidePush(
   const current = existing(key);
   if (current) {
     if (current.developerId !== identity.developerId) return { status: 'conflict', reason: `session ${payload.sessionId} was pushed by another developer.` };
+    // A retracted summary can be pushed again by its developer, replacing it (D60).
+    if (current.retractedAt) return { status: 'create', key, replaces: true, stored: { ...current, developerName: identity.developerName, pushedAt: now.toISOString(), payloadHash: hash, retractedAt: null, summary: payload } };
     if (current.payloadHash === hash) return { status: 'unchanged', stored: current };
     return { status: 'conflict', reason: `session ${payload.sessionId} was already pushed with different content; pushed summaries are immutable.` };
   }
@@ -101,6 +120,17 @@ export function decidePush(
 }
 
 /** `linked` are the ticket keys manually linked to this summary after it was pushed (DECISIONS.md D45). */
+/** The rules for retracting: only the developer who pushed it, and only once. */
+export function decideRetract(identity: PushIdentity, stored: StoredSummary | undefined): RetractResult | { status: 'retract' } {
+  if (!stored) return { status: 'not-found', reason: 'no pushed summary for that session in this repo' };
+  if (stored.developerId !== identity.developerId) return { status: 'forbidden', reason: 'only the developer who pushed a summary can retract it' };
+  if (stored.retractedAt) return { status: 'already', retractedAt: stored.retractedAt };
+  return { status: 'retract' };
+}
+
+/** How digests name the summaries they were written from. */
+export const digestSummaryKey = (s: { agent: string; sessionId: string }) => `${s.agent}/${s.sessionId}`;
+
 export function matchesQuery(s: StoredSummary, q: SummaryQuery, linked: readonly string[] = []): boolean {
   if (s.repoId !== q.repoId || s.retractedAt) return false;
   if (q.branch !== undefined && s.summary.branch !== q.branch) return false;

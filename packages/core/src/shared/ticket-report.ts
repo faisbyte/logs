@@ -100,3 +100,9 @@ export async function ticketReport(store: SharedStore, repoId: string, filter: T
   for (const g of sprintGroups) for (const s of [...g.unlinked, ...g.tickets.flatMap((t) => t.summaries.map((e) => e.summary))]) shown.set(`${s.summary.agent}/${s.summary.sessionId}`, s);
   return { repoId, filter, summaryCount: shown.size, developerCount: new Set([...shown.values()].map((s) => s.developerId)).size, sprints: sprintGroups };
 }
+
+/** Every summary a report shows, as "agent/sessionId", for digests to record (D60). */
+export function reportSummaryKeys(report: TicketReport): string[] {
+  const keys = report.sprints.flatMap((g) => [...g.unlinked, ...g.tickets.flatMap((t) => t.summaries.map((e) => e.summary))].map((s) => `${s.summary.agent}/${s.summary.sessionId}`));
+  return [...new Set(keys)].sort();
+}

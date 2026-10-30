@@ -1,4 +1,4 @@
-import { bySessionStart, decidePush, hashToken, matchesQuery, newToken, summaryKey, teamReportFrom, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
+import { bySessionStart, decidePush, decideRetract, digestSummaryKey, hashToken, matchesQuery, newToken, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
 import {
   byFrom,
   byLinkTime,
@@ -28,6 +28,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   /** Tracker tickets by repo, then by key. */
   readonly #tracker = new Map<string, Map<string, TrackerTicket>>();
   readonly #digests: StoredDigest[] = [];
+  readonly #retractions: Retraction[] = [];
   readonly #spend: { repoId: string; usd: number; at: string }[] = [];
   readonly #settings = new Map<string, RepoSettings>();
   readonly #now: () => Date;
@@ -41,6 +42,27 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
     if (decision.status !== 'create') return structuredClone(decision);
     this.#summaries.set(decision.key, decision.stored);
     return { status: 'created', stored: structuredClone(decision.stored) };
+  }
+
+  async retract(identity: PushIdentity, ref: { agent: StoredSummary['summary']['agent']; sessionId: string }): Promise<RetractResult> {
+    const stored = this.#summaries.get(summaryKey(identity.repoId, ref));
+    const decision = decideRetract(identity, stored);
+    if (decision.status !== 'retract') return decision;
+    const retractedAt = this.#now().toISOString();
+    stored!.retractedAt = retractedAt;
+    this.#retractions.push({ repoId: identity.repoId, agent: ref.agent, sessionId: ref.sessionId, developerId: identity.developerId, payloadHash: stored!.payloadHash, retractedAt });
+    const key = digestSummaryKey(ref);
+    for (let i = this.#digests.length - 1; i >= 0; i--) {
+      const d = this.#digests[i]!;
+      if (d.repoId !== identity.repoId || !d.summaryKeys.includes(key)) continue;
+      if (d.status === 'sent') d.status = 'withdrawn';
+      else this.#digests.splice(i, 1);
+    }
+    return { status: 'retracted', retractedAt };
+  }
+
+  async retractions(repoId: string): Promise<Retraction[]> {
+    return structuredClone(this.#retractions.filter((r) => r.repoId === repoId));
   }
 
   async list(query: SummaryQuery): Promise<StoredSummary[]> {
@@ -122,7 +144,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
       (d) => d.repoId === digest.repoId && (digest.kind === 'scheduled' ? d.kind === 'scheduled' && d.periodKey === digest.periodKey : sameReport(d, digest)),
     );
     if (existing) return structuredClone(existing);
-    const stored: StoredDigest = { ...structuredClone(digest), id: randomUUID(), deliveries: {}, sentAt: null };
+    const stored: StoredDigest = { ...structuredClone(digest), summaryKeys: [...(digest.summaryKeys ?? [])], id: randomUUID(), deliveries: {}, sentAt: null };
     this.#digests.push(stored);
     return structuredClone(stored);
   }

@@ -43,6 +43,7 @@ function dateParam(params: URLSearchParams, name: string, required: boolean): st
 }
 
 const PUSH_STATUS = { created: 201, unchanged: 200, conflict: 409, rejected: 422, unauthorized: 401, forbidden: 403 } as const;
+const RETRACT_STATUS = { retracted: 200, already: 200, 'not-found': 404, forbidden: 403 } as const;
 const LINK_STATUS = { created: 201, unchanged: 200, removed: 200, 'not-found': 404, forbidden: 403, rejected: 422, 'in-summary': 409 } as const;
 
 /** The summary a ticket-link request names. Session and ticket travel in the body, so the logged path stays fixed. */
@@ -102,6 +103,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/summaries': ['GET', 'POST'],
       '/v1/team-report': ['GET'],
       '/v1/ticket-links': ['POST', 'DELETE'],
+      '/v1/retractions': ['POST'],
       '/v1/tickets': ['GET'],
       '/v1/reports': ['POST'],
       '/v1/digests': ['GET'],
@@ -131,6 +133,12 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       const digest = await store.getDigest(repoId, decodeURIComponent(digestId));
       if (!digest || (statuses && !statuses.includes(digest.status as 'ready'))) throw new HttpError(404, 'no such digest');
       return [200, { digest }];
+    }
+
+    if (url.pathname === '/v1/retractions') {
+      const { repoId, ref } = linkTarget(await readJson(req));
+      const result = await store.retract(await developer(req, repoId), ref);
+      return [RETRACT_STATUS[result.status], result];
     }
 
     if (url.pathname === '/v1/ticket-links') {

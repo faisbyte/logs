@@ -3,7 +3,7 @@ import { digestInput, type DigestInput } from '../digest/input.js';
 import { DIGEST_PROMPT_VERSION } from '../digest/prompt.js';
 import type { LlmClient } from '../summarize/llm.js';
 import type { DigestStore, NewDigest, StoredDigest } from './digests.js';
-import { ticketReport, type TicketReportFilter } from './ticket-report.js';
+import { reportSummaryKeys, ticketReport, type TicketReportFilter } from './ticket-report.js';
 import type { SharedStore } from './tickets.js';
 
 // Digests written on the server (DECISIONS.md D53): on-demand reports for any sprint or date range, cached, and
@@ -60,9 +60,10 @@ export async function writeDigest(deps: DigestDeps, repoId: string, input: Diges
   }
 }
 
-export function storedFields(repoId: string, digest: Digest): Omit<NewDigest, 'kind' | 'periodKey' | 'status' | 'previewUntil'> {
+export function storedFields(repoId: string, digest: Digest, summaryKeys: string[]): Omit<NewDigest, 'kind' | 'periodKey' | 'status' | 'previewUntil'> {
   return {
     repoId,
+    summaryKeys,
     periodLabel: digest.period.label,
     from: digest.period.from,
     to: digest.period.to,
@@ -79,7 +80,8 @@ export function storedFields(repoId: string, digest: Digest): Omit<NewDigest, 'k
 
 /** A report for any sprint or date range, for readers and developers alike. */
 export async function onDemandReport(deps: DigestDeps, repoId: string, filter: TicketReportFilter): Promise<ReportResult> {
-  const input = digestInput(await ticketReport(deps.store, repoId, filter));
+  const report = await ticketReport(deps.store, repoId, filter);
+  const input = digestInput(report);
   const key = { periodKey: periodKey(filter), inputHash: input.hash, promptVersion: DIGEST_PROMPT_VERSION, model: deps.model };
   const cached = await deps.store.findReport(repoId, key);
   if (cached) return { status: 'ok', digest: cached, cached: true };
@@ -93,6 +95,6 @@ export async function onDemandReport(deps: DigestDeps, repoId: string, filter: T
     if (err instanceof DigestError) return { status: 'failed', reason: err.message };
     throw err;
   }
-  const stored = await deps.store.saveDigest({ ...storedFields(repoId, digest), kind: 'report', periodKey: key.periodKey, status: 'ready', previewUntil: null });
+  const stored = await deps.store.saveDigest({ ...storedFields(repoId, digest, reportSummaryKeys(report)), kind: 'report', periodKey: key.periodKey, status: 'ready', previewUntil: null });
   return { status: 'ok', digest: stored, cached: false };
 }

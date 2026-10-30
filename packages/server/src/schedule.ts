@@ -3,6 +3,7 @@ import {
   capRefusal,
   DigestError,
   digestInput,
+  reportSummaryKeys,
   storedFields,
   ticketReport,
   writeDigest,
@@ -79,13 +80,14 @@ async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: Due
   const { deliveries, problems } = deps.deliveries(settings);
   if (!deliveries.length) return `not sent: ${problems.join('; ')}`;
   if (!digest) {
-    const input = digestInput(await ticketReport(deps.store, repoId, period.filter));
+    const report = await ticketReport(deps.store, repoId, period.filter);
+    const input = digestInput(report);
     const refusal = await capRefusal(deps, repoId, input, 'this digest');
     if (refusal) return `not written: ${refusal}`;
     try {
       const written = await writeDigest(deps, repoId, input);
       const previewUntil = settings.previewHours > 0 ? new Date(now.getTime() + settings.previewHours * 3_600_000).toISOString() : null;
-      digest = await deps.store.saveDigest({ ...storedFields(repoId, written), kind: 'scheduled', periodKey: period.periodKey, status: previewUntil ? 'preview' : 'ready', previewUntil });
+      digest = await deps.store.saveDigest({ ...storedFields(repoId, written, reportSummaryKeys(report)), kind: 'scheduled', periodKey: period.periodKey, status: previewUntil ? 'preview' : 'ready', previewUntil });
     } catch (err) {
       if (err instanceof DigestError) return `not written: ${err.message}`;
       throw err;
