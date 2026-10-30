@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ensureDigestDir } from '../digest-dir.js';
+import { periodId } from '../periods.js';
 import { SessionSummarySchema, type SessionSummary } from '../summarize/schema.js';
 
 // One file per session in .digest/summaries/ holds its current summary and review state (DECISIONS.md D25, D34).
@@ -36,7 +37,11 @@ export function listSummaries(repoRoot: string): SessionSummary[] {
 }
 
 export function findSummary(repoRoot: string, prefix: string): { summary: SessionSummary } | { error: string } {
-  const matches = listSummaries(repoRoot).filter((s) => s.sessionId.startsWith(prefix));
+  // "fe5d7843.p2" names one work period of a session (DECISIONS.md D58).
+  const wanted = periodId(prefix);
+  const matches = listSummaries(repoRoot).filter((s) =>
+    wanted.period === null ? s.sessionId.startsWith(prefix) : periodId(s.sessionId).period === wanted.period && periodId(s.sessionId).sessionId.startsWith(wanted.sessionId),
+  );
   if (matches.length === 1) return { summary: matches[0]! };
   if (matches.length === 0) return { error: `No summary matching ${prefix}. Run digest review --list to see them.` };
   return { error: `${prefix} matches ${matches.length} summaries; use more of the session id.` };

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeLlmClient } from '@digest/core';
@@ -69,6 +69,60 @@ describe('digest summarize', () => {
       await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
       expect(llm.requests).toHaveLength(1);
       expect(draftOf(repo).ticketRefs).toEqual(['PROJ-142', 'PROJ-150']);
+    });
+  });
+
+  describe('--by-period (DECISIONS.md D58)', () => {
+    const ID = 'c1a5e001-0000-4000-8000-000000000001';
+    // The basic fixture plus a second exchange 8 hours later: two work periods.
+    function twoPeriodRepo() {
+      const { repo, env } = fixtureRepo();
+      const file = join(env.CLAUDE_CONFIG_DIR, 'projects', '-work-acme-webapp'.replace('-work-acme-webapp', readdirSync(join(env.CLAUDE_CONFIG_DIR, 'projects'))[0]!), `${ID}.jsonl`);
+      const lines = readFileSync(file, 'utf8').trim().split('\n');
+      const userLine = lines.find((l) => l.includes('"type":"user"') && l.includes('"origin":{"kind":"human"}'))!;
+      const assistantLine = [...lines].reverse().find((l) => l.includes('"type":"assistant"'))!;
+      const later = (line: string, at: string, uuid: string) => line.replace(/"timestamp":"[^"]+"/, `"timestamp":"${at}"`).replace(/"uuid":"[^"]+"/, `"uuid":"${uuid}"`);
+      writeFileSync(file, [...lines, later(userLine, '2026-03-02T17:30:00.000Z', 'c1a5e001-bbbb-4bbb-8bbb-000000000001'), later(assistantLine, '2026-03-02T17:30:20.000Z', 'c1a5e001-bbbb-4bbb-8bbb-000000000002')].join('\n') + '\n');
+      return { repo, env };
+    }
+    const draft = (repo: string, period: number) => JSON.parse(readFileSync(join(repo, `.digest/summaries/claude-code-${ID}.p${period}.json`), 'utf8'));
+
+    it('writes one draft per work period, each with its own times, and marks the session processed', async () => {
+      const { repo, env } = twoPeriodRepo();
+      const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
+      const { exitCode, stdout, stderr } = await run(['summarize', 'c1a5e001', '--by-period', '--yes', '--repo', repo], env, { llm });
+      expect(stderr).toBe('');
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/^c1a5e001\.p1 +summarised/m);
+      expect(stdout).toMatch(/^c1a5e001\.p2 +summarised/m);
+      expect(draft(repo, 1)).toMatchObject({ sessionId: `${ID}.p1`, status: 'draft', startedAt: '2026-03-02T09:00:00.000Z', endedAt: '2026-03-02T09:00:54.000Z' });
+      expect(draft(repo, 2)).toMatchObject({ sessionId: `${ID}.p2`, status: 'draft', startedAt: '2026-03-02T17:30:00.000Z', endedAt: '2026-03-02T17:30:20.000Z' });
+      expect(existsSync(join(repo, `.digest/summaries/claude-code-${ID}.json`))).toBe(false);
+      const list = await run(['list', '--json', '--all', '--repo', repo], env);
+      expect(JSON.parse(list.stdout).find((s: { sourceSessionId: string }) => s.sourceSessionId === ID).status).toBe('processed');
+    });
+
+    it('estimates each period, and each period is reviewed and approved on its own', async () => {
+      const { repo, env } = twoPeriodRepo();
+      const estimate = await run(['summarize', 'c1a5e001', '--by-period', '--estimate', '--repo', repo], env);
+      expect(estimate.stdout).toMatch(/^2 sessions to summarise/);
+      expect(estimate.stdout).toMatch(/^ {2}c1a5e001\.p1 /m);
+      await run(['summarize', 'c1a5e001', '--by-period', '--yes', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+      const listed = await run(['review', '--list', '--repo', repo], env);
+      expect(listed.stdout).toMatch(/c1a5e001\.p1 .*draft/);
+      expect(listed.stdout).toMatch(/c1a5e001\.p2 .*draft/);
+      expect((await run(['approve', 'c1a5e001.p2', '--repo', repo], env)).exitCode).toBe(0);
+      expect(draft(repo, 2).status).toBe('approved');
+      expect(draft(repo, 1).status).toBe('draft');
+      expect((await run(['approve', 'c1a5e001', '--repo', repo], env)).stderr).toContain('matches 2 summaries');
+    });
+
+    it('is a flag: without it the session is still summarised whole', async () => {
+      const { repo, env } = twoPeriodRepo();
+      const whole = await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
+      expect(whole.stdout).toMatch(/^c1a5e001 +summarised/m);
+      expect(existsSync(join(repo, `.digest/summaries/claude-code-${ID}.json`))).toBe(true);
+      expect(existsSync(join(repo, `.digest/summaries/claude-code-${ID}.p1.json`))).toBe(false);
     });
   });
 

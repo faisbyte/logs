@@ -1,6 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  shortSessionId,
   approve,
   createRedactor,
   editSummary,
@@ -26,7 +27,7 @@ interface RepoOption {
   repo?: string;
 }
 
-const short = (s: SessionSummary) => s.sessionId.slice(0, 8);
+const short = (s: SessionSummary) => shortSessionId(s.sessionId);
 
 export function reviewListCommand(options: RepoOption, ctx: CliContext): number {
   const resolved = resolveRepoRoot(options.repo, ctx);

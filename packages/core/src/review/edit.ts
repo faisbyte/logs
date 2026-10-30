@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { RedactedText } from '../redact/text.js';
 import type { RedactionCounts } from '../redact/types.js';
 import { LlmSummarySchema, type SessionSummary } from '../summarize/schema.js';
+import { shortSessionId } from '../periods.js';
 import { ReviewError, SHARED_FIELDS } from './approval.js';
 
 // Developers edit a summary as YAML in $EDITOR (DECISIONS.md D35). Every text field, outcome, AI involvement
@@ -38,7 +39,7 @@ const ERROR_PREFIX = '# ERROR: ';
 
 export function toEditable(summary: SessionSummary): string {
   const header = [
-    `# Editing the summary of ${summary.agent} session ${summary.sessionId.slice(0, 8)} (branch ${summary.branch ?? 'unknown'}, ${summary.startedAt.slice(0, 10)}).`,
+    `# Editing the summary of ${summary.agent} session ${shortSessionId(summary.sessionId)} (branch ${summary.branch ?? 'unknown'}, ${summary.startedAt.slice(0, 10)}).`,
     '# Save and close the editor to apply your changes.',
     '# Close the editor without saving to change nothing.',
     `# Shared with the team once pushed: ${SHARED_FIELDS.join(', ')}.`,

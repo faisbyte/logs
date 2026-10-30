@@ -1,4 +1,4 @@
-import { findSummary, repoIdentity, type PushTarget, type SprintGroup, type TicketLink, type TicketReportFilter } from '@digest/core';
+import { findSummary, repoIdentity, shortSessionId, type PushTarget, type SprintGroup, type TicketLink, type TicketReportFilter } from '@digest/core';
 import type { CliContext } from './cli.js';
 import { resolvePushTarget } from './share.js';
 import { resolveRepoRoot } from './sessions.js';
@@ -28,7 +28,7 @@ export async function linkCommand(action: 'link' | 'unlink', sessionId: string, 
   const found = findSummary(repoRoot, sessionId);
   if ('error' in found) return fail(found.error);
   const s = found.summary;
-  const short = s.sessionId.slice(0, 8);
+  const short = shortSessionId(s.sessionId);
   if (!s.pushedAt) return fail(`${short} has not been pushed; add ticket keys while reviewing it (digest review) instead.`);
 
   const ref = { agent: s.agent, sessionId: s.sessionId };
