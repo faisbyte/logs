@@ -36,6 +36,7 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `sprintdigest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
 | `sprintdigest review --list` | List every summary with its status (draft, approved, rejected, edited) |
 | `sprintdigest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |
+| `sprintdigest retract <id>` | Withdraw a summary you pushed from the shared store; it becomes a local draft again |
 | `sprintdigest push` | Push approved summaries to the shared store (only the shared fields; drafts and rejected summaries stay local) |
 | `sprintdigest sync` | Summarise new sessions (cost estimate first), review the drafts, then push what you approved |
 | `sprintdigest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
