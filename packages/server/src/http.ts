@@ -104,6 +104,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/team-report': ['GET'],
       '/v1/ticket-links': ['POST', 'DELETE'],
       '/v1/retractions': ['POST'],
+      '/v1/sprints': ['GET'],
       '/v1/tickets': ['GET'],
       '/v1/reports': ['POST'],
       '/v1/digests': ['GET'],
@@ -135,6 +136,12 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       return [200, { digest }];
     }
 
+    if (url.pathname === '/v1/sprints') {
+      const repoId = url.searchParams.get('repoId');
+      if (!repoId) throw new HttpError(400, 'repoId is required');
+      await reader(req, repoId);
+      return [200, { sprints: await store.sprints(repoId) }];
+    }
     if (url.pathname === '/v1/retractions') {
       const { repoId, ref } = linkTarget(await readJson(req));
       const result = await store.retract(await developer(req, repoId), ref);

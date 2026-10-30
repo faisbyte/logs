@@ -1,6 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  repoIdentity,
   shortSessionId,
   approve,
   createRedactor,
@@ -20,6 +21,7 @@ import {
 } from '@digest/core';
 import type { CliContext } from './cli.js';
 import { resolveRepoRoot, writableRepoRoot } from './sessions.js';
+import { resolvePushTarget } from './share.js';
 
 // Developer review (Phase 4): the core does the work; these commands only read input and print.
 
@@ -40,8 +42,28 @@ export function reviewListCommand(options: RepoOption, ctx: CliContext): number 
   return 0;
 }
 
+export const NO_TICKETS = 'No tickets tagged. Approve anyway? [y/N] ';
+
+/**
+ * Whether a summary without tickets deserves a second look (DECISIONS.md D61): the repo has a tickets pattern or
+ * project keys configured, or its shared store has sprints. An unreachable store counts as no.
+ */
+async function ticketsExpected(repoRoot: string, ctx: CliContext): Promise<boolean> {
+  const { tickets } = readConfig(repoRoot);
+  if (tickets.pattern || tickets.keys?.length) return true;
+  const resolved = resolvePushTarget(ctx, repoRoot);
+  const identity = repoIdentity(repoRoot);
+  if ('error' in resolved || 'error' in identity) return false;
+  try {
+    const result = await resolved.target.sprints(identity.repoId);
+    return result.status === 'ok' && result.sprints.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** approve, reject and reopen: one transition on one summary, saved back in place. */
-export function transitionCommand(action: 'approve' | 'reject' | 'reopen', id: string, options: RepoOption, ctx: CliContext): number {
+export async function transitionCommand(action: 'approve' | 'reject' | 'reopen', id: string, options: RepoOption & { yes?: boolean }, ctx: CliContext): Promise<number> {
   const fail = (message: string) => (ctx.stderr(`sprintdigest ${action}: ${message}\n`), 1);
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
@@ -49,6 +71,10 @@ export function transitionCommand(action: 'approve' | 'reject' | 'reopen', id: s
   if ('error' in found) return fail(found.error);
   const s = found.summary;
   if (action === 'approve') {
+    if (s.ticketRefs.length === 0 && !options.yes && (await ticketsExpected(writable.root, ctx))) {
+      if (!ctx.confirm) return fail('No tickets tagged. Re-run with --yes to approve anyway, or tag its tickets with sprintdigest review (e to edit).');
+      if (!(await ctx.confirm(NO_TICKETS))) return fail('Not approved. Tag its tickets with sprintdigest review (e to edit), or pass --yes.');
+    }
     saveSummary(writable.root, approve(s).summary as SessionSummary);
     ctx.stdout(`Approved ${short(s)}. It will be shared when you push.\n`);
   } else if (action === 'reject') {
@@ -81,6 +107,7 @@ export async function reviewDrafts(options: RepoOption, ctx: CliContext): Promis
   const redact = createRedactor(readConfig(repoRoot).redaction);
   const tally = { approved: 0, rejected: 0, skipped: 0, seen: 0 };
   let quit = false;
+  let expected: boolean | undefined;
 
   // Writes the YAML under .digest/edit/, runs the editor on it and reads back what was saved.
   const open = async (run: (file: string) => Promise<void>, summary: SessionSummary, text: string) => {
@@ -100,6 +127,7 @@ export async function reviewDrafts(options: RepoOption, ctx: CliContext): Promis
     for (;;) {
       const answer = (await ask(PROMPT)).trim().toLowerCase();
       if (answer === 'a') {
+        if (summary.ticketRefs.length === 0 && (expected ??= await ticketsExpected(repoRoot, ctx)) && (await ask(NO_TICKETS)).trim().toLowerCase() !== 'y') continue;
         saveSummary(repoRoot, approve(summary).summary as SessionSummary);
         ctx.stdout(`Approved ${short(summary)}.\n`);
         tally.approved++;

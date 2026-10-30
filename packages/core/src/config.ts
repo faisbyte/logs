@@ -28,6 +28,8 @@ export const SummarizeConfigSchema = z
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
     /** Estimated input tokens per chunk; long sessions are split into chunks this size. */
     chunkTokens: z.number().int().min(1_000).max(500_000).optional(),
+    /** Warn when a session's last activity is this recent: its follow-ups may go stale (DECISIONS.md D61). 0 turns it off. */
+    activeWarningHours: z.number().min(0).max(168).optional(),
   })
   .strict();
 

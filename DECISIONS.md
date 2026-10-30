@@ -783,3 +783,13 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Re-pushing:** a new push of a retracted session from the same developer replaces the stored summary. Another developer's push is still a conflict.
 - **Why:** pushed summaries are immutable (D40), so a stale or wrong one needs a way out that its author controls. The first real review needed it.
 - **Not yet:** deleting retracted content entirely (Phase 10's delete-my-data).
+
+## D61. Review warnings: missing tickets, and sessions that look active
+
+- **Date:** 2026-10-30
+- **Decision:**
+  - **Missing tickets:** approving a summary with no ticket keys asks "No tickets tagged. Approve anyway? [y/N]". This happens in `sprintdigest approve` and in the interactive review.
+    - It asks only when the repo uses tickets: `.digest/config.json` has a tickets pattern or project keys, or the shared store has sprints (`GET /v1/sprints`, new). An unreachable store counts as no.
+    - Without a terminal, `approve` needs `--yes`. Answering no in review stays on the summary, so it can be edited.
+  - **Active sessions:** `sprintdigest summarize` warns for each session or period whose last activity is under `summarize.activeWarningHours` ago (default 2, 0 turns it off): "the session looks active and its follow-ups may go stale". It warns but doesn't block.
+- **Why:** the first real review pushed three summaries without tickets, and one summarised mid-session with follow-ups that were already done.

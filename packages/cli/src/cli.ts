@@ -31,6 +31,8 @@ export interface CliIo {
   editor?: (file: string) => Promise<void>;
   /** The shared store, behind its auth; absent until one is configured. */
   pushTarget?: PushTarget;
+  /** The clock; tests pass a fixed one. */
+  now?: () => Date;
 }
 
 type Optional = 'timeZone' | 'llm' | 'confirm' | 'ask' | 'editor' | 'pushTarget';
@@ -41,7 +43,7 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 };
 
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
-  const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), ...io };
+  const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), now: () => new Date(), ...io };
   let exitCode = 0;
   // Runs a command, turning an expected failure (bad state or config file) into a message and exit code 1.
   const guarded = async (name: string, command: () => number | Promise<number>) => {
@@ -104,12 +106,13 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     ['reject', 'Reject a draft summary: it is never uploaded or re-summarised automatically'],
     ['reopen', 'Put an approved or rejected summary back to draft (only before it is pushed)'],
   ] as const) {
-    program
+    const command = program
       .command(action)
       .argument('<sessionId>', 'session id or a unique prefix of it (see sprintdigest review --list)')
       .description(description)
-      .option(...repoOption)
-      .action((sessionId: string, options: { repo?: string }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
+      .option(...repoOption);
+    if (action === 'approve') command.option('--yes', 'approve without asking, even with no tickets tagged');
+    command.action((sessionId: string, options: { repo?: string; yes?: boolean }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
   }
 
   program

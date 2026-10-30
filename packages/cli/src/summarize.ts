@@ -82,6 +82,17 @@ export async function summarizeCommand(sessionId: string | undefined, options: S
   });
   selected = selected.filter((s) => !held.some((h) => h.session === s));
 
+  // A session with very recent activity is probably still going: its follow-ups may already be stale (D61).
+  const activeHours = config.summarize.activeWarningHours ?? 2;
+  const now = ctx.now().getTime();
+  for (const session of selected) {
+    const minutes = Math.round((now - Date.parse(session.endedAt)) / 60_000);
+    if (activeHours > 0 && minutes >= 0 && minutes < activeHours * 60) {
+      const ago = minutes < 90 ? `${minutes} minute${minutes === 1 ? '' : 's'}` : `${Math.round(minutes / 60)} hours`;
+      ctx.stdout(`${shortId(session)}  warning: last activity ${ago} ago, so the session looks active and its follow-ups may go stale. Summarise it again when the work is done.\n`);
+    }
+  }
+
   const plan = selected.map((session) => {
     // Repo-relative files and commits come from the parsed session and git, before redaction (DECISIONS.md D29).
     const prepared = prepareSessionForRepo(session, repoRoot);
