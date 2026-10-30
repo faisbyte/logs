@@ -23,7 +23,7 @@ async function sync(repo: string, env: Record<string, string>, extra: Partial<Cl
 
 const answering = (...replies: string[]) => async () => replies.shift() ?? 'q';
 
-describe('digest sync', () => {
+describe('sprintdigest sync', () => {
   it('summarises after showing the estimate, then reviews, then pushes what was approved', async () => {
     const { repo, env, store, pushTarget, llm } = await setup();
     const questions: string[] = [];

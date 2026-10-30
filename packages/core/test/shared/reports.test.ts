@@ -45,7 +45,7 @@ describe('onDemandReport', () => {
     const refused = await onDemandReport(deps, REPO, range);
     expect(refused).toEqual({
       status: 'cap-reached',
-      reason: expect.stringMatching(/^This repo has reached its monthly LLM cost cap: \$9\.99 of \$10\.00 spent since 2026-03-01 \(UTC\), and this report could cost up to \$0\.\d{2}\. A digest-server admin can raise it with digest-server repo --cap-usd\.$/),
+      reason: expect.stringMatching(/^This repo has reached its monthly LLM cost cap: \$9\.99 of \$10\.00 spent since 2026-03-01 \(UTC\), and this report could cost up to \$0\.\d{2}\. A sprintdigest-server admin can raise it with sprintdigest-server repo --cap-usd\.$/),
     });
     expect(llm.requests).toEqual([]);
     await store.saveRepoSettings(REPO, { monthlyCapUsd: 20 });

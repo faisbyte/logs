@@ -43,7 +43,7 @@ export function findSummary(repoRoot: string, prefix: string): { summary: Sessio
     wanted.period === null ? s.sessionId.startsWith(prefix) : periodId(s.sessionId).period === wanted.period && periodId(s.sessionId).sessionId.startsWith(wanted.sessionId),
   );
   if (matches.length === 1) return { summary: matches[0]! };
-  if (matches.length === 0) return { error: `No summary matching ${prefix}. Run digest review --list to see them.` };
+  if (matches.length === 0) return { error: `No summary matching ${prefix}. Run sprintdigest review --list to see them.` };
   return { error: `${prefix} matches ${matches.length} summaries; use more of the session id.` };
 }
 

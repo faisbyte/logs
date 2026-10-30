@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
 import { runCli, type CliIo } from '../src/cli.js';
 
-// digest report (a report written locally with the caller's key, DECISIONS.md D53) and digest preview (D54).
+// sprintdigest report (a report written locally with the caller's key, DECISIONS.md D53) and sprintdigest preview (D54).
 
 const REPO_ID = 'github.com/acme/webapp';
 const alice = { repoId: REPO_ID, developerId: 'alice', developerName: 'Alice' };
@@ -36,7 +36,7 @@ async function setup() {
   return { store, pushTarget, repo, llm };
 }
 
-describe('digest report', () => {
+describe('sprintdigest report', () => {
   it('shows the cost estimate, then writes the report with the caller’s model, and serves a repeat from the local cache', async () => {
     const { pushTarget, repo, llm } = await setup();
     const first = await run(['report', '--from', '2026-03-01', '--to', '2026-04-01', '--yes', '--repo', repo], { pushTarget, llm });
@@ -77,7 +77,7 @@ describe('digest report', () => {
   });
 });
 
-describe('digest preview', () => {
+describe('sprintdigest preview', () => {
   it('prints the digests waiting in developer preview', async () => {
     const { store, pushTarget, repo } = await setup();
     expect((await run(['preview', '--repo', repo], { pushTarget })).stdout).toBe('No digests are waiting in developer preview.\n');

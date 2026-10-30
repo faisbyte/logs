@@ -47,13 +47,13 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     try {
       exitCode = await command();
     } catch (err) {
-      io.stderr(`digest ${name}: ${(err as Error).message}\n`);
+      io.stderr(`sprintdigest ${name}: ${(err as Error).message}\n`);
       exitCode = 1;
     }
   };
 
   const program = new Command()
-    .name('digest')
+    .name('sprintdigest')
     .description('Turn AI coding sessions into team digests')
     .version(version)
     .exitOverride()
@@ -69,14 +69,14 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
 
   program
     .command('redact')
-    .argument('<sessionId>', 'session id or a unique prefix of it (see digest list)')
+    .argument('<sessionId>', 'session id or a unique prefix of it (see sprintdigest list)')
     .description('Redact a session and print how many values of each type were replaced (never the values)')
     .option('--repo <path>', 'repo the session belongs to (default: the git repo containing the current directory)')
     .action((sessionId: string, options: { repo?: string }) => guarded('redact', () => redactCommand(sessionId, options, ctx)));
 
   program
     .command('summarize')
-    .argument('[sessionId]', 'session id or a unique prefix of it (see digest list)')
+    .argument('[sessionId]', 'session id or a unique prefix of it (see sprintdigest list)')
     .description('Summarise sessions into local drafts; sends redacted, condensed session text to the Anthropic API with your key')
     .option('--all', 'summarise every non-empty session for the repo')
     .option('--estimate', 'print how many sessions would be sent and the estimated cost, then stop')
@@ -105,7 +105,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   ] as const) {
     program
       .command(action)
-      .argument('<sessionId>', 'session id or a unique prefix of it (see digest review --list)')
+      .argument('<sessionId>', 'session id or a unique prefix of it (see sprintdigest review --list)')
       .description(description)
       .option(...repoOption)
       .action((sessionId: string, options: { repo?: string }) => guarded(action, () => transitionCommand(action, sessionId, options, ctx)));
@@ -119,7 +119,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
 
   program
     .command('init')
-    .description('Install an optional pre-push reminder to run digest sync (it only prints; it never blocks a push)')
+    .description('Install an optional pre-push reminder to run sprintdigest sync (it only prints; it never blocks a push)')
     .option(...repoOption)
     .action((options: { repo?: string }) => guarded('init', () => initCommand(options, ctx)));
 
@@ -131,11 +131,11 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
 
   for (const [action, description] of [
     ['link', 'Link a pushed summary to another ticket (only the developer who pushed it can)'],
-    ['unlink', 'Remove a link added with digest link (ticket keys inside the summary stay)'],
+    ['unlink', 'Remove a link added with sprintdigest link (ticket keys inside the summary stay)'],
   ] as const) {
     program
       .command(action)
-      .argument('<sessionId>', 'session id or a unique prefix of it (see digest review --list)')
+      .argument('<sessionId>', 'session id or a unique prefix of it (see sprintdigest review --list)')
       .argument('<ticket>', 'ticket key, e.g. PROJ-142')
       .description(description)
       .option(...repoOption)

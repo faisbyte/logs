@@ -27,7 +27,7 @@ async function run(argv: string[], context: { cwd?: string; env?: Record<string,
 
 const rows = (stdout: string) => stdout.split('\n').slice(1).filter((l) => /^\d{4}-/.test(l));
 
-describe('digest list', () => {
+describe('sprintdigest list', () => {
   it('lists Claude Code and Codex sessions for the repo, newest first', async () => {
     const { exitCode, stdout } = await run(['list', '--repo', '/work/acme-webapp']);
     expect(exitCode).toBe(0);
@@ -141,7 +141,7 @@ describe('digest list', () => {
     writeFileSync(join(repo, '.digest/state.json'), 'not json');
     const { exitCode, stderr } = await run(['list', '--repo', repo]);
     expect(exitCode).toBe(1);
-    expect(stderr).toMatch(/^digest list: Unreadable \.digest\/state\.json/);
+    expect(stderr).toMatch(/^sprintdigest list: Unreadable \.digest\/state\.json/);
   });
 
   it('fails with a hint outside a git repo when no --repo is given', async () => {

@@ -63,7 +63,7 @@ describe('the shared store from .digest/config.json', () => {
     const server = await stubServer();
     const { exitCode, stderr } = await push(repoWith({ share: { url: server.url } }));
     expect(exitCode).toBe(1);
-    expect(stderr).toContain('no token for the shared store: put the token your digest-server admin gave you in .digest/token, or set DIGEST_TOKEN.');
+    expect(stderr).toContain('no token for the shared store: put the token your sprintdigest-server admin gave you in .digest/token, or set DIGEST_TOKEN.');
     expect(server.seen).toEqual([]);
   });
 

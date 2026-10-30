@@ -10,14 +10,14 @@ import { draftSummary } from '../../core/test/review/helpers.js';
 import { openStore, serverCli, startServer } from '../src/cli.js';
 
 // Phase 6 "Done when": summaries are grouped correctly by ticket and sprint for a test project. Everything runs
-// locally: digest-server on a PGlite database, the digest CLI for two developers, and a fake tracker.
+// locally: sprintdigest-server on a PGlite database, the digest CLI for two developers, and a fake tracker.
 //
 // The project:
 //   Sprint 1 is 2026-03-02 up to 2026-03-16, Sprint 2 is 2026-03-16 up to 2026-03-30.
 //   Alice  c1a5e001  2026-03-02  summarised from a fixture session on feature/PROJ-142-rate-limit, with a commit
 //                                "PROJ-150 ..." that also mentions SHA-256, UTF-8 and GPT-4 → PROJ-142 + PROJ-150
 //          a2        2026-03-17  no ticket → unlinked, Sprint 2
-//          a3        2026-03-20  no ticket when pushed; OPS-7 linked afterwards with digest link
+//          a3        2026-03-20  no ticket when pushed; OPS-7 linked afterwards with sprintdigest link
 //   Bob    b1        2026-03-15 22:00 to 03-16 02:00, PROJ-160 → crosses the boundary, lands in Sprint 1
 //          b2        2026-03-18  PROJ-170, which the tracker knows and has in no sprint → No sprint
 //          b3        2026-04-02  no ticket, after every sprint → No sprint, unlinked

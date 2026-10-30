@@ -3,7 +3,7 @@ import type { CliContext } from './cli.js';
 import { resolvePushTarget } from './share.js';
 import { resolveRepoRoot } from './sessions.js';
 
-// digest link / unlink (manual ticket links on a pushed summary, DECISIONS.md D45) and digest tickets (the
+// sprintdigest link / unlink (manual ticket links on a pushed summary, DECISIONS.md D45) and sprintdigest tickets (the
 // grouped view from the digest server, D46). All three only talk to the shared store.
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -11,7 +11,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 type Connection = { repoRoot: string; target: PushTarget; repoId: string; fail: (message: string) => number };
 
 export function connect(command: string, repo: string | undefined, ctx: CliContext): Connection | { exit: number } {
-  const fail = (message: string) => (ctx.stderr(`digest ${command}: ${message}\n`), 1);
+  const fail = (message: string) => (ctx.stderr(`sprintdigest ${command}: ${message}\n`), 1);
   const root = resolveRepoRoot(repo, ctx);
   if ('error' in root) return { exit: fail(root.error) };
   const resolved = resolvePushTarget(ctx, root.root);
@@ -29,7 +29,7 @@ export async function linkCommand(action: 'link' | 'unlink', sessionId: string, 
   if ('error' in found) return fail(found.error);
   const s = found.summary;
   const short = shortSessionId(s.sessionId);
-  if (!s.pushedAt) return fail(`${short} has not been pushed; add ticket keys while reviewing it (digest review) instead.`);
+  if (!s.pushedAt) return fail(`${short} has not been pushed; add ticket keys while reviewing it (sprintdigest review) instead.`);
 
   const ref = { agent: s.agent, sessionId: s.sessionId };
   const result = action === 'link' ? await target.link(repoId, ref, ticket) : await target.unlink(repoId, ref, ticket);

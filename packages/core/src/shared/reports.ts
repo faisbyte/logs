@@ -40,7 +40,7 @@ export async function capRefusal(deps: DigestDeps, repoId: string, input: Digest
   const cap = settings.monthlyCapUsd ?? deps.defaultCapUsd;
   const spent = await deps.store.spendSince(repoId, since);
   if (spent + estimate <= cap) return null;
-  return `This repo has reached its monthly LLM cost cap: ${dollars(spent)} of ${dollars(cap)} spent since ${since.slice(0, 10)} (UTC), and ${what} could cost up to ${dollars(estimate)}. A digest-server admin can raise it with digest-server repo --cap-usd.`;
+  return `This repo has reached its monthly LLM cost cap: ${dollars(spent)} of ${dollars(cap)} spent since ${since.slice(0, 10)} (UTC), and ${what} could cost up to ${dollars(estimate)}. A sprintdigest-server admin can raise it with sprintdigest-server repo --cap-usd.`;
 }
 
 /** Writes a digest for an input, recording its cost whether or not it passed its checks. */

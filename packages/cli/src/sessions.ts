@@ -31,7 +31,7 @@ export function repoSessions(repoRoot: string, ctx: CliContext): { dirs: AgentDi
 export function findSession(sessions: ParsedSession[], prefix: string, repoRoot: string): { session: ParsedSession } | { error: string } {
   const matches = sessions.filter((s) => s.sourceSessionId.startsWith(prefix));
   if (matches.length === 1) return { session: matches[0]! };
-  if (matches.length === 0) return { error: `No session matching "${prefix}" for ${repoRoot}. Run digest list to see session ids.` };
+  if (matches.length === 0) return { error: `No session matching "${prefix}" for ${repoRoot}. Run sprintdigest list to see session ids.` };
   return { error: `"${prefix}" matches ${matches.length} sessions: ${matches.map((s) => s.sourceSessionId).join(', ')}` };
 }
 

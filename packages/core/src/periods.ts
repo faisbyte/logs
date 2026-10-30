@@ -1,7 +1,7 @@
 import type { ParsedSession, Subagent, TranscriptEntry } from './schema.js';
 import { WORK_PERIOD_GAP_MS } from './summarize/condense.js';
 
-// digest summarize --by-period (DECISIONS.md D58): a session cut into its work periods, at the same 6-hour gap
+// sprintdigest summarize --by-period (DECISIONS.md D58): a session cut into its work periods, at the same 6-hour gap
 // the summariser uses (D28). Each period is a session of its own, with id "<session id>.p<n>", so redaction,
 // caching, review, approval and push treat it like any other session.
 

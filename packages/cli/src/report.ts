@@ -16,8 +16,8 @@ import {
 import type { CliContext } from './cli.js';
 import { connect, periodOption } from './tickets.js';
 
-// digest report: a report written on this machine with the caller's own key, after a cost estimate, from the
-// shared store's grouped summaries (DECISIONS.md D53); cached in .digest/. digest preview: what is waiting in
+// sprintdigest report: a report written on this machine with the caller's own key, after a cost estimate, from the
+// shared store's grouped summaries (DECISIONS.md D53); cached in .digest/. sprintdigest preview: what is waiting in
 // developer preview (D54).
 
 const DEFAULT_REPORT_MODEL = 'claude-sonnet-5-5';

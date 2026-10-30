@@ -5,7 +5,7 @@ For the session that tests Phase 7's "Done when": a real sprint's digest, read b
 ## Before the session
 
 - [ ] Pick one finished sprint with at least 5 approved, pushed summaries from at least 2 developers.
-- [ ] Generate its digest (`digest report --sprint <name> --out digest.md`, or `POST /v1/reports`) and read it yourself first.
+- [ ] Generate its digest (`sprintdigest report --sprint <name> --out digest.md`, or `POST /v1/reports`) and read it yourself first.
 - [ ] Ask one developer who worked in that sprint to mark anything wrong or misleading in the digest. Fix nothing yet: record it.
 - [ ] Deliver it the way the PO or SM would really get it: Slack or email.
 - [ ] Don't explain the tool, AI involvement levels or the coverage line beforehand. The digest has to stand on its own.

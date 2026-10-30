@@ -31,9 +31,9 @@ const short = (s: SessionSummary) => shortSessionId(s.sessionId);
 
 export function reviewListCommand(options: RepoOption, ctx: CliContext): number {
   const resolved = resolveRepoRoot(options.repo, ctx);
-  if ('error' in resolved) return (ctx.stderr(`digest review: ${resolved.error}\n`), 1);
+  if ('error' in resolved) return (ctx.stderr(`sprintdigest review: ${resolved.error}\n`), 1);
   const summaries = listSummaries(resolved.root);
-  if (summaries.length === 0) return (ctx.stdout('No summaries yet. Run digest summarize first.\n'), 0);
+  if (summaries.length === 0) return (ctx.stdout('No summaries yet. Run sprintdigest summarize first.\n'), 0);
   const rows = summaries.map((s) => [short(s), formatTime(s.startedAt, ctx.timeZone), statusText(s, ctx.timeZone), s.goal]);
   const widths = [0, 1, 2].map((i) => Math.max(...rows.map((r) => r[i]!.length)));
   ctx.stdout(rows.map((r) => r.map((c, i) => (i < 3 ? c.padEnd(widths[i]!) : c)).join('  ')).join('\n') + '\n');
@@ -42,7 +42,7 @@ export function reviewListCommand(options: RepoOption, ctx: CliContext): number 
 
 /** approve, reject and reopen: one transition on one summary, saved back in place. */
 export function transitionCommand(action: 'approve' | 'reject' | 'reopen', id: string, options: RepoOption, ctx: CliContext): number {
-  const fail = (message: string) => (ctx.stderr(`digest ${action}: ${message}\n`), 1);
+  const fail = (message: string) => (ctx.stderr(`sprintdigest ${action}: ${message}\n`), 1);
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
   const found = findSummary(writable.root, id);
@@ -67,13 +67,13 @@ export async function reviewCommand(options: RepoOption, ctx: CliContext): Promi
   return (await reviewDrafts(options, ctx)).code;
 }
 
-/** The interactive review; `quit` is true when the developer stopped before the end (digest sync then stops too). */
+/** The interactive review; `quit` is true when the developer stopped before the end (sprintdigest sync then stops too). */
 export async function reviewDrafts(options: RepoOption, ctx: CliContext): Promise<{ code: number; quit: boolean }> {
-  const fail = (message: string) => (ctx.stderr(`digest review: ${message}\n`), { code: 1, quit: false });
+  const fail = (message: string) => (ctx.stderr(`sprintdigest review: ${message}\n`), { code: 1, quit: false });
   const writable = writableRepoRoot(options.repo, ctx);
   if ('error' in writable) return fail(writable.error);
   const repoRoot = writable.root;
-  if (!ctx.ask) return fail('reviewing one by one needs a terminal. Use digest review --list, digest approve <id> or digest reject <id>.');
+  if (!ctx.ask) return fail('reviewing one by one needs a terminal. Use sprintdigest review --list, sprintdigest approve <id> or sprintdigest reject <id>.');
   const { ask, editor } = ctx;
 
   const drafts = listSummaries(repoRoot).filter((s) => s.status === 'draft');

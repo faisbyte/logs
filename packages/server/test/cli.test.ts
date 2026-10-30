@@ -11,9 +11,9 @@ async function cli(argv: string[], env: Record<string, string | undefined> = {},
   return { exitCode, stdout, stderr };
 }
 
-describe('digest-server token', () => {
+describe('sprintdigest-server token', () => {
   it('issues a token once, for the normalised repo id, storing only its hash', async () => {
-    const data = join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db');
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
     const { exitCode, stdout } = await cli(['token', '--data', data, '--repo', 'git@github.com:Acme/WebApp.git', '--developer', 'alice', '--name', 'Alice']);
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Token for Alice (alice) on github.com/acme/webapp. It is shown only this once:');
@@ -24,7 +24,7 @@ describe('digest-server token', () => {
   });
 
   it('issues a read-only token for a stakeholder with --reader', async () => {
-    const data = join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db');
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
     const { exitCode, stdout } = await cli(['token', '--data', data, '--repo', 'github.com/acme/webapp', '--reader', 'pat', '--name', 'Pat (PO)']);
     expect(exitCode).toBe(0);
     expect(stdout).toContain('Read-only token for Pat (PO) (pat) on github.com/acme/webapp: digests and reports only. It is shown only this once:');
@@ -38,15 +38,15 @@ describe('digest-server token', () => {
     expect((await cli(['token', '--data', '/tmp/x', '--repo', 'github.com/acme/webapp'])).stderr).toContain('--developer (or --reader) and --name are required');
     expect((await cli(['token', '--repo', 'a/b', '--developer', 'a', '--name', 'A'])).stderr).toContain('set DATABASE_URL or pass --data');
     expect((await cli(['token', '--data', '/tmp/x', '--repo', 'not a repo', '--developer', 'a', '--name', 'A'])).stderr).toContain('--repo must be a repo URL or host/path id');
-    expect((await cli(['frobnicate'])).stderr).toContain('usage: digest-server');
+    expect((await cli(['frobnicate'])).stderr).toContain('usage: sprintdigest-server');
   });
 });
 
-describe('digest-server sprint (DECISIONS.md D45)', () => {
+describe('sprintdigest-server sprint (DECISIONS.md D45)', () => {
   const repo = ['--repo', 'git@github.com:Acme/WebApp.git'];
 
   it('adds, lists, replaces and removes the named date ranges of a repo', async () => {
-    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     const added = await cli(['sprint', ...data, ...repo, '--name', 'Sprint 1', '--from', '2026-03-02', '--to', '2026-03-16']);
     expect(added).toMatchObject({ exitCode: 0, stdout: 'Saved Sprint 1 on github.com/acme/webapp: 2026-03-02 up to 2026-03-16 (not included).\n' });
     await cli(['sprint', ...data, ...repo, '--name', 'Sprint 2', '--from', '2026-03-16', '--to', '2026-03-30T12:00:00Z']);
@@ -58,18 +58,18 @@ describe('digest-server sprint (DECISIONS.md D45)', () => {
   });
 
   it('explains bad dates and missing arguments', async () => {
-    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', 'next monday', '--to', '2026-03-16'])).stderr).toContain('--from and --to must be dates such as 2026-03-02');
     expect((await cli(['sprint', ...data, ...repo, '--name', 'S', '--from', '2026-03-02'])).stderr).toContain('--name, --from and --to are needed');
     expect((await cli(['sprint', ...data])).stderr).toContain('--repo is required');
   });
 });
 
-describe('digest-server repo (DECISIONS.md D54)', () => {
+describe('sprintdigest-server repo (DECISIONS.md D54)', () => {
   const repo = ['--repo', 'github.com/acme/webapp'];
 
   it('shows the defaults, then changes what is asked and keeps the rest', async () => {
-    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     expect((await cli(['repo', ...data, ...repo])).stdout).toBe(
       'Digest settings for github.com/acme/webapp:\n  schedule: off\n  developer preview: off\n  email: none\n  slack: none\n  monthly LLM cost cap: the server default\n',
     );
@@ -83,7 +83,7 @@ describe('digest-server repo (DECISIONS.md D54)', () => {
   });
 
   it('explains bad values', async () => {
-    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     for (const [flag, value, message] of <[string, string | undefined, string][]>[
       ['--schedule', 'daily', '--schedule must be off, weekly or sprint-end'],
       ['--weekday', 'someday', '--weekday must be a day such as mon, or 1 to 7'],
@@ -98,9 +98,9 @@ describe('digest-server repo (DECISIONS.md D54)', () => {
   });
 });
 
-describe('digest-server digest send-due (DECISIONS.md D54)', () => {
+describe('sprintdigest-server digest send-due (DECISIONS.md D54)', () => {
   it('sends what is due once, and reports it; a second run sends nothing', async () => {
-    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     const repo = ['--repo', 'github.com/acme/webapp'];
     await cli(['sprint', ...data, ...repo, '--name', 'Sprint 1', '--from', '2026-03-02', '--to', '2026-03-16']);
     await cli(['repo', ...data, ...repo, '--schedule', 'sprint-end', '--since', '2026-03-01', '--slack-env', 'SLACK_WEBHOOK_URL']);
@@ -115,12 +115,12 @@ describe('digest-server digest send-due (DECISIONS.md D54)', () => {
   });
 
   it('exits 1 when something due could not be sent, so cron can alert', async () => {
-    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db')];
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     const repo = ['--repo', 'github.com/acme/webapp'];
     await cli(['sprint', ...data, ...repo, '--name', 'Sprint 1', '--from', '2026-03-02', '--to', '2026-03-16']);
     await cli(['repo', ...data, ...repo, '--schedule', 'sprint-end', '--since', '2026-03-01', '--slack-env', 'SLACK_WEBHOOK_URL']);
     expect(await cli(['digest', 'send-due', ...data])).toMatchObject({ exitCode: 1, stdout: 'github.com/acme/webapp  sprint:Sprint 1  not sent: slack: SLACK_WEBHOOK_URL is not set on the server\n' });
-    expect((await cli(['digest', ...data])).stderr).toContain('usage: digest-server');
+    expect((await cli(['digest', ...data])).stderr).toContain('usage: sprintdigest-server');
   });
 });
 
@@ -140,7 +140,7 @@ describe('digestDepsFromEnv (DECISIONS.md D48, D53)', () => {
 
 describe('startServer', () => {
   it('serves the API on the given port until closed', async () => {
-    const data = join(mkdtempSync(join(tmpdir(), 'digest-server-')), 'db');
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
     const { store, close } = await openStore({ dataDir: data });
     const server = await startServer({ store, port: 0, log: () => {} });
     expect((await fetch(`${server.url}/healthz`)).status).toBe(200);

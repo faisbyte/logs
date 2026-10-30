@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "digest": "./dist/bin.js"
+    "sprintdigest": "./dist/bin.js"
   },
   "scripts": {
     "build": "tsc -b"

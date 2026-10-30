@@ -34,7 +34,7 @@ const answers = (...replies: string[]) => {
   return { asked, ask: async (q: string) => (asked.push(q), replies.shift() ?? 'q') };
 };
 
-describe('digest review --list', () => {
+describe('sprintdigest review --list', () => {
   it('lists every summary with its status and goal', async () => {
     const repo = repoWithDrafts();
     await run(['approve', 'aaaa', '--repo', repo]);
@@ -47,11 +47,11 @@ describe('digest review --list', () => {
   it('says when there is nothing to review yet', async () => {
     const repo = realpathSync(mkdtempSync(join(tmpdir(), 'digest-cli-review-')));
     execFileSync('git', ['init', '-q'], { cwd: repo });
-    expect((await run(['review', '--list', '--repo', repo])).stdout).toContain('No summaries yet. Run digest summarize first.');
+    expect((await run(['review', '--list', '--repo', repo])).stdout).toContain('No summaries yet. Run sprintdigest summarize first.');
   });
 });
 
-describe('digest approve / reject / reopen', () => {
+describe('sprintdigest approve / reject / reopen', () => {
   it('approves a draft by id prefix, as the developer', async () => {
     const repo = repoWithDrafts();
     const { exitCode, stdout } = await run(['approve', 'aaaa', '--repo', repo]);
@@ -85,7 +85,7 @@ describe('digest approve / reject / reopen', () => {
   });
 });
 
-describe('digest review (interactive)', () => {
+describe('sprintdigest review (interactive)', () => {
   it('steps through the drafts as readable text under the shared-fields header', async () => {
     const repo = repoWithDrafts();
     const { ask, asked } = answers('a', 'r');
@@ -158,7 +158,7 @@ describe('digest review (interactive)', () => {
     const repo = repoWithDrafts();
     const { exitCode, stderr } = await run(['review', '--repo', repo]);
     expect(exitCode).toBe(1);
-    expect(stderr).toContain('digest review --list, digest approve <id> or digest reject <id>');
+    expect(stderr).toContain('sprintdigest review --list, sprintdigest approve <id> or sprintdigest reject <id>');
   });
 
   it('says when there are no drafts', async () => {
