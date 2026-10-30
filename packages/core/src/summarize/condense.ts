@@ -26,7 +26,8 @@ export interface CondensedSession {
 }
 
 // An idle gap this long splits a session into work periods, each summarised as its own part (DECISIONS.md D28).
-const WORK_PERIOD_GAP_MS = 6 * 3_600_000;
+/** A new work period starts when a turn begins this long after the last one ended (DECISIONS.md D28). */
+export const WORK_PERIOD_GAP_MS = 6 * 3_600_000;
 
 /** Conservative: the current tokenizer averages about 2.5 characters per token. */
 export const estimateTokens = (text: string) => Math.ceil(text.length / 2.5);
