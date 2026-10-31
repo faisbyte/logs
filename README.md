@@ -32,7 +32,7 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 |---|---|
 | `sprintdigest list` (`--json`) | Show this repo's Claude Code and Codex sessions: time, turns, tools, files, commits, branch, status |
 | `sprintdigest redact <sessionId>` | Redact a session and print counts per placeholder type (never the values); honours `.digest/config.json` |
-| `sprintdigest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation, `--by-period` writes one draft per work period) |
+| `sprintdigest summarize <sessionId>` / `--all` | Summarise sessions into local drafts in `.digest/summaries/` (`--estimate` shows the cost first, `--yes` skips the confirmation, `--by-period` writes one draft per work period, `<id>.p<n>` one period, `--discard-edits` replaces an edited draft) |
 | `sprintdigest review` | Step through drafts: approve, edit in `$EDITOR`, reject or skip each one |
 | `sprintdigest review --list` | List every summary with its status (draft, approved, rejected, edited) |
 | `sprintdigest approve <id>` / `reject <id>` / `reopen <id>` | Approve or reject a draft, or put one back to draft before it's pushed |
@@ -41,6 +41,7 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `sprintdigest sync` | Summarise new sessions (cost estimate first), review the drafts, then push what you approved |
 | `sprintdigest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
 | `sprintdigest link <id> <ticket>` / `unlink <id> <ticket>` | Link a pushed summary to another ticket, or remove such a link (ticket keys come from branch names, and from commit messages when `tickets.keys` is set in `.digest/config.json`) |
+| `sprintdigest ticket title <KEY> "<title>"` | Set a ticket's title for reports and digests when no tracker gives one |
 | `sprintdigest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
 | `sprintdigest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
 | `sprintdigest preview` | Show scheduled digests waiting in developer preview before they are sent |
