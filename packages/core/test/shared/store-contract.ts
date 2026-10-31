@@ -157,6 +157,20 @@ export function summaryStoreContract(name: string, make: () => Promise<SharedSto
       });
     });
 
+    describe('a withdrawn scheduled digest (DECISIONS.md D70)', () => {
+      it('no longer counts as its period\'s digest, so a corrected one can be stored next to it', async () => {
+        await store.push(alice, payloadFor());
+        const base = { repoId: REPO, kind: 'scheduled' as const, periodKey: 'sprint:Sprint 1', periodLabel: 'p', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# p\n', summaryCount: 1, developerCount: 1, costUsd: 0, previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z' };
+        const first = await store.saveDigest({ ...base, status: 'sent', summaryKeys: [`claude-code/${payloadFor().sessionId}`] });
+        await store.retract(alice, { agent: 'claude-code', sessionId: payloadFor().sessionId });
+        expect(await store.scheduledDigest(REPO, 'sprint:Sprint 1')).toBeNull();
+        const corrected = await store.saveDigest({ ...base, status: 'ready', markdown: '# p (corrected)\n', corrects: first.id });
+        expect(corrected.id).not.toBe(first.id);
+        expect(await store.scheduledDigest(REPO, 'sprint:Sprint 1')).toMatchObject({ id: corrected.id, corrects: first.id });
+        expect(await store.getDigest(REPO, first.id)).toMatchObject({ status: 'withdrawn', corrects: null });
+      });
+    });
+
     describe('tokens', () => {
       it('issues a token per developer per repo that authenticates as that identity', async () => {
         const { token } = await store.issueToken(alice);

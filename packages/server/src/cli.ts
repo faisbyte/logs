@@ -7,7 +7,7 @@ import pg from 'pg';
 import { createHandler, type HandlerOptions } from './http.js';
 import { openPGlite } from './pglite.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
-import { sendDue } from './schedule.js';
+import { needsAttention, sendDue } from './schedule.js';
 
 // sprintdigest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
 // `sprint` keeps a repo's named date ranges (D45).
@@ -235,7 +235,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
       for (const r of results) io.stdout(`${r.repoId}  ${r.periodKey}  ${r.result}\n`);
       if (!results.length) io.stdout('Nothing is due.\n');
       // Anything due but not sent, so cron can alert.
-      return results.some((r) => !/^(sent to|already sent|in developer preview)/.test(r.result) || r.result.includes('failed')) ? 1 : 0;
+      return results.some((r) => needsAttention(r.result)) ? 1 : 0;
     } finally {
       await close();
     }

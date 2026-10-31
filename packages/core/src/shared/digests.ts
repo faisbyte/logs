@@ -30,11 +30,14 @@ export interface NewDigest {
   createdAt: string;
   /** The summaries it was written from ("agent/sessionId"), so a retraction can withdraw it (D60). */
   summaryKeys?: string[];
+  /** The withdrawn digest this one corrects (D70). */
+  corrects?: string | null;
 }
 
 export interface StoredDigest extends NewDigest {
   id: string;
   summaryKeys: string[];
+  corrects: string | null;
   /** Channel → when it was delivered there. */
   deliveries: Record<string, string>;
   sentAt: string | null;
@@ -66,10 +69,14 @@ export interface RepoSettings {
 export type DigestPatch = Partial<Pick<StoredDigest, 'status' | 'sentAt' | 'previewUntil'>> & { deliveries?: Record<string, string> };
 
 export interface DigestStore {
-  /** Stores a digest after the secret check (D50). A repeat of the same scheduled period or cached report returns the one stored. */
+  /**
+   * Stores a digest after the secret check (D50). A repeat of the same scheduled period or cached report returns the
+   * one stored; a withdrawn scheduled digest doesn't count, so a corrected one can follow it (D70).
+   */
   saveDigest(digest: NewDigest): Promise<StoredDigest>;
   getDigest(repoId: string, id: string): Promise<StoredDigest | null>;
   findReport(repoId: string, key: ReportKey): Promise<StoredDigest | null>;
+  /** The period's scheduled digest, leaving out withdrawn ones. */
   scheduledDigest(repoId: string, periodKey: string): Promise<StoredDigest | null>;
   /** Newest first. */
   digests(repoId: string, filter?: { kinds?: DigestKind[]; statuses?: DigestStatus[] }): Promise<StoredDigest[]>;

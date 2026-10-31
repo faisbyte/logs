@@ -54,23 +54,31 @@ export interface SendResult {
   result: string;
 }
 
+/** Marks a digest as the corrected version of one that was withdrawn after it was sent (D70). */
+export function markCorrected(markdown: string, withdrawn: StoredDigest): string {
+  const sent = (withdrawn.sentAt ?? withdrawn.createdAt).slice(0, 10);
+  return markdown.replace(/^# AI work update: (.*)\n/, `# AI work update (corrected): $1\n\n_This corrects the update sent on ${sent}: a developer withdrew a summary it included._\n`);
+}
+
 async function deliver(deps: SendDueDeps, digest: StoredDigest, deliveries: Delivery[], now: Date): Promise<string> {
   assertDeliverable(digest.markdown);
+  const subject = `AI work update${digest.corrects ? ' (corrected)' : ''}: ${digest.periodLabel}`;
+  const what = digest.corrects ? 'a corrected version ' : '';
   const sent: string[] = [];
   const failed: string[] = [];
   for (const delivery of deliveries) {
     if (digest.deliveries[delivery.channel]) continue;
     try {
-      await delivery.send({ subject: `AI work update: ${digest.periodLabel}`, markdown: digest.markdown });
+      await delivery.send({ subject, markdown: digest.markdown });
       await deps.store.updateDigest(digest.repoId, digest.id, { deliveries: { [delivery.channel]: now.toISOString() } });
       sent.push(delivery.channel);
     } catch (err) {
       failed.push(`${delivery.channel} failed: ${(err as Error).message}`);
     }
   }
-  if (failed.length) return `${sent.length ? `sent to ${sent.join(', ')}; ` : ''}${failed.join('; ')} Will retry on the next run.`;
+  if (failed.length) return `${sent.length ? `sent ${what}to ${sent.join(', ')}; ` : ''}${failed.join('; ')} Will retry on the next run.`;
   await deps.store.updateDigest(digest.repoId, digest.id, { status: 'sent', sentAt: now.toISOString() });
-  return `sent to ${sent.join(', ')}`;
+  return `sent ${what}to ${sent.join(', ')}`;
 }
 
 async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: DuePeriod, now: Date): Promise<string> {
@@ -84,10 +92,20 @@ async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: Due
     const input = digestInput(report);
     const refusal = await capRefusal(deps, repoId, input, 'this digest');
     if (refusal) return `not written: ${refusal}`;
+    // A digest withdrawn after a retraction (D60) is replaced by a corrected one, never sent again (D70).
+    const withdrawn = (await deps.store.digests(repoId, { kinds: ['scheduled'], statuses: ['withdrawn'] })).find((d) => d.periodKey === period.periodKey);
     try {
       const written = await writeDigest(deps, repoId, input);
       const previewUntil = settings.previewHours > 0 ? new Date(now.getTime() + settings.previewHours * 3_600_000).toISOString() : null;
-      digest = await deps.store.saveDigest({ ...storedFields(repoId, written, reportSummaryKeys(report)), kind: 'scheduled', periodKey: period.periodKey, status: previewUntil ? 'preview' : 'ready', previewUntil });
+      const fields = storedFields(repoId, written, reportSummaryKeys(report));
+      digest = await deps.store.saveDigest({
+        ...fields,
+        ...(withdrawn ? { markdown: markCorrected(fields.markdown, withdrawn), corrects: withdrawn.id } : {}),
+        kind: 'scheduled',
+        periodKey: period.periodKey,
+        status: previewUntil ? 'preview' : 'ready',
+        previewUntil,
+      });
     } catch (err) {
       if (err instanceof DigestError) return `not written: ${err.message}`;
       throw err;
@@ -109,3 +127,6 @@ export async function sendDue(deps: SendDueDeps): Promise<SendResult[]> {
   }
   return results;
 }
+
+/** Whether a send-due result means something due wasn't delivered, so cron should alert. */
+export const needsAttention = (result: string) => !/^(sent |already sent|in developer preview)/.test(result) || result.includes(' failed: ');
