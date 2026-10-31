@@ -98,3 +98,6 @@ export { checkNewDigest, defaultRepoSettings, sameReport, warningText, type Dige
 export { capRefusal, monthStart, onDemandReport, periodKey, storedFields, writeDigest, type DigestDeps, type ReportResult } from './shared/reports.js';
 export { judgeDigest, judgeSystemPrompt, JudgeSchema, type JudgeVerdict } from './digest/judge.js';
 export { periodId, shortSessionId, splitByPeriod } from './periods.js';
+export { itemProblems, MAX_SENTENCE, type ContextItem, type ContextItemStatus, type ContextItemType } from './context/item.js';
+export { contextInput, isContextInput, type ContextInput, type ContextSource } from './context/input.js';
+export { CONTEXT_PROMPT_VERSION, ContextError, contextMessage, contextSystemPrompt, estimateContextCost, extractContext, ExtractedItemSchema, type ContextChanges, type ExtractedItem, type Extraction } from './context/extract.js';

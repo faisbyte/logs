@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isContextInput } from '../context/input.js';
 import { isRedactedSession } from '../redact/session.js';
 import type { UploadPayload } from '../shared/payload.js';
 import type { StoredSummary } from '../shared/store.js';
@@ -88,10 +89,10 @@ export function assertDigestSource(value: unknown): asserts value is DigestInput
   if (!isDigestInput(value)) throw new Error('Refusing to send digest data that did not come from digestInput().');
 }
 
-/** What an LLM request may carry: a redacted session (summaries) or a digest input (digests). */
+/** What an LLM request may carry: a redacted session (summaries), a digest input (digests) or a context input (D76). */
 export function assertLlmSource(value: unknown): void {
-  if (!isRedactedSession(value) && !isDigestInput(value)) {
-    throw new Error('Refusing to send unredacted session data: expected a RedactedSession from redactSession() or a DigestInput from digestInput().');
+  if (!isRedactedSession(value) && !isDigestInput(value) && !isContextInput(value)) {
+    throw new Error('Refusing to send unredacted session data: expected a RedactedSession from redactSession(), a DigestInput from digestInput() or a ContextInput from contextInput().');
   }
 }
 
