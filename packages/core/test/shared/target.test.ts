@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemorySummaryStore } from '../../src/shared/memory-store.js';
 import { localPushTarget } from '../../src/shared/target.js';
+import { contextItem } from './context-contract.js';
 import { payloadFor } from './store-contract.js';
 
 const REPO = 'github.com/acme/webapp';
@@ -34,5 +35,17 @@ describe('localPushTarget: ticket links and the tickets view behind the token', 
     expect(await target.retract(REPO, ref)).toMatchObject({ status: 'retracted' });
     const reader = localPushTarget(store, (await store.issueToken(alice, 'reader')).token);
     expect(await reader.retract(REPO, ref)).toMatchObject({ status: 'forbidden' });
+  });
+
+  it('reads context items and retires one as the identity the token belongs to; a reader is refused (DECISIONS.md D77)', async () => {
+    const store = new InMemorySummaryStore();
+    await store.applyContextChanges(REPO, { added: [contextItem()], merged: [], superseded: [] });
+    const target = localPushTarget(store, (await store.issueToken(alice)).token);
+    expect(await target.contextItems(REPO)).toEqual({ status: 'ok', items: [contextItem()] });
+    expect(await target.retireContextItem(REPO, 'ctx-0000000a')).toMatchObject({ status: 'retired' });
+    expect((await store.contextItems(REPO))[0]).toMatchObject({ status: 'retired', retiredBy: 'alice' });
+    const reader = localPushTarget(store, (await store.issueToken(alice, 'reader')).token);
+    expect(await reader.contextItems(REPO)).toMatchObject({ status: 'forbidden' });
+    expect(await reader.retireContextItem(REPO, 'ctx-0000000a')).toMatchObject({ status: 'forbidden' });
   });
 });

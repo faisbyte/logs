@@ -19,6 +19,9 @@ import {
 } from './tickets.js';
 
 import { randomUUID } from 'node:crypto';
+import type { ContextChanges } from '../context/extract.js';
+import type { ContextItem, ContextItemStatus } from '../context/item.js';
+import { allSourcesRetracted, byNewest, checkContextChanges, type RetireResult } from '../context/store.js';
 import { checkNewDigest, defaultRepoSettings, sameReport, type DigestPatch, type DigestStore, type DigestKind, type DigestStatus, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './digests.js';
 
 /** A shared store kept in memory: for tests, and the reference implementation of the contracts. */
@@ -35,6 +38,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   readonly #spend: { repoId: string; usd: number; at: string }[] = [];
   readonly #settings = new Map<string, RepoSettings>();
   readonly #titles = new Map<string, Map<string, TicketTitle>>();
+  readonly #context: ContextItem[] = [];
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -61,6 +65,11 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
       if (d.repoId !== identity.repoId || !d.summaryKeys.includes(key)) continue;
       if (d.status === 'sent') d.status = 'withdrawn';
       else this.#digests.splice(i, 1);
+    }
+    // Items whose every source is now retracted are retired (D77).
+    const retracted = (k: string) => [...this.#summaries.values()].some((s) => s.repoId === identity.repoId && digestSummaryKey(s.summary) === k && s.retractedAt !== null);
+    for (const item of this.#context) {
+      if (item.repoId === identity.repoId && item.status !== 'retired' && allSourcesRetracted(item, retracted)) Object.assign(item, { status: 'retired', retiredBy: 'retraction', retiredAt: retractedAt });
     }
     return { status: 'retracted', retractedAt };
   }
@@ -140,6 +149,32 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
 
   async trackerTickets(repoId: string): Promise<TrackerTicket[]> {
     return structuredClone([...(this.#tracker.get(repoId)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key)));
+  }
+
+  async contextItems(repoId: string, { statuses }: { statuses?: ContextItemStatus[] } = {}): Promise<ContextItem[]> {
+    return structuredClone(this.#context.filter((i) => i.repoId === repoId && (!statuses || statuses.includes(i.status))).sort(byNewest));
+  }
+
+  async applyContextChanges(repoId: string, changes: ContextChanges): Promise<void> {
+    checkContextChanges(repoId, changes);
+    const find = (id: string) => this.#context.find((i) => i.repoId === repoId && i.id === id);
+    for (const item of changes.added) if (!find(item.id)) this.#context.push(structuredClone(item));
+    for (const { id, ...fields } of changes.merged) {
+      const item = find(id);
+      if (item?.status === 'active') Object.assign(item, structuredClone(fields));
+    }
+    for (const { id, by } of changes.superseded) {
+      const item = find(id);
+      if (item?.status === 'active') Object.assign(item, { status: 'superseded', supersededBy: by });
+    }
+  }
+
+  async retireContextItem(identity: PushIdentity, id: string): Promise<RetireResult> {
+    const item = this.#context.find((i) => i.repoId === identity.repoId && i.id === id);
+    if (!item) return { status: 'not-found' };
+    if (item.status === 'retired') return { status: 'already', retiredAt: item.retiredAt! };
+    Object.assign(item, { status: 'retired', retiredBy: identity.developerId, retiredAt: this.#now().toISOString() });
+    return { status: 'retired', retiredAt: item.retiredAt! };
   }
 
   async saveDigest(digest: NewDigest): Promise<StoredDigest> {

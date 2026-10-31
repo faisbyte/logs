@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe } from 'vitest';
 import { summaryStoreContract } from '../../core/test/shared/store-contract.js';
 import { digestStoreContract } from '../../core/test/shared/digest-contract.js';
 import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
+import { contextStoreContract } from '../../core/test/shared/context-contract.js';
 import { migrate, PostgresSummaryStore } from '../src/postgres-store.js';
 
 const url = process.env.DIGEST_TEST_DATABASE_URL;
@@ -22,10 +23,11 @@ describe.skipIf(!url)('real Postgres', () => {
   });
   afterAll(() => pool?.end());
   const fresh = async () => {
-    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles');
+    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items');
     return new PostgresSummaryStore(pool);
   };
   summaryStoreContract('PostgresSummaryStore (node-postgres)', fresh);
   ticketStoreContract('PostgresSummaryStore (node-postgres)', fresh);
   digestStoreContract('PostgresSummaryStore (node-postgres)', fresh);
+  contextStoreContract('PostgresSummaryStore (node-postgres)', fresh);
 });

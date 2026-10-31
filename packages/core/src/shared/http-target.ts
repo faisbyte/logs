@@ -1,6 +1,7 @@
+import type { ContextItem } from '../context/item.js';
 import type { UploadPayload } from './payload.js';
 import type { StoredDigest } from './digests.js';
-import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TitleOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { ContextItemsOutcome, LinkOutcome, PreviewsOutcome, RetireOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TitleOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
 import type { TicketReport } from './ticket-report.js';
 import type { Sprint, SummaryRef } from './tickets.js';
 
@@ -69,6 +70,22 @@ export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof
       const b = body as Body & { retractedAt?: string };
       if ((b.status === 'retracted' || b.status === 'already') && b.retractedAt) return { status: b.status, retractedAt: b.retractedAt };
       if ((b.status === 'not-found' || b.status === 'forbidden') && b.reason) return { status: b.status, reason: b.reason };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
+    async contextItems(repoId): Promise<ContextItemsOutcome> {
+      const [response, body] = await call(`/v1/context-items?${new URLSearchParams({ repoId })}`);
+      if (response.status === 200) return { status: 'ok', items: (body as unknown as { items: ContextItem[] }).items };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
+    async retireContextItem(repoId, id): Promise<RetireOutcome> {
+      const [response, body] = await call('/v1/context-retirements', { method: 'POST', body: { repoId, id } });
+      const b = body as Body & { retiredAt?: string };
+      if ((b.status === 'retired' || b.status === 'already') && b.retiredAt) return { status: b.status, retiredAt: b.retiredAt };
+      if (b.status === 'not-found') return { status: 'not-found' };
       const no = refused(response, body);
       if (no) return no;
       throw unexpected(response, body);

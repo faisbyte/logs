@@ -2,6 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { FakeLlmClient, InMemorySummaryStore } from '@digest/core';
 import { afterEach, describe, expect, it } from 'vitest';
+import { contextItem } from '../../core/test/shared/context-contract.js';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
 import { createHandler } from '../src/http.js';
 
@@ -178,6 +179,24 @@ describe('digest server HTTP API', () => {
     expect(answers.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403]);
     for (const r of answers) expect(JSON.stringify(await r.json())).not.toContain('Rate limit');
     expect(await store.list({ repoId: REPO })).toHaveLength(1);
+  });
+
+  it('serves context items to developers and lets them retire one; readers get 403 on both (DECISIONS.md D77)', async () => {
+    const { store, call, token } = await start();
+    await store.applyContextChanges(REPO, { added: [contextItem()], merged: [], superseded: [] });
+    const repo = encodeURIComponent(REPO);
+    const listed = await call(`/v1/context-items?repoId=${repo}`, { token });
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({ items: [contextItem()] });
+    expect((await call('/v1/context-retirements', { method: 'POST', token, body: { repoId: REPO, id: 'ctx-99999999' } })).status).toBe(404);
+    const retired = await call('/v1/context-retirements', { method: 'POST', token, body: { repoId: REPO, id: 'ctx-0000000a' } });
+    expect(retired.status).toBe(200);
+    expect(await retired.json()).toEqual({ status: 'retired', retiredAt: expect.any(String) });
+    expect((await call('/v1/context-retirements', { method: 'POST', token, body: { repoId: REPO } })).status).toBe(400);
+
+    const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+    expect((await call(`/v1/context-items?repoId=${repo}`, { token: reader })).status).toBe(403);
+    expect((await call('/v1/context-retirements', { method: 'POST', token: reader, body: { repoId: REPO, id: 'ctx-0000000a' } })).status).toBe(403);
   });
 
   describe('reports and digests (DECISIONS.md D51, D53)', () => {

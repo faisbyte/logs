@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   byFrom,
+  byNewest,
+  checkContextChanges,
   checkNewDigest,
   decideLink,
   defaultRepoSettings,
@@ -14,6 +16,10 @@ import {
   newToken,
   teamReportFrom,
   UploadPayloadSchema,
+  type ContextChanges,
+  type ContextItem,
+  type ContextItemStatus,
+  type RetireResult,
   type DigestKind,
   type DigestPatch,
   type DigestStatus,
@@ -184,6 +190,26 @@ const MIGRATIONS: string[][] = [
     "alter table digests add column warnings jsonb not null default '[]'",
     'alter table digests add column jargon_retried boolean not null default false',
   ],
+  [
+    // Context items (DECISIONS.md D76, D77): never deleted, only superseded or retired.
+    `create table context_items (
+      repo_id text not null,
+      id text not null,
+      type text not null,
+      text text not null,
+      reason text not null,
+      paths jsonb not null,
+      tickets jsonb not null,
+      sources jsonb not null,
+      date text not null,
+      status text not null,
+      superseded_by text,
+      retired_by text,
+      retired_at timestamptz,
+      created_at timestamptz not null,
+      primary key (repo_id, id)
+    )`,
+  ],
 ];
 
 /**
@@ -258,6 +284,40 @@ interface DigestRow {
 }
 
 const isoOrNull = (value: Date | string | null) => (value === null ? null : iso(value));
+
+interface ContextRow {
+  repo_id: string;
+  id: string;
+  type: ContextItem['type'];
+  text: string;
+  reason: string;
+  paths: string[] | string;
+  tickets: string[] | string;
+  sources: string[] | string;
+  date: string;
+  status: ContextItemStatus;
+  superseded_by: string | null;
+  retired_by: string | null;
+  retired_at: Date | string | null;
+  created_at: Date | string;
+}
+const json = <T>(value: T | string): T => (typeof value === 'string' ? JSON.parse(value) : value);
+const toContextItem = (r: ContextRow): ContextItem => ({
+  id: r.id,
+  repoId: r.repo_id,
+  type: r.type,
+  text: r.text,
+  reason: r.reason,
+  paths: json(r.paths),
+  tickets: json(r.tickets),
+  sources: json(r.sources),
+  date: r.date,
+  status: r.status,
+  supersededBy: r.superseded_by,
+  retiredBy: r.retired_by,
+  retiredAt: isoOrNull(r.retired_at),
+  createdAt: iso(r.created_at),
+});
 const toDigest = (r: DigestRow): StoredDigest => ({
   repoId: r.repo_id,
   kind: r.kind,
@@ -346,6 +406,16 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const key = JSON.stringify([digestSummaryKey(ref)]);
     await this.#sql.query("update digests set status = 'withdrawn' where repo_id = $1 and status = 'sent' and summary_keys @> $2::jsonb", [identity.repoId, key]);
     await this.#sql.query("delete from digests where repo_id = $1 and status <> 'withdrawn' and summary_keys @> $2::jsonb", [identity.repoId, key]);
+    // Items whose every source is now retracted are retired (D77).
+    await this.#sql.query(
+      `update context_items c set status = 'retired', retired_by = 'retraction', retired_at = $2
+       where c.repo_id = $1 and c.status <> 'retired' and jsonb_array_length(c.sources) > 0
+         and not exists (
+           select 1 from jsonb_array_elements_text(c.sources) src
+           where not exists (select 1 from summaries s where s.repo_id = c.repo_id and s.agent || '/' || s.session_id = src and s.retracted_at is not null)
+         )`,
+      [identity.repoId, retractedAt],
+    );
     return { status: 'retracted', retractedAt };
   }
 
@@ -473,6 +543,54 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
   async trackerTickets(repoId: string): Promise<TrackerTicket[]> {
     const { rows } = await this.#sql.query<{ ticket_key: string; title: string | null; sprint: string | null }>('select ticket_key, title, sprint from tracker_tickets where repo_id = $1', [repoId]);
     return rows.map((r) => ({ key: r.ticket_key, title: r.title, sprint: r.sprint })).sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  async contextItems(repoId: string, { statuses }: { statuses?: ContextItemStatus[] } = {}): Promise<ContextItem[]> {
+    const { rows } = await this.#sql.query<ContextRow>('select * from context_items where repo_id = $1 and ($2::text[] is null or status = any($2::text[]))', [repoId, statuses ?? null]);
+    return rows.map(toContextItem).sort(byNewest);
+  }
+
+  async applyContextChanges(repoId: string, changes: ContextChanges): Promise<void> {
+    checkContextChanges(repoId, changes);
+    // One extraction's changes land together or not at all.
+    await this.#sql.query('begin');
+    try {
+      for (const i of changes.added) {
+        await this.#sql.query(
+          `insert into context_items (repo_id, id, type, text, reason, paths, tickets, sources, date, status, superseded_by, retired_by, retired_at, created_at)
+           values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14) on conflict do nothing`,
+          [repoId, i.id, i.type, i.text, i.reason, JSON.stringify(i.paths), JSON.stringify(i.tickets), JSON.stringify(i.sources), i.date, i.status, i.supersededBy, i.retiredBy, i.retiredAt, i.createdAt],
+        );
+      }
+      for (const m of changes.merged) {
+        await this.#sql.query("update context_items set sources = $3::jsonb, paths = $4::jsonb, tickets = $5::jsonb, date = $6 where repo_id = $1 and id = $2 and status = 'active'", [
+          repoId,
+          m.id,
+          JSON.stringify(m.sources),
+          JSON.stringify(m.paths),
+          JSON.stringify(m.tickets),
+          m.date,
+        ]);
+      }
+      for (const s of changes.superseded) {
+        await this.#sql.query("update context_items set status = 'superseded', superseded_by = $3 where repo_id = $1 and id = $2 and status = 'active'", [repoId, s.id, s.by]);
+      }
+      await this.#sql.query('commit');
+    } catch (err) {
+      await this.#sql.query('rollback');
+      throw err;
+    }
+  }
+
+  async retireContextItem(identity: PushIdentity, id: string): Promise<RetireResult> {
+    const retiredAt = this.#now().toISOString();
+    const { rows } = await this.#sql.query<{ retired_at: Date | string }>(
+      "update context_items set status = 'retired', retired_by = $3, retired_at = $4 where repo_id = $1 and id = $2 and status <> 'retired' returning retired_at",
+      [identity.repoId, id, identity.developerId, retiredAt],
+    );
+    if (rows[0]) return { status: 'retired', retiredAt: iso(rows[0].retired_at) };
+    const { rows: existing } = await this.#sql.query<{ retired_at: Date | string | null }>('select retired_at from context_items where repo_id = $1 and id = $2', [identity.repoId, id]);
+    return existing[0] ? { status: 'already', retiredAt: iso(existing[0].retired_at!) } : { status: 'not-found' };
   }
 
   async saveDigest(digest: NewDigest): Promise<StoredDigest> {
