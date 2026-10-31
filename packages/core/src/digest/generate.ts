@@ -28,6 +28,8 @@ export type DigestOutput = z.infer<typeof DigestOutputSchema>;
 
 export interface Digest {
   markdown: string;
+  /** Soft problems the digest was kept with, e.g. "jargon: schema" (D68). */
+  warnings: string[];
   period: DigestPeriod;
   coverage: { summaryCount: number; developerCount: number };
   model: string;
@@ -108,6 +110,53 @@ export function renderDigest(out: DigestOutput | null, input: DigestInput): stri
   return [...lines, coverageLine(input.coverage), ''].join('\n');
 }
 
+/** Developer terms a product owner may not know (D68). The server and `sprintdigest report` can replace the list. */
+export const DEFAULT_JARGON = [
+  'API',
+  'Block Kit',
+  'cache',
+  'chunk',
+  'CI',
+  'CLI',
+  'commit',
+  'Docker',
+  'end-to-end test',
+  'endpoint',
+  'hook',
+  'JSON',
+  'merge request',
+  'migration',
+  'mrkdwn',
+  'npm',
+  'package manager',
+  'payload',
+  'PGlite',
+  'pnpm',
+  'Postgres',
+  'pre-push',
+  'prompt',
+  'pull request',
+  'refactor',
+  'regex',
+  'repo',
+  'repository',
+  'schema',
+  'token',
+  'TypeScript',
+  'webhook',
+  'work period',
+  'YAML',
+  'zod',
+];
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The listed terms the digest uses, as whole words in any case (plural and verb endings too), alphabetically. */
+export function jargonIn(out: DigestOutput, terms: readonly string[]): string[] {
+  const text = strings(out).map(([, t]) => t).join('\n');
+  return terms.filter((term) => new RegExp(`\\b${escapeRegExp(term)}(?:s|es|ed|ing)?\\b`, 'i').test(text)).sort((a, b) => a.localeCompare(b));
+}
+
 /** The last check before a digest is stored or delivered: the secret detectors, on the whole text (D50). */
 export function assertDeliverable(markdown: string): void {
   const problems = contentProblems('digest', markdown);
@@ -143,15 +192,19 @@ function withUsage(error: DigestError, model: string, usages: LlmUsage[]): Diges
   return error;
 }
 
-export async function generateDigest(input: DigestInput, llm: LlmClient, { now = () => new Date() }: { now?: () => Date } = {}): Promise<Digest> {
-  const done = (out: DigestOutput | null, usages: LlmUsage[]): Digest => {
+export async function generateDigest(
+  input: DigestInput,
+  llm: LlmClient,
+  { now = () => new Date(), jargon = DEFAULT_JARGON }: { now?: () => Date; jargon?: readonly string[] } = {},
+): Promise<Digest> {
+  const done = (out: DigestOutput | null, usages: LlmUsage[], warnings: string[] = []): Digest => {
     const markdown = renderDigest(out, input);
     assertDeliverable(markdown);
-    return { markdown, period: input.period, coverage: input.coverage, model: llm.model, promptVersion: DIGEST_PROMPT_VERSION, inputHash: input.hash, usage: totalUsage(llm.model, usages), generatedAt: now().toISOString() };
+    return { markdown, warnings, period: input.period, coverage: input.coverage, model: llm.model, promptVersion: DIGEST_PROMPT_VERSION, inputHash: input.hash, usage: totalUsage(llm.model, usages), generatedAt: now().toISOString() };
   };
   if (input.tickets.length === 0 && input.unlinked.length === 0) return done(null, []);
 
-  const system = digestSystemPrompt();
+  const system = digestSystemPrompt(jargon);
   let messages: LlmMessage[] = [{ role: 'user', content: digestMessage(input) }];
   const usages: LlmUsage[] = [];
   for (let attempt = 1; ; attempt++) {
@@ -163,7 +216,15 @@ export async function generateDigest(input: DigestInput, llm: LlmClient, { now =
       // A secret is blocked outright, never retried: the reply that held it isn't sent back to the model either.
       const secrets = strings(result.value).flatMap(([path, text]) => contentProblems(path, text));
       if (secrets.length) throw withUsage(new DigestBlockedError(`Digest blocked: ${secrets.join('; ')}.`), llm.model, usages);
-      return done(result.value, usages);
+      // Jargon gets one retry; a second reply that still has it is kept, with a warning (D68).
+      const terms = jargonIn(result.value, jargon);
+      if (!terms.length || attempt === 2) return done(result.value, usages, terms.map((t) => `jargon: ${t}`));
+      messages = [
+        ...messages,
+        { role: 'assistant', content: response.text },
+        { role: 'user', content: `Your previous reply used developer terms a product owner may not know: ${terms.join(', ')}. Explain each in a few plain words or avoid it. Reply again with only the corrected JSON object.` },
+      ];
+      continue;
     }
     if (attempt === 2) throw withUsage(new DigestError(`The digest for ${input.period.label} failed its checks twice: ${result.errors}`), llm.model, usages);
     messages = [

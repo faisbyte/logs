@@ -56,7 +56,8 @@ export function digestDepsFromEnv(env: Record<string, string | undefined>): Omit
   if (!EFFORTS.includes(effort)) throw new Error(`DIGEST_EFFORT must be one of ${EFFORTS.join(', ')}.`);
   const defaultCapUsd = env.DIGEST_MONTHLY_CAP_USD === undefined ? 10 : Number(env.DIGEST_MONTHLY_CAP_USD);
   if (!Number.isFinite(defaultCapUsd) || defaultCapUsd < 0) throw new Error('DIGEST_MONTHLY_CAP_USD must be a number of dollars, e.g. 10.');
-  return { llm: env.ANTHROPIC_API_KEY ? AnthropicLlmClient.fromEnv(env, model, effort) : null, model, defaultCapUsd };
+  const jargon = env.DIGEST_JARGON?.split(',').map((t) => t.trim()).filter(Boolean);
+  return { llm: env.ANTHROPIC_API_KEY ? AnthropicLlmClient.fromEnv(env, model, effort) : null, model, defaultCapUsd, ...(jargon ? { jargon } : {}) };
 }
 
 export async function startServer({

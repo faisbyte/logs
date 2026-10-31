@@ -867,3 +867,16 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Storage:** the server keeps one title per key per repo, with who set it and when, in a `ticket_titles` table (migration 7).
   - **Use:** reports, `sprintdigest tickets` and digests use the tracker's title when there is one, and this title otherwise. Headings read "LOGS-1: Session parsing".
 - **Why:** with no tracker connected, the Sprint 1 digest's headings were bare keys a reader couldn't place.
+
+## D68. Jargon: a prompt rule, a deterministic check with one retry, and the judge
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - **Prompt rule:** "Write for someone who has never written software: explain a technical term in a few plain words, or avoid it." It is followed by the list of words to avoid or explain.
+  - **Deterministic check:**
+    - Every field of the reply is checked against a term list, as whole words in any case (plurals and verb endings too, so "commit" doesn't match "commitment").
+    - The built-in list starts from the terms in the first Sprint 1 digest (pnpm, package manager, schema, prompt, chunk, commit, hook, pre-push, end-to-end test, work period) plus common developer words.
+    - The server's `DIGEST_JARGON` (comma-separated) replaces it, and so does `report.jargon` in `.digest/config.json` for `sprintdigest report`.
+    - A hit causes one retry that names the terms. If the second reply still uses them, it is kept, with a warning recorded on the digest (`warnings: ["jargon: schema"]`), not refused.
+  - **Judge:** the eval judge reports unexplained jargon, and the golden fixture has a planted term ("payload") it must catch.
+- **Alternative:** refuse a digest that still has jargon after the retry. That's too strict: one unavoidable word would block a whole sprint update.

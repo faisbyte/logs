@@ -22,6 +22,7 @@ describe('judgeDigest', () => {
         { claim: 'The change shipped to production.', supported: false, reason: 'No summary mentions a release.' },
       ],
       resolvedStillListed: [{ item: 'Lockout is not built yet.', laterWork: 'W2 built the lockout.' }],
+      jargon: [{ term: 'schema', sentence: 'The schema changed.' }],
     };
     const llm = new FakeLlmClient([JSON.stringify(reply)], 'claude-opus-5-5');
     const verdict = await judgeDigest(input, '# Update\n\nLogin now limits repeated attempts. The change shipped to production.\n', llm);
@@ -29,6 +30,7 @@ describe('judgeDigest', () => {
       claimCount: 2,
       unsupported: [{ claim: 'The change shipped to production.', reason: 'No summary mentions a release.' }],
       resolvedStillListed: [{ item: 'Lockout is not built yet.', laterWork: 'W2 built the lockout.' }],
+      jargon: [{ term: 'schema', sentence: 'The schema changed.' }],
       usage: { requests: 1 },
     });
     const sent = llm.requests[0]!;
@@ -40,6 +42,7 @@ describe('judgeDigest', () => {
   it('asks for every factual claim, judged only against the summaries', () => {
     expect(judgeSystemPrompt()).toContain('List every factual claim the digest makes');
     expect(judgeSystemPrompt()).toContain('supported only if the summaries state it or plainly imply it');
+    expect(judgeSystemPrompt()).toContain('"jargon": every technical term in the digest that a non-technical product owner would not understand and that is not explained');
     expect(judgeSystemPrompt()).toContain('"resolvedStillListed": every risk, follow-up or "not yet done" statement in the digest that later work (a higher W number) shows as done, fixed or decided');
   });
 });

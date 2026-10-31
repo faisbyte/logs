@@ -16,6 +16,8 @@ export interface DigestDeps {
   model: string;
   defaultCapUsd: number;
   now?: () => Date;
+  /** Terms the digest must explain or avoid; the built-in list when absent (D68). */
+  jargon?: readonly string[];
 }
 
 export type ReportResult =
@@ -51,7 +53,7 @@ export async function writeDigest(deps: DigestDeps, repoId: string, input: Diges
     complete: () => Promise.reject(new DigestError(NO_KEY)),
   };
   try {
-    const digest = await generateDigest(input, llm, { now });
+    const digest = await generateDigest(input, llm, { now, ...(deps.jargon ? { jargon: deps.jargon } : {}) });
     if (digest.usage.costUsd) await deps.store.recordSpend(repoId, digest.usage.costUsd, now().toISOString());
     return digest;
   } catch (err) {

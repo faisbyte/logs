@@ -1,15 +1,27 @@
 {
   "about": "Synthetic sprint for the opt-in digest eval (DECISIONS.md D65): early follow-ups that later work resolves, developer housekeeping, a note about the tool's own process, and two items still open that a product owner should see.",
-  "sprint": { "name": "Sprint 7", "from": "2026-04-06T00:00:00.000Z", "to": "2026-04-20T00:00:00.000Z" },
+  "sprint": {
+    "name": "Sprint 7",
+    "from": "2026-04-06T00:00:00.000Z",
+    "to": "2026-04-20T00:00:00.000Z"
+  },
   "titles": [
-    { "key": "PROJ-201", "title": "Account lockout" },
-    { "key": "PROJ-202", "title": "Password reset emails" }
+    {
+      "key": "PROJ-201",
+      "title": "Account lockout"
+    },
+    {
+      "key": "PROJ-202",
+      "title": "Password reset emails"
+    }
   ],
   "summaries": [
     {
       "developer": "alice",
       "sessionId": "f1000001-0000-4000-8000-000000000001",
-      "ticketRefs": ["PROJ-201"],
+      "ticketRefs": [
+        "PROJ-201"
+      ],
       "branch": "feature/PROJ-201-lockout",
       "startedAt": "2026-04-07T09:00:00.000Z",
       "endedAt": "2026-04-07T11:00:00.000Z",
@@ -29,36 +41,69 @@
     {
       "developer": "alice",
       "sessionId": "f1000002-0000-4000-8000-000000000002",
-      "ticketRefs": ["PROJ-201"],
+      "ticketRefs": [
+        "PROJ-201"
+      ],
       "branch": "feature/PROJ-201-lockout",
       "startedAt": "2026-04-14T09:00:00.000Z",
       "endedAt": "2026-04-14T12:00:00.000Z",
       "goal": "Finish the account lockout.",
       "outcome": "completed",
       "whatWasDone": "Accounts now lock after 5 failed logins and unlock automatically after 15 minutes, with a message saying when to try again.",
-      "decisions": [{ "decision": "Unlock accounts automatically after 15 minutes", "reason": "Unlocking by hand would add work for the support team." }],
-      "rejectedApproaches": [{ "approach": "Unlocking only through support", "reason": "Too slow for people locked out by mistake." }],
-      "risksOrFollowUps": ["The support team has not been told about the 15-minute automatic unlock yet."],
+      "decisions": [
+        {
+          "decision": "Unlock accounts automatically after 15 minutes",
+          "reason": "Unlocking by hand would add work for the support team."
+        }
+      ],
+      "rejectedApproaches": [
+        {
+          "approach": "Unlocking only through support",
+          "reason": "Too slow for people locked out by mistake."
+        }
+      ],
+      "risksOrFollowUps": [
+        "The support team has not been told about the 15-minute automatic unlock yet."
+      ],
       "aiInvolvement": "moderate"
     },
     {
       "developer": "bob",
       "sessionId": "f1000003-0000-4000-8000-000000000003",
-      "ticketRefs": ["PROJ-202"],
+      "ticketRefs": [
+        "PROJ-202"
+      ],
       "branch": "feature/PROJ-202-reset",
       "startedAt": "2026-04-15T10:00:00.000Z",
       "endedAt": "2026-04-15T12:00:00.000Z",
       "goal": "Send password reset emails.",
       "outcome": "partial",
       "whatWasDone": "Built the reset link and its expiry. Emails go through a test account for now.",
-      "decisions": [{ "decision": "Reset links expire after one hour", "reason": "Shorter links are safer if an email is forwarded." }],
+      "decisions": [
+        {
+          "decision": "Reset links expire after one hour",
+          "reason": "Shorter links are safer if an email is forwarded."
+        }
+      ],
       "rejectedApproaches": [],
-      "risksOrFollowUps": ["An email provider must be chosen before launch; the free tier sends at most 100 emails a day."],
+      "risksOrFollowUps": [
+        "An email provider must be chosen before launch; the free tier sends at most 100 emails a day."
+      ],
       "aiInvolvement": "light"
     }
   ],
-  "plantedDigest": "# AI work update: Sprint 7 (2026-04-06 to 2026-04-19)\n\nThe team finished the account lockout and started password reset emails.\n\n## PROJ-201: Account lockout\n\nAccounts now lock after 5 failed logins and unlock after 15 minutes.\n\n## PROJ-202: Password reset emails\n\nReset links work and expire after an hour.\n\n## Risks and open questions\n\n- The lockout after failed logins is not built yet.\n- An email provider must be chosen before launch.\n\n_Based on 3 summaries that 2 developers chose to share._\n",
+  "plantedDigest": "# AI work update: Sprint 7 (2026-04-06 to 2026-04-19)\n\nThe team finished the account lockout and started password reset emails.\n\n## PROJ-201: Account lockout\n\nAccounts now lock after 5 failed logins and unlock after 15 minutes.\n\n## PROJ-202: Password reset emails\n\nReset links work and expire after an hour; each link carries a signed payload.\n\n## Risks and open questions\n\n- The lockout after failed logins is not built yet.\n- An email provider must be chosen before launch.\n\n_Based on 3 summaries that 2 developers chose to share._\n",
   "plantedResolved": "lockout after failed logins is not built",
-  "mustNotAppear": ["test runner", "Re-run the summaries", "not built yet", "Decide whether locked accounts"],
-  "mustAppear": ["15 minutes", "email provider", "support team"]
+  "mustNotAppear": [
+    "test runner",
+    "Re-run the summaries",
+    "not built yet",
+    "Decide whether locked accounts"
+  ],
+  "mustAppear": [
+    "15 minutes",
+    "email provider",
+    "support team"
+  ],
+  "plantedJargon": "payload"
 }
