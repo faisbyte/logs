@@ -911,3 +911,13 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - The withdrawn digest stays withdrawn. A further run says "already sent".
   - The cron exit code treats a corrected send as success.
 - **Test:** the exact sequence: send, retract, `send-due` (corrected and sent to both channels), `send-due` again (already sent).
+
+## D71. A digest kept with jargon says so in the preview and in send-due
+
+- **Date:** 2026-10-31
+- **Gap:** D68 kept a digest whose jargon survived the retry and attached a warning, but nothing stored or showed it, not even a log line. The first corrected Sprint 1 digest can't tell whether a retry ran.
+- **Decision:**
+  - A stored digest keeps its `warnings` and `jargonRetried` (whether the jargon check sent the reply back once). Migration 9 adds both; older digests read as no warnings and no retry.
+  - `sprintdigest preview` prints "Warning: jargon: schema (still there after one retry, so kept)" under the preview line, or "A jargon retry ran; the second reply had none of the listed terms." when the retry fixed it.
+  - `send-due` appends "; warning: …" to the result line when it writes, previews or delivers a digest with a warning. "already sent" stays as it is.
+  - The warning doesn't change the cron exit code: the digest was delivered (option A, chosen by the owner over failing the run).

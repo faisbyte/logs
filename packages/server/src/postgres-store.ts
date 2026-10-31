@@ -179,6 +179,11 @@ const MIGRATIONS: string[][] = [
     'drop index digests_one_per_scheduled_period',
     "create unique index digests_one_per_scheduled_period on digests (repo_id, period_key) where kind = 'scheduled' and status <> 'withdrawn'",
   ],
+  [
+    // Warnings a digest was kept with, and whether a jargon retry ran (DECISIONS.md D71).
+    "alter table digests add column warnings jsonb not null default '[]'",
+    'alter table digests add column jargon_retried boolean not null default false',
+  ],
 ];
 
 /**
@@ -248,6 +253,8 @@ interface DigestRow {
   sent_at: Date | string | null;
   summary_keys: string[] | string;
   corrects: string | null;
+  warnings: string[] | string;
+  jargon_retried: boolean;
 }
 
 const isoOrNull = (value: Date | string | null) => (value === null ? null : iso(value));
@@ -273,6 +280,8 @@ const toDigest = (r: DigestRow): StoredDigest => ({
   sentAt: isoOrNull(r.sent_at),
   summaryKeys: typeof r.summary_keys === 'string' ? JSON.parse(r.summary_keys) : r.summary_keys,
   corrects: r.corrects,
+  warnings: typeof r.warnings === 'string' ? JSON.parse(r.warnings) : r.warnings,
+  jargonRetried: r.jargon_retried,
 });
 
 export class PostgresSummaryStore implements SharedStore, DigestStore {
@@ -471,10 +480,11 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const d = digest;
     const { rows } = await this.#sql.query<DigestRow>(
       `insert into digests (id, repo_id, kind, period_key, period_label, period_from, period_to, input_hash, prompt_version, model,
-         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at, summary_keys, corrects)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19)
+         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at, summary_keys, corrects,
+         warnings, jargon_retried)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19, $20::jsonb, $21)
        on conflict do nothing returning *`,
-      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt, JSON.stringify(d.summaryKeys ?? []), d.corrects ?? null],
+      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt, JSON.stringify(d.summaryKeys ?? []), d.corrects ?? null, JSON.stringify(d.warnings ?? []), d.jargonRetried ?? false],
     );
     if (rows[0]) return toDigest(rows[0]);
     // The scheduled period or cached report already exists: keep that one.

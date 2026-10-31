@@ -77,6 +77,8 @@ export function storedFields(repoId: string, digest: Digest, summaryKeys: string
     developerCount: digest.coverage.developerCount,
     costUsd: digest.usage.costUsd,
     createdAt: digest.generatedAt,
+    warnings: digest.warnings,
+    jargonRetried: digest.jargonRetried,
   };
 }
 

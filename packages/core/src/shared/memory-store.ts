@@ -148,7 +148,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
       (d) => d.repoId === digest.repoId && (digest.kind === 'scheduled' ? d.kind === 'scheduled' && d.periodKey === digest.periodKey && d.status !== 'withdrawn' : sameReport(d, digest)),
     );
     if (existing) return structuredClone(existing);
-    const stored: StoredDigest = { ...structuredClone(digest), summaryKeys: [...(digest.summaryKeys ?? [])], corrects: digest.corrects ?? null, id: randomUUID(), deliveries: {}, sentAt: null };
+    const stored: StoredDigest = { ...structuredClone(digest), summaryKeys: [...(digest.summaryKeys ?? [])], corrects: digest.corrects ?? null, warnings: [...(digest.warnings ?? [])], jargonRetried: digest.jargonRetried ?? false, id: randomUUID(), deliveries: {}, sentAt: null };
     this.#digests.push(stored);
     return structuredClone(stored);
   }

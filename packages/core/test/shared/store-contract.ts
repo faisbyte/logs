@@ -157,6 +157,17 @@ export function summaryStoreContract(name: string, make: () => Promise<SharedSto
       });
     });
 
+    describe('digest warnings (DECISIONS.md D71)', () => {
+      it("keeps a digest's warnings and whether a jargon retry ran; a digest saved without them has none", async () => {
+        const base = { repoId: REPO, kind: 'report' as const, periodLabel: 'p', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# p\n', summaryCount: 1, developerCount: 1, costUsd: 0, status: 'ready' as const, previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z' };
+        const warned = await store.saveDigest({ ...base, periodKey: 'sprint:Sprint 1', warnings: ['jargon: schema'], jargonRetried: true });
+        const plain = await store.saveDigest({ ...base, periodKey: 'sprint:Sprint 2' });
+        expect(await store.getDigest(REPO, warned.id)).toMatchObject({ warnings: ['jargon: schema'], jargonRetried: true });
+        expect(await store.getDigest(REPO, plain.id)).toMatchObject({ warnings: [], jargonRetried: false });
+        expect(warned).toMatchObject({ warnings: ['jargon: schema'], jargonRetried: true });
+      });
+    });
+
     describe('a withdrawn scheduled digest (DECISIONS.md D70)', () => {
       it('no longer counts as its period\'s digest, so a corrected one can be stored next to it', async () => {
         await store.push(alice, payloadFor());
