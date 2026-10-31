@@ -156,6 +156,19 @@ describe('sendDue', () => {
     expect(needsAttention(results[0]!.result)).toBe(false);
   });
 
+  it('stamps each delivery and sentAt when the send happens, not when the run started', async () => {
+    const { store, slack, deps, advance } = await setup();
+    const llm = new FakeLlmClient(() => (advance(1), JSON.stringify(output)), 'claude-sonnet-5-5');
+    const send = slack.send.bind(slack);
+    slack.send = async (message) => (advance(1), send(message));
+    await sendDue({ ...deps, llm });
+    expect(await store.scheduledDigest(REPO, 'sprint:Sprint 1')).toMatchObject({
+      createdAt: '2026-03-16T07:00:00.000Z',
+      deliveries: { slack: '2026-03-16T08:00:00.000Z', email: '2026-03-16T08:00:00.000Z' },
+      sentAt: '2026-03-16T08:00:00.000Z',
+    });
+  });
+
   it('flags for cron only the results where something due was not delivered', () => {
     for (const ok of ['sent to slack, email', 'sent a corrected version to slack', 'already sent', 'in developer preview until 2026-03-17T06:00:00.000Z']) expect(needsAttention(ok)).toBe(false);
     for (const bad of ['sent to email; slack failed: x Will retry on the next run.', 'not sent: email: set SMTP_URL', 'not written: cap']) expect(needsAttention(bad)).toBe(true);

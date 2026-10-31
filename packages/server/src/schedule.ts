@@ -61,8 +61,10 @@ export function markCorrected(markdown: string, withdrawn: StoredDigest): string
   return markdown.replace(/^# AI work update: (.*)\n/, `# AI work update (corrected): $1\n\n_This corrects the update sent on ${sent}: a developer withdrew a summary it included._\n`);
 }
 
-async function deliver(deps: SendDueDeps, digest: StoredDigest, deliveries: Delivery[], now: Date): Promise<string> {
+async function deliver(deps: SendDueDeps, digest: StoredDigest, deliveries: Delivery[]): Promise<string> {
   assertDeliverable(digest.markdown);
+  // Stamped when each send happens: writing the digest first can take a while after the run started.
+  const now = () => (deps.now ?? (() => new Date()))().toISOString();
   const subject = `AI work update${digest.corrects ? ' (corrected)' : ''}: ${digest.periodLabel}`;
   const what = digest.corrects ? 'a corrected version ' : '';
   const sent: string[] = [];
@@ -71,14 +73,14 @@ async function deliver(deps: SendDueDeps, digest: StoredDigest, deliveries: Deli
     if (digest.deliveries[delivery.channel]) continue;
     try {
       await delivery.send({ subject, markdown: digest.markdown });
-      await deps.store.updateDigest(digest.repoId, digest.id, { deliveries: { [delivery.channel]: now.toISOString() } });
+      await deps.store.updateDigest(digest.repoId, digest.id, { deliveries: { [delivery.channel]: now() } });
       sent.push(delivery.channel);
     } catch (err) {
       failed.push(`${delivery.channel} failed: ${(err as Error).message}`);
     }
   }
   if (failed.length) return `${sent.length ? `sent ${what}to ${sent.join(', ')}; ` : ''}${failed.join('; ')} Will retry on the next run.`;
-  await deps.store.updateDigest(digest.repoId, digest.id, { status: 'sent', sentAt: now.toISOString() });
+  await deps.store.updateDigest(digest.repoId, digest.id, { status: 'sent', sentAt: now() });
   return `sent ${what}to ${sent.join(', ')}`;
 }
 
@@ -116,7 +118,7 @@ async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: Due
   const warning = warningText(digest);
   const withWarning = (result: string) => (warning ? `${result}; warning: ${warning}` : result);
   if (digest.status === 'preview' && digest.previewUntil && Date.parse(digest.previewUntil) > now.getTime()) return withWarning(`in developer preview until ${digest.previewUntil}`);
-  return withWarning(await deliver(deps, digest, deliveries, now));
+  return withWarning(await deliver(deps, digest, deliveries));
 }
 
 /** One pass over every scheduled repo: write, preview and deliver whatever is due. */

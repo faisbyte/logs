@@ -921,3 +921,9 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - `sprintdigest preview` prints "Warning: jargon: schema (still there after one retry, so kept)" under the preview line, or "A jargon retry ran; the second reply had none of the listed terms." when the retry fixed it.
   - `send-due` appends "; warning: …" to the result line when it writes, previews or delivers a digest with a warning. "already sent" stays as it is.
   - The warning doesn't change the cron exit code: the digest was delivered (option A, chosen by the owner over failing the run).
+
+## D72. send-due stamps deliveries when they happen
+
+- **Date:** 2026-10-31
+- **Bug:** `send-due` read the clock once when the run started and used it for every delivery and for `sentAt`. Writing the digest took 25 seconds, so the corrected Sprint 1 digest showed `sentAt` 05:51:42, earlier than its `createdAt` of 05:52:07.
+- **Decision:** each channel's delivery time is taken right after its send, and `sentAt` after the last one. Which periods are due, and the preview window, still use the time the run started.
