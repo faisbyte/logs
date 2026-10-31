@@ -68,4 +68,13 @@ describe('digestInput', () => {
     expect(() => guardRequest(request(redactSession(parseClaudeCodeFile(claude.basic)!)))).not.toThrow();
     expect(() => guardRequest(request({ tickets: [] }))).toThrow();
   });
+
+  it('keeps one timeline of all work, oldest first, with dates and tickets, and nothing about who (DECISIONS.md D65)', async () => {
+    const input = digestInput((await report()).report);
+    expect(input.timeline.map((w) => [w.from, w.to, w.tickets, w.goal])).toEqual([
+      ['2026-03-03', '2026-03-03', ['PROJ-142'], 'Rate limit the login endpoint.'],
+      ['2026-03-04', '2026-03-04', ['PROJ-142'], 'Tune the limiter window.'],
+      ['2026-03-05', '2026-03-05', [], 'Clean up logging.'],
+    ]);
+  });
 });

@@ -11,6 +11,11 @@ import type { TicketReport } from '../shared/ticket-report.js';
 type Involvement = UploadPayload['aiInvolvement'];
 
 export interface DigestWork {
+  /** Days the work ran (UTC), so the model can tell earlier from later (D65). */
+  from: string;
+  to: string;
+  /** The tickets it is linked to; empty when none. */
+  tickets: string[];
   goal: string;
   outcome: UploadPayload['outcome'];
   whatWasDone: string;
@@ -49,6 +54,8 @@ class DigestInput {
   readonly coverage: { summaryCount: number; developerCount: number };
   readonly tickets: readonly DigestTicket[];
   readonly unlinked: readonly DigestWork[];
+  /** Every piece of work once, oldest first: what the model reads (D65). */
+  readonly timeline: readonly DigestWork[];
   /** sha256 of everything above: the summary-set part of a digest's cache key. */
   readonly hash: string;
 
@@ -57,6 +64,7 @@ class DigestInput {
     this.coverage = fields.coverage;
     this.tickets = fields.tickets;
     this.unlinked = fields.unlinked;
+    this.timeline = fields.timeline;
     this.hash = createHash('sha256').update(JSON.stringify(fields)).digest('hex');
     deepFreeze(this);
   }
@@ -81,7 +89,10 @@ export function assertLlmSource(value: unknown): void {
   }
 }
 
-const work = ({ summary: s }: StoredSummary): DigestWork => ({
+const work = ({ summary: s }: StoredSummary, tickets: string[]): DigestWork => ({
+  from: s.startedAt.slice(0, 10),
+  to: s.endedAt.slice(0, 10),
+  tickets,
   goal: s.goal,
   outcome: s.outcome,
   whatWasDone: s.whatWasDone,
@@ -111,6 +122,7 @@ function period(report: TicketReport): DigestPeriod {
 }
 
 const id = (s: StoredSummary) => `${s.summary.agent}/${s.summary.sessionId}`;
+const byKey = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
 const byStart = (a: StoredSummary, b: StoredSummary) => a.summary.startedAt.localeCompare(b.summary.startedAt) || id(a).localeCompare(id(b));
 
 export function digestInput(report: TicketReport): DigestInput {
@@ -123,15 +135,18 @@ export function digestInput(report: TicketReport): DigestInput {
     }
     for (const s of group.unlinked) unlinked.set(id(s), s);
   }
+  const keys = [...tickets.keys()].sort(byKey);
+  const all = new Map<string, StoredSummary>([...unlinked, ...[...tickets.values()].flatMap((t) => [...t.summaries])]);
+  // One DigestWork per summary, shared by the timeline and its tickets.
+  const items = new Map([...all].map(([id_, s]) => [id_, work(s, keys.filter((k) => tickets.get(k)!.summaries.has(id_)))]));
   return new DigestInput({
     period: period(report),
     coverage: { summaryCount: report.summaryCount, developerCount: report.developerCount },
-    tickets: [...tickets.keys()]
-      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-      .map((key) => {
-        const summaries = [...tickets.get(key)!.summaries.values()].sort(byStart);
-        return { key, title: tickets.get(key)!.title, aiInvolvement: mostCommon(summaries.map((s) => s.summary.aiInvolvement)), work: summaries.map(work) };
-      }),
-    unlinked: [...unlinked.values()].sort(byStart).map(work),
+    tickets: keys.map((key) => {
+      const summaries = [...tickets.get(key)!.summaries.values()].sort(byStart);
+      return { key, title: tickets.get(key)!.title, aiInvolvement: mostCommon(summaries.map((s) => s.summary.aiInvolvement)), work: summaries.map((s) => items.get(id(s))!) };
+    }),
+    unlinked: [...unlinked.values()].sort(byStart).map((s) => items.get(id(s))!),
+    timeline: [...all.values()].sort(byStart).map((s) => items.get(id(s))!),
   });
 }
