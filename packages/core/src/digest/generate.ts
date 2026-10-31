@@ -30,6 +30,8 @@ export interface Digest {
   markdown: string;
   /** Soft problems the digest was kept with, e.g. "jargon: schema" (D68). */
   warnings: string[];
+  /** Whether the jargon check sent the reply back once (D68, D71). */
+  jargonRetried: boolean;
   period: DigestPeriod;
   coverage: { summaryCount: number; developerCount: number };
   model: string;
@@ -209,10 +211,11 @@ export async function generateDigest(
   llm: LlmClient,
   { now = () => new Date(), jargon = DEFAULT_JARGON }: { now?: () => Date; jargon?: readonly string[] } = {},
 ): Promise<Digest> {
+  let jargonRetried = false;
   const done = (out: DigestOutput | null, usages: LlmUsage[], warnings: string[] = []): Digest => {
     const markdown = renderDigest(out, input);
     assertDeliverable(markdown);
-    return { markdown, warnings, period: input.period, coverage: input.coverage, model: llm.model, promptVersion: DIGEST_PROMPT_VERSION, inputHash: input.hash, usage: totalUsage(llm.model, usages), generatedAt: now().toISOString() };
+    return { markdown, warnings, jargonRetried, period: input.period, coverage: input.coverage, model: llm.model, promptVersion: DIGEST_PROMPT_VERSION, inputHash: input.hash, usage: totalUsage(llm.model, usages), generatedAt: now().toISOString() };
   };
   if (input.tickets.length === 0 && input.unlinked.length === 0) return done(null, []);
 
@@ -236,6 +239,7 @@ export async function generateDigest(
         { role: 'assistant', content: response.text },
         { role: 'user', content: `Your previous reply used developer terms a product owner may not know: ${terms.join(', ')}. Explain each in a few plain words or avoid it. Reply again with only the corrected JSON object.` },
       ];
+      jargonRetried = true;
       continue;
     }
     if (attempt === 2) throw withUsage(new DigestError(`The digest for ${input.period.label} failed its checks twice: ${result.errors}`), llm.model, usages);

@@ -32,12 +32,17 @@ export interface NewDigest {
   summaryKeys?: string[];
   /** The withdrawn digest this one corrects (D70). */
   corrects?: string | null;
+  /** Soft problems it was kept with, and whether a jargon retry ran (D71). */
+  warnings?: string[];
+  jargonRetried?: boolean;
 }
 
 export interface StoredDigest extends NewDigest {
   id: string;
   summaryKeys: string[];
   corrects: string | null;
+  warnings: string[];
+  jargonRetried: boolean;
   /** Channel → when it was delivered there. */
   deliveries: Record<string, string>;
   sentAt: string | null;
@@ -91,6 +96,9 @@ export interface DigestStore {
 }
 
 export const defaultRepoSettings = (repoId: string): RepoSettings => ({ repoId, schedule: 'off', weekday: 1, previewHours: 0, emailTo: [], slackWebhookEnv: null, monthlyCapUsd: null, scheduleSince: null });
+
+/** A kept warning as one line for the preview and send-due, or null (D71). Jargon is the only kind so far. */
+export const warningText = (d: Pick<StoredDigest, 'warnings'>) => (d.warnings.length ? `${d.warnings.join('; ')} (still there after one retry, so kept)` : null);
 
 /** The checks every DigestStore runs before keeping a digest. */
 export function checkNewDigest(digest: NewDigest): void {

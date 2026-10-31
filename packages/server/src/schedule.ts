@@ -12,6 +12,7 @@ import {
   type Sprint,
   type StoredDigest,
   type TicketReportFilter,
+  warningText,
 } from '@digest/core';
 import type { Delivery } from './delivery.js';
 
@@ -111,8 +112,11 @@ async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: Due
       throw err;
     }
   }
-  if (digest.status === 'preview' && digest.previewUntil && Date.parse(digest.previewUntil) > now.getTime()) return `in developer preview until ${digest.previewUntil}`;
-  return deliver(deps, digest, deliveries, now);
+  // A kept warning shows in the result line, and cron still reports success (D71).
+  const warning = warningText(digest);
+  const withWarning = (result: string) => (warning ? `${result}; warning: ${warning}` : result);
+  if (digest.status === 'preview' && digest.previewUntil && Date.parse(digest.previewUntil) > now.getTime()) return withWarning(`in developer preview until ${digest.previewUntil}`);
+  return withWarning(await deliver(deps, digest, deliveries, now));
 }
 
 /** One pass over every scheduled repo: write, preview and deliver whatever is due. */

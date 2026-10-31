@@ -96,4 +96,15 @@ describe('sprintdigest preview', () => {
     await store.saveDigest({ repoId: REPO_ID, kind: 'scheduled', periodKey: 'sprint:Sprint 1', periodLabel: 'Sprint 1', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v1', model: 'm', markdown: '# AI work update: Sprint 1\n\nAll good.\n', summaryCount: 1, developerCount: 1, costUsd: 0, status: 'preview', previewUntil: '2026-03-17T06:00:00.000Z', createdAt: '2026-03-16T06:00:00.000Z' });
     expect((await run(['preview', '--repo', repo], { pushTarget })).stdout).toBe('Sprint 1: in preview until 2026-03-17 06:00 UTC, then sent.\n\n# AI work update: Sprint 1\n\nAll good.\n\n');
   });
+
+  it('shows a kept jargon warning, and says when a jargon retry ran and fixed it (DECISIONS.md D71)', async () => {
+    const { store, pushTarget, repo } = await setup();
+    const base = { repoId: REPO_ID, kind: 'scheduled' as const, periodLabel: 'Sprint 1', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# AI work update: Sprint 1\n\nAll good.\n', summaryCount: 1, developerCount: 1, costUsd: 0, status: 'preview' as const, previewUntil: '2026-03-17T06:00:00.000Z', createdAt: '2026-03-16T06:00:00.000Z' };
+    await store.saveDigest({ ...base, periodKey: 'sprint:Sprint 1', warnings: ['jargon: schema'], jargonRetried: true });
+    expect((await run(['preview', '--repo', repo], { pushTarget })).stdout).toBe(
+      'Sprint 1: in preview until 2026-03-17 06:00 UTC, then sent.\nWarning: jargon: schema (still there after one retry, so kept)\n\n# AI work update: Sprint 1\n\nAll good.\n\n',
+    );
+    await store.saveDigest({ ...base, periodKey: 'week:2026-03-09', periodLabel: 'Week of 2026-03-09', warnings: [], jargonRetried: true });
+    expect((await run(['preview', '--repo', repo], { pushTarget })).stdout).toContain('Week of 2026-03-09: in preview until 2026-03-17 06:00 UTC, then sent.\nA jargon retry ran; the second reply had none of the listed terms.\n\n');
+  });
 });

@@ -137,6 +137,25 @@ describe('sendDue', () => {
     expect(slack.sent).toHaveLength(2);
   });
 
+  it('shows a kept jargon warning in the result line and keeps cron reporting success (DECISIONS.md D71)', async () => {
+    const { store, deps } = await setup();
+    const jargony = { ...output, overview: 'The schema changed.' };
+    const llm = new FakeLlmClient(() => JSON.stringify(jargony), 'claude-sonnet-5-5');
+    const results = await sendDue({ ...deps, llm });
+    expect(results).toEqual([{ repoId: REPO, periodKey: 'sprint:Sprint 1', result: 'sent to slack, email; warning: jargon: schema (still there after one retry, so kept)' }]);
+    expect(needsAttention(results[0]!.result)).toBe(false);
+    expect(await store.scheduledDigest(REPO, 'sprint:Sprint 1')).toMatchObject({ warnings: ['jargon: schema'], jargonRetried: true });
+    expect((await sendDue({ ...deps, llm }))[0]!.result).toBe('already sent');
+  });
+
+  it('shows the warning while the digest is in developer preview too', async () => {
+    const { deps } = await setup({ previewHours: 24 });
+    const llm = new FakeLlmClient(() => JSON.stringify({ ...output, overview: 'The schema changed.' }), 'claude-sonnet-5-5');
+    const results = await sendDue({ ...deps, llm });
+    expect(results[0]!.result).toBe('in developer preview until 2026-03-17T06:00:00.000Z; warning: jargon: schema (still there after one retry, so kept)');
+    expect(needsAttention(results[0]!.result)).toBe(false);
+  });
+
   it('flags for cron only the results where something due was not delivered', () => {
     for (const ok of ['sent to slack, email', 'sent a corrected version to slack', 'already sent', 'in developer preview until 2026-03-17T06:00:00.000Z']) expect(needsAttention(ok)).toBe(false);
     for (const bad of ['sent to email; slack failed: x Will retry on the next run.', 'not sent: email: set SMTP_URL', 'not written: cap']) expect(needsAttention(bad)).toBe(true);

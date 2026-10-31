@@ -214,6 +214,12 @@ describe('developer jargon (DECISIONS.md D68)', () => {
     expect(digest.usage.requests).toBe(2);
     expect(llm.requests[1]!.messages.at(-1)!.content).toContain('Your previous reply used developer terms a product owner may not know: commit, end-to-end test.');
     expect(digest.warnings).toEqual([]);
+    expect(digest.jargonRetried).toBe(true);
+  });
+
+  it('records that no jargon retry ran when the first reply is clean', async () => {
+    const digest = await generateDigest(await input(), llmWith(good()), { now });
+    expect(digest).toMatchObject({ warnings: [], jargonRetried: false });
   });
 
   it('keeps the second reply with a warning if the terms are still there', async () => {
@@ -221,6 +227,7 @@ describe('developer jargon (DECISIONS.md D68)', () => {
     const digest = await generateDigest(await input(), llmWith(jargony, jargony), { now });
     expect(digest.markdown).toContain('The schema changed.');
     expect(digest.warnings).toEqual(['jargon: schema']);
+    expect(digest.jargonRetried).toBe(true);
   });
 
   it('matches whole words in any case, from a configurable list', async () => {

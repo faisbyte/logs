@@ -11,6 +11,7 @@ import {
   generateDigest,
   periodKey,
   readConfig,
+  warningText,
   type LlmClient,
 } from '@digest/core';
 import type { CliContext } from './cli.js';
@@ -93,7 +94,10 @@ export async function previewCommand(options: { repo?: string }, ctx: CliContext
   if (!result.digests.length) return (ctx.stdout('No digests are waiting in developer preview.\n'), 0);
   for (const d of result.digests) {
     const until = d.previewUntil ? `${formatTime(d.previewUntil, ctx.timeZone)}${ctx.timeZone ? ` ${ctx.timeZone}` : ''}` : 'the next send-due run';
-    ctx.stdout(`${d.periodLabel}: in preview until ${until}, then sent.\n\n${d.markdown}\n`);
+    // Older servers send digests without warnings (D71).
+    const warning = d.warnings?.length ? warningText(d) : null;
+    const note = warning ? `Warning: ${warning}\n` : d.jargonRetried ? 'A jargon retry ran; the second reply had none of the listed terms.\n' : '';
+    ctx.stdout(`${d.periodLabel}: in preview until ${until}, then sent.\n${note}\n${d.markdown}\n`);
   }
   return 0;
 }
