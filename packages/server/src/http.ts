@@ -105,6 +105,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/ticket-links': ['POST', 'DELETE'],
       '/v1/retractions': ['POST'],
       '/v1/sprints': ['GET'],
+      '/v1/ticket-titles': ['PUT'],
       '/v1/tickets': ['GET'],
       '/v1/reports': ['POST'],
       '/v1/digests': ['GET'],
@@ -136,6 +137,13 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       return [200, { digest }];
     }
 
+    if (url.pathname === '/v1/ticket-titles') {
+      const body = (await readJson(req)) as Record<string, unknown> | null;
+      const repoId = body?.repoId;
+      if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
+      const result = await store.setTicketTitle(await developer(req, repoId), body?.ticket as string, body?.title as string);
+      return [result.status === 'saved' ? 200 : 422, result];
+    }
     if (url.pathname === '/v1/sprints') {
       const repoId = url.searchParams.get('repoId');
       if (!repoId) throw new HttpError(400, 'repoId is required');

@@ -103,6 +103,23 @@ export function ticketStoreContract(name: string, make: () => Promise<SharedStor
       });
     });
 
+    describe('ticket titles set by hand (DECISIONS.md D67)', () => {
+      it('keeps one title per key per repo, recording who set it and when, replacing it on a new one', async () => {
+        expect(await store.setTicketTitle(alice, 'LOGS-1', 'Session parsing')).toEqual({ status: 'saved' });
+        await store.setTicketTitle(bob, 'LOGS-1', 'Session parsing and listing');
+        await store.setTicketTitle({ ...alice, repoId: 'github.com/acme/other' }, 'LOGS-1', 'Elsewhere');
+        expect(await store.ticketTitles(REPO)).toEqual([{ key: 'LOGS-1', title: 'Session parsing and listing', setBy: 'bob', setAt: expect.any(String) }]);
+      });
+
+      it('refuses a key that is not a single safe word, and an empty, long or secret-bearing title', async () => {
+        const fakeToken = ['ghp', '_', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'].join('');
+        for (const [key, title] of [['two words', 'Fine'], ['LOGS-1', ''], ['LOGS-1', 'x'.repeat(201)], ['LOGS-1', `Use ${fakeToken}`]]) {
+          expect(await store.setTicketTitle(alice, key!, title!)).toMatchObject({ status: 'rejected' });
+        }
+        expect(await store.ticketTitles(REPO)).toEqual([]);
+      });
+    });
+
     describe('tracker tickets', () => {
       it('keeps titles and sprint membership per repo, replacing earlier data for the same key', async () => {
         await store.saveTrackerTickets(REPO, [

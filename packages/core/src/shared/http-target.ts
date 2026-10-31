@@ -1,6 +1,6 @@
 import type { UploadPayload } from './payload.js';
 import type { StoredDigest } from './digests.js';
-import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { LinkOutcome, PreviewsOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TitleOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
 import type { TicketReport } from './ticket-report.js';
 import type { Sprint, SummaryRef } from './tickets.js';
 
@@ -45,6 +45,14 @@ export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof
       const params = new URLSearchParams({ repoId, ...filter });
       const [response, body] = await call(`/v1/tickets?${params}`);
       if (response.status === 200) return { status: 'ok', report: body as unknown as TicketReport };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
+    async setTicketTitle(repoId, ticket, title): Promise<TitleOutcome> {
+      const [response, body] = await call('/v1/ticket-titles', { method: 'PUT', body: { repoId, ticket, title } });
+      if (body.status === 'saved') return { status: 'saved' };
+      if (body.status === 'rejected' && body.reason) return { status: 'rejected', reason: body.reason };
       const no = refused(response, body);
       if (no) return no;
       throw unexpected(response, body);

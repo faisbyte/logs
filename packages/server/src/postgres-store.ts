@@ -8,6 +8,7 @@ import {
   decideRetract,
   digestSummaryKey,
   decideSprint,
+  decideTitle,
   decideUnlink,
   hashToken,
   newToken,
@@ -33,6 +34,8 @@ import {
   type Sprint,
   type SprintResult,
   type SummaryRef,
+  type TicketTitle,
+  type TitleResult,
   type TrackerTicket,
   type UnlinkResult,
   type StoredSummary,
@@ -158,6 +161,17 @@ const MIGRATIONS: string[][] = [
     "alter table digests add column summary_keys jsonb not null default '[]'",
     'alter table digests drop constraint digests_status_check',
     "alter table digests add constraint digests_status_check check (status in ('ready', 'preview', 'sent', 'withdrawn'))",
+  ],
+  [
+    // Ticket titles set by hand, for repos without a tracker (DECISIONS.md D67).
+    `create table ticket_titles (
+      repo_id text not null,
+      ticket_key text not null,
+      title text not null,
+      set_by text not null,
+      set_at timestamptz not null,
+      primary key (repo_id, ticket_key)
+    )`,
   ],
 ];
 
@@ -530,5 +544,21 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
   async scheduledRepos(): Promise<string[]> {
     const { rows } = await this.#sql.query<{ repo_id: string }>("select repo_id from repo_settings where settings->>'schedule' <> 'off' order by repo_id");
     return rows.map((r) => r.repo_id);
+  }
+
+  async setTicketTitle(identity: PushIdentity, ticketKey: string, title: string): Promise<TitleResult> {
+    const decision = decideTitle(ticketKey, title);
+    if (decision.status !== 'save') return decision;
+    await this.#sql.query(
+      `insert into ticket_titles (repo_id, ticket_key, title, set_by, set_at) values ($1, $2, $3, $4, $5)
+       on conflict (repo_id, ticket_key) do update set title = excluded.title, set_by = excluded.set_by, set_at = excluded.set_at`,
+      [identity.repoId, ticketKey, decision.title, identity.developerId, this.#now().toISOString()],
+    );
+    return { status: 'saved' };
+  }
+
+  async ticketTitles(repoId: string): Promise<TicketTitle[]> {
+    const { rows } = await this.#sql.query<{ ticket_key: string; title: string; set_by: string; set_at: Date | string }>('select ticket_key, title, set_by, set_at from ticket_titles where repo_id = $1', [repoId]);
+    return rows.map((r) => ({ key: r.ticket_key, title: r.title, setBy: r.set_by, setAt: iso(r.set_at) })).sort((a, b) => a.key.localeCompare(b.key));
   }
 }

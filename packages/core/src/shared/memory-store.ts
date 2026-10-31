@@ -11,8 +11,11 @@ import {
   type Sprint,
   type SprintResult,
   type SummaryRef,
+  type TicketTitle,
+  type TitleResult,
   type TrackerTicket,
   type UnlinkResult,
+  decideTitle,
 } from './tickets.js';
 
 import { randomUUID } from 'node:crypto';
@@ -31,6 +34,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   readonly #retractions: Retraction[] = [];
   readonly #spend: { repoId: string; usd: number; at: string }[] = [];
   readonly #settings = new Map<string, RepoSettings>();
+  readonly #titles = new Map<string, Map<string, TicketTitle>>();
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -199,5 +203,17 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
 
   async scheduledRepos(): Promise<string[]> {
     return [...this.#settings.values()].filter((s) => s.schedule !== 'off').map((s) => s.repoId).sort();
+  }
+
+  async setTicketTitle(identity: PushIdentity, ticketKey: string, title: string): Promise<TitleResult> {
+    const decision = decideTitle(ticketKey, title);
+    if (decision.status !== 'save') return decision;
+    const titles = this.#titles.get(identity.repoId) ?? this.#titles.set(identity.repoId, new Map()).get(identity.repoId)!;
+    titles.set(ticketKey, { key: ticketKey, title: decision.title, setBy: identity.developerId, setAt: this.#now().toISOString() });
+    return { status: 'saved' };
+  }
+
+  async ticketTitles(repoId: string): Promise<TicketTitle[]> {
+    return structuredClone([...(this.#titles.get(repoId)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key)));
   }
 }

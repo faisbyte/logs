@@ -71,6 +71,9 @@ export {
   decideSprint,
   decideUnlink,
   ticketKeyProblems,
+  decideTitle,
+  type TicketTitle,
+  type TitleResult,
   type LinkResult,
   type ManualTicketLink,
   type SharedStore,
@@ -87,7 +90,7 @@ export { groupByTicket, linksOf, reportSummaryKeys, ticketReport, type SprintGro
 export { FakeTracker, refreshTracker, type Tracker } from './shared/tracker.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
-export { localPushTarget, type SprintsOutcome, type RetractOutcome, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
+export { localPushTarget, type TitleOutcome, type SprintsOutcome, type RetractOutcome, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
 export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type DigestPeriod, type DigestTicket, type DigestWork } from './digest/input.js';
 export { assertDeliverable, checkDigest, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';

@@ -47,6 +47,17 @@ export interface TrackerTicket {
   sprint: string | null;
 }
 
+/** A ticket title set by hand, for repos without a tracker (D67). The tracker's title wins when there is one. */
+export interface TicketTitle {
+  key: string;
+  title: string;
+  /** Developer id. */
+  setBy: string;
+  setAt: string;
+}
+
+export type TitleResult = { status: 'saved' } | { status: 'rejected'; reason: string };
+
 export type LinkResult = { status: 'created' | 'unchanged' } | { status: 'not-found' | 'forbidden' | 'rejected'; reason: string };
 export type UnlinkResult = { status: 'removed' } | { status: 'not-found' | 'forbidden' | 'in-summary'; reason: string };
 export type SprintResult = { status: 'saved' } | { status: 'invalid'; reason: string };
@@ -64,6 +75,10 @@ export interface TicketStore {
   saveTrackerTickets(repoId: string, tickets: TrackerTicket[]): Promise<void>;
   /** Sorted by key. */
   trackerTickets(repoId: string): Promise<TrackerTicket[]>;
+  /** Sets or replaces the title of a ticket on this repo. */
+  setTicketTitle(identity: PushIdentity, ticketKey: string, title: string): Promise<TitleResult>;
+  /** Sorted by key. */
+  ticketTitles(repoId: string): Promise<TicketTitle[]>;
 }
 
 export type SharedStore = SummaryStore & TokenStore & TicketStore & DigestStore;
@@ -75,6 +90,17 @@ export function ticketKeyProblems(key: unknown): string[] {
   const parsed = TicketKeySchema.safeParse(key);
   if (!parsed.success) return parsed.error.issues.map((i) => `ticket: ${i.message}`);
   return contentProblems('ticket', parsed.data);
+}
+
+const TitleSchema = z.string().trim().min(1, 'must not be empty').max(200, 'must be at most 200 characters');
+
+/** Why a title from a client can't be stored, without echoing it. */
+export function decideTitle(ticketKey: unknown, title: unknown): TitleResult | { status: 'save'; title: string } {
+  const problems = ticketKeyProblems(ticketKey);
+  const parsed = TitleSchema.safeParse(title);
+  if (!parsed.success) problems.push(...parsed.error.issues.map((i) => `title: ${i.message}`));
+  else problems.push(...contentProblems('title', parsed.data));
+  return problems.length ? { status: 'rejected', reason: problems.join('; ') } : { status: 'save', title: parsed.data! };
 }
 
 /** The rules for adding a manual link; `linked` says whether that manual link already exists. */
