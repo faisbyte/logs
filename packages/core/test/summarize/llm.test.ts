@@ -4,6 +4,7 @@ import { redactSession, type RedactedSession } from '../../src/redact/session.js
 import { FakeLlmClient } from '../../src/summarize/fake-llm.js';
 import type { LlmRequest } from '../../src/summarize/llm.js';
 import { LlmSummarySchema } from '../../src/summarize/schema.js';
+import { contextInput } from '../../src/context/input.js';
 import { claude } from '../fixtures.js';
 
 const parsed = parseClaudeCodeFile(claude.basic)!;
@@ -50,5 +51,12 @@ describe('FakeLlmClient', () => {
     const forged = [parsed, { ...redactSession(parsed) }, { session: parsed, counts: {} }] as unknown as RedactedSession[];
     for (const source of forged) await expect(llm.complete(request(source))).rejects.toThrow(/unredacted/);
     expect(llm.requests).toEqual([]);
+  });
+
+  it('accepts a context input from contextInput(), and refuses a copy of one (DECISIONS.md D76)', async () => {
+    const llm = new FakeLlmClient(['{}', '{}']);
+    const input = contextInput([]);
+    await expect(llm.complete(request(input as unknown as RedactedSession))).resolves.toMatchObject({ text: '{}' });
+    await expect(llm.complete(request({ ...input } as unknown as RedactedSession))).rejects.toThrow(/contextInput/);
   });
 });
