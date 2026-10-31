@@ -145,10 +145,10 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   async saveDigest(digest: NewDigest): Promise<StoredDigest> {
     checkNewDigest(digest);
     const existing = this.#digests.find(
-      (d) => d.repoId === digest.repoId && (digest.kind === 'scheduled' ? d.kind === 'scheduled' && d.periodKey === digest.periodKey : sameReport(d, digest)),
+      (d) => d.repoId === digest.repoId && (digest.kind === 'scheduled' ? d.kind === 'scheduled' && d.periodKey === digest.periodKey && d.status !== 'withdrawn' : sameReport(d, digest)),
     );
     if (existing) return structuredClone(existing);
-    const stored: StoredDigest = { ...structuredClone(digest), summaryKeys: [...(digest.summaryKeys ?? [])], id: randomUUID(), deliveries: {}, sentAt: null };
+    const stored: StoredDigest = { ...structuredClone(digest), summaryKeys: [...(digest.summaryKeys ?? [])], corrects: digest.corrects ?? null, id: randomUUID(), deliveries: {}, sentAt: null };
     this.#digests.push(stored);
     return structuredClone(stored);
   }
@@ -164,7 +164,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   }
 
   async scheduledDigest(repoId: string, periodKey: string): Promise<StoredDigest | null> {
-    const d = this.#digests.find((x) => x.repoId === repoId && x.kind === 'scheduled' && x.periodKey === periodKey);
+    const d = this.#digests.find((x) => x.repoId === repoId && x.kind === 'scheduled' && x.periodKey === periodKey && x.status !== 'withdrawn');
     return d ? structuredClone(d) : null;
   }
 

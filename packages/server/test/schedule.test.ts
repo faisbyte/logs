@@ -2,7 +2,7 @@ import { defaultRepoSettings, FakeLlmClient, InMemorySummaryStore, type DigestOu
 import { describe, expect, it } from 'vitest';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
 import type { Delivery, DeliveryMessage } from '../src/delivery.js';
-import { duePeriods, sendDue } from '../src/schedule.js';
+import { duePeriods, needsAttention, sendDue } from '../src/schedule.js';
 
 // Scheduled digests (DECISIONS.md D54): weekly or at the end of each sprint, sent by an idempotent send-due run.
 
@@ -113,5 +113,32 @@ describe('sendDue', () => {
   it('skips repos without a schedule', async () => {
     const { deps } = await setup({ schedule: 'off' });
     expect(await sendDue(deps)).toEqual([]);
+  });
+
+  it('after a retraction, writes a corrected digest and sends it to every channel again, never re-sending the withdrawn one (DECISIONS.md D70)', async () => {
+    const { store, slack, email, deps, advance } = await setup();
+    await store.push(alice, payloadFor({ sessionId: 'second', ticketRefs: [], branch: 'main', startedAt: '2026-03-05T09:00:00.000Z', endedAt: '2026-03-05T10:00:00.000Z' }));
+    await sendDue(deps);
+    const first = (await store.digests(REPO))[0]!;
+    expect(first).toMatchObject({ status: 'sent', summaryCount: 2 });
+    advance(1);
+    await store.retract(alice, { agent: 'claude-code', sessionId: 'second' });
+    expect((await store.getDigest(REPO, first.id))!.status).toBe('withdrawn');
+
+    expect(await sendDue(deps)).toEqual([{ repoId: REPO, periodKey: 'sprint:Sprint 1', result: 'sent a corrected version to slack, email' }]);
+    const corrected = (await store.digests(REPO, { statuses: ['sent'] }))[0]!;
+    expect(corrected).toMatchObject({ corrects: first.id, summaryCount: 1 });
+    expect(corrected.markdown).toMatch(/^# AI work update \(corrected\): Sprint 1 \(2026-03-02 to 2026-03-15\)\n\n_This corrects the update sent on 2026-03-16: a developer withdrew a summary it included\._\n/);
+    expect(slack.sent.map((m) => m.subject)).toEqual(['AI work update: Sprint 1 (2026-03-02 to 2026-03-15)', 'AI work update (corrected): Sprint 1 (2026-03-02 to 2026-03-15)']);
+    expect(email.sent).toHaveLength(2);
+    expect((await store.getDigest(REPO, first.id))!.status).toBe('withdrawn');
+
+    expect(await sendDue(deps)).toEqual([{ repoId: REPO, periodKey: 'sprint:Sprint 1', result: 'already sent' }]);
+    expect(slack.sent).toHaveLength(2);
+  });
+
+  it('flags for cron only the results where something due was not delivered', () => {
+    for (const ok of ['sent to slack, email', 'sent a corrected version to slack', 'already sent', 'in developer preview until 2026-03-17T06:00:00.000Z']) expect(needsAttention(ok)).toBe(false);
+    for (const bad of ['sent to email; slack failed: x Will retry on the next run.', 'not sent: email: set SMTP_URL', 'not written: cap']) expect(needsAttention(bad)).toBe(true);
   });
 });

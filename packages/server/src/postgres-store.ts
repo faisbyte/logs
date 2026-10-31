@@ -173,6 +173,12 @@ const MIGRATIONS: string[][] = [
       primary key (repo_id, ticket_key)
     )`,
   ],
+  [
+    // A withdrawn scheduled digest no longer holds its period, so a corrected one can follow it (DECISIONS.md D70).
+    'alter table digests add column corrects uuid',
+    'drop index digests_one_per_scheduled_period',
+    "create unique index digests_one_per_scheduled_period on digests (repo_id, period_key) where kind = 'scheduled' and status <> 'withdrawn'",
+  ],
 ];
 
 /**
@@ -241,6 +247,7 @@ interface DigestRow {
   deliveries: Record<string, string> | string;
   sent_at: Date | string | null;
   summary_keys: string[] | string;
+  corrects: string | null;
 }
 
 const isoOrNull = (value: Date | string | null) => (value === null ? null : iso(value));
@@ -265,6 +272,7 @@ const toDigest = (r: DigestRow): StoredDigest => ({
   deliveries: typeof r.deliveries === 'string' ? JSON.parse(r.deliveries) : r.deliveries,
   sentAt: isoOrNull(r.sent_at),
   summaryKeys: typeof r.summary_keys === 'string' ? JSON.parse(r.summary_keys) : r.summary_keys,
+  corrects: r.corrects,
 });
 
 export class PostgresSummaryStore implements SharedStore, DigestStore {
@@ -463,10 +471,10 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const d = digest;
     const { rows } = await this.#sql.query<DigestRow>(
       `insert into digests (id, repo_id, kind, period_key, period_label, period_from, period_to, input_hash, prompt_version, model,
-         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at, summary_keys)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb)
+         markdown, summary_count, developer_count, cost_usd, status, preview_until, created_at, summary_keys, corrects)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19)
        on conflict do nothing returning *`,
-      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt, JSON.stringify(d.summaryKeys ?? [])],
+      [randomUUID(), d.repoId, d.kind, d.periodKey, d.periodLabel, d.from, d.to, d.inputHash, d.promptVersion, d.model, d.markdown, d.summaryCount, d.developerCount, d.costUsd, d.status, d.previewUntil, d.createdAt, JSON.stringify(d.summaryKeys ?? []), d.corrects ?? null],
     );
     if (rows[0]) return toDigest(rows[0]);
     // The scheduled period or cached report already exists: keep that one.
@@ -490,7 +498,7 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
   }
 
   async scheduledDigest(repoId: string, periodKey: string): Promise<StoredDigest | null> {
-    const { rows } = await this.#sql.query<DigestRow>("select * from digests where repo_id = $1 and kind = 'scheduled' and period_key = $2", [repoId, periodKey]);
+    const { rows } = await this.#sql.query<DigestRow>("select * from digests where repo_id = $1 and kind = 'scheduled' and period_key = $2 and status <> 'withdrawn'", [repoId, periodKey]);
     return rows[0] ? toDigest(rows[0]) : null;
   }
 

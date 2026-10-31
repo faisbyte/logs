@@ -890,3 +890,18 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - Mixed levels keep a line per section, with the model's sentence.
   - The wording follows the summariser's own definitions (light, moderate, heavy).
 - **Why:** in the Sprint 1 digest every section said "AI involvement: heavy", which told the reader nothing new seven times.
+
+## D70. A withdrawn digest is never sent again; its period gets a corrected one
+
+- **Date:** 2026-10-31
+- **Bug:** after a retraction withdrew a sent digest (D60), `send-due` found it as the period's digest, saw both channels already delivered, and marked it sent again. Readers would have seen the withdrawn content again, and no new digest was written.
+- **Decision:**
+  - A withdrawn scheduled digest no longer counts as its period's digest. The one-per-period unique index now leaves withdrawn rows out (migration 8, which also adds `corrects`).
+  - On the next `send-due`, such a period gets a fresh digest:
+    - it is titled "AI work update (corrected): …";
+    - it opens with "_This corrects the update sent on <date>: a developer withdrew a summary it included._";
+    - it records `corrects` (the withdrawn digest's id);
+    - it is delivered to every channel again, under a "(corrected)" subject.
+  - The withdrawn digest stays withdrawn. A further run says "already sent".
+  - The cron exit code treats a corrected send as success.
+- **Test:** the exact sequence: send, retract, `send-due` (corrected and sent to both channels), `send-due` again (already sent).
