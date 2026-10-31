@@ -25,9 +25,15 @@ export interface DigestWork {
   aiInvolvement: Involvement;
 }
 
+/** One ticket, or several that share exactly the same work, written as one section (D66). */
 export interface DigestTicket {
+  /** The first key of the group. */
   key: string;
+  /** From the tracker or a title set by hand, when there is one. */
   title: string | null;
+  /** Every key in the group, in key order, with their titles. */
+  keys: string[];
+  titles: (string | null)[];
   /** The most common AI involvement of the ticket's work; the higher one on a tie. */
   aiInvolvement: Involvement;
   work: DigestWork[];
@@ -123,6 +129,13 @@ function period(report: TicketReport): DigestPeriod {
 
 const id = (s: StoredSummary) => `${s.summary.agent}/${s.summary.sessionId}`;
 const byKey = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
+
+/** Keys (already in order) grouped by an exact match of their work, each group led by its first key. */
+function groupByWork(keys: string[], workOf: (key: string) => string): string[][] {
+  const groups = new Map<string, string[]>();
+  for (const key of keys) (groups.get(workOf(key)) ?? groups.set(workOf(key), []).get(workOf(key))!).push(key);
+  return [...groups.values()];
+}
 const byStart = (a: StoredSummary, b: StoredSummary) => a.summary.startedAt.localeCompare(b.summary.startedAt) || id(a).localeCompare(id(b));
 
 export function digestInput(report: TicketReport): DigestInput {
@@ -142,9 +155,10 @@ export function digestInput(report: TicketReport): DigestInput {
   return new DigestInput({
     period: period(report),
     coverage: { summaryCount: report.summaryCount, developerCount: report.developerCount },
-    tickets: keys.map((key) => {
-      const summaries = [...tickets.get(key)!.summaries.values()].sort(byStart);
-      return { key, title: tickets.get(key)!.title, aiInvolvement: mostCommon(summaries.map((s) => s.summary.aiInvolvement)), work: summaries.map((s) => items.get(id(s))!) };
+    tickets: groupByWork(keys, (k) => [...tickets.get(k)!.summaries.keys()].sort().join('|')).map((group) => {
+      const summaries = [...tickets.get(group[0]!)!.summaries.values()].sort(byStart);
+      const titles = group.map((k) => tickets.get(k)!.title);
+      return { key: group[0]!, title: titles[0]!, keys: group, titles, aiInvolvement: mostCommon(summaries.map((s) => s.summary.aiInvolvement)), work: summaries.map((s) => items.get(id(s))!) };
     }),
     unlinked: [...unlinked.values()].sort(byStart).map((s) => items.get(id(s))!),
     timeline: [...all.values()].sort(byStart).map((s) => items.get(id(s))!),
