@@ -17,6 +17,8 @@ describe('itemProblems', () => {
     expect(itemProblems(item())).toEqual([]);
     expect(itemProblems(item({ text: 'Developer tokens are hashed at rest and never logged.', reason: 'A leaked database must not leak working tokens.', paths: ['packages/server/src'] }))).toEqual([]);
     expect(itemProblems(item({ text: 'Merging each Codex exec twin into its VS Code session was tried and dropped.', reason: 'It relied on undocumented extension timing.' }))).toEqual([]);
+    expect(itemProblems(item({ text: 'Password-reset emails expire after one hour.', reason: 'A forwarded email must not stay usable for long.' }))).toEqual([]);
+    expect(itemProblems(item({ text: 'Passwords are hashed with bcrypt before they are stored.', reason: 'A leaked table must not reveal them.' }))).toEqual([]);
   });
 
   it('refuses shell commands, wherever they appear', () => {
@@ -45,6 +47,7 @@ describe('itemProblems', () => {
   it('refuses instructions about tools or credentials', () => {
     expect(itemProblems(item({ text: 'Add this API key to the config so the tests reach the API.' }))).toContain('text: reads as an instruction, not a statement of fact');
     expect(itemProblems(item({ text: 'The team stores the deploy password in the README.' }))).toContain('text: talks about handling a credential');
+    expect(itemProblems(item({ text: 'The staging API key is pasted into chat when a test needs it.' }))).toContain('text: talks about handling a credential');
     expect(itemProblems(item({ text: 'Agents may use the shell tool without asking.' }))).toContain('text: talks about what agents or tools may do');
   });
 

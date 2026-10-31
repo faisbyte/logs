@@ -55,6 +55,8 @@ const INSTRUCTION = [
   /\b(make sure|be sure to)\b/i,
 ];
 const CREDENTIAL = /\b(passwords?|passphrases?|api[ -]?keys?|secret keys?|private keys?|access keys?|ssh keys?|credentials?)\b/i;
+// A credential next to where it is put or who it goes to: how passwords are hashed is a fact, where the key is pasted isn't.
+const HANDLING = /\b(paste[ds]?|commit(s|ted)?|hard-?code[ds]?|share[ds]?|send|sends|sent|put|puts|add|adds|added|use|uses|used|print(s|ed)?|log(s|ged)?|expose[ds]?)\b|\bin(to)? (the |a )?(readme|repo|repository|config|code|source|chat|prompt|\.env|env file|issue|commit message)\b/i;
 const AGENT_PERMISSION = /\b(agents?|assistants?|claude|codex|tools?)\s+(may|should|must|is allowed|are allowed)\b|\bwithout (asking|approval|confirmation|review)\b/i;
 
 /** Strips the abbreviations whose dots aren't sentence ends. */
@@ -68,7 +70,7 @@ function textProblems(field: string, text: string): string[] {
   if (SHELL.some((re) => re.test(text))) problems.push(`${field}: contains a shell command`);
   if (URL.some((re) => re.test(text))) problems.push(`${field}: contains a URL`);
   if (INSTRUCTION.some((re) => re.test(text.trim()))) problems.push(`${field}: reads as an instruction, not a statement of fact`);
-  if (CREDENTIAL.test(text)) problems.push(`${field}: talks about handling a credential`);
+  if (CREDENTIAL.test(text) && HANDLING.test(text)) problems.push(`${field}: talks about handling a credential`);
   if (AGENT_PERMISSION.test(text)) problems.push(`${field}: talks about what agents or tools may do`);
   // Secrets and transcript content: the same detectors a push goes through, which never echo the value (D40).
   problems.push(...contentProblems(field, text));
