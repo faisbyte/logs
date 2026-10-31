@@ -819,3 +819,16 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Fallback:** the message's `text` (the title and the overview, escaped) is what notifications show.
   - **Limit:** past Slack's 50 blocks, the message falls back to D55's text-only mrkdwn.
 - **Why:** in mrkdwn, section titles and bold lead-ins looked the same, and the sections ran together.
+
+## D64. A large turn is summarised on its own; one period can be re-summarised by id
+
+- **Date:** 2026-10-31
+- **Finding:** `fe5d7843.p3`'s summary left out the whole Phase 7 build: digest writing, delivery, reader tokens, scheduling and the cost cap. The usage log shows where:
+  - The merge and the 6-item cap weren't the cause. No part's output mentioned the work, so the merge had nothing to pick.
+  - The work was in chunk 2. That 13K-token chunk joined the 7K-token Phase 7 turn (one request, 82 tool lines, 38 lines of assistant text) with three later, smaller requests: the judge eval, `--by-period` and a fix.
+  - That part's output described only the later requests. This is the recency bias of D28 and D31, inside a single chunk.
+- **Decision:**
+  - **Chunking:** a turn of 40% or more of the chunk budget now gets a chunk of its own, so it becomes its own part. The merge's per-part pick (D32) then keeps it. `CHUNKING_VERSION` is in the content hash, so summaries made under the old rule are regenerated. On the real p3, the Phase 7 turn is now chunk 4 of 6, alone.
+  - **One period:** `sprintdigest summarize <id>.p<n>` summarises just that work period.
+  - **`--discard-edits`:** replaces an edited draft, which D37 otherwise protects. Approved summaries are never replaced.
+- **Not yet verified live:** that the re-summarised p3 now covers Phase 7. Check it in review.

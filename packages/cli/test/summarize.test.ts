@@ -117,6 +117,34 @@ describe('sprintdigest summarize', () => {
       expect((await run(['approve', 'c1a5e001', '--repo', repo], env)).stderr).toContain('matches 2 summaries');
     });
 
+    it('summarises one period by its id, and replaces an edited draft only with --discard-edits (DECISIONS.md D64)', async () => {
+      const { repo, env } = twoPeriodRepo();
+      const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
+      const one = await run(['summarize', 'c1a5e001.p2', '--repo', repo], env, { llm });
+      expect(one.stdout).toMatch(/^c1a5e001\.p2 +summarised/m);
+      expect(one.stdout).not.toContain('c1a5e001.p1');
+      expect(existsSync(join(repo, `.digest/summaries/claude-code-${ID}.p1.json`))).toBe(false);
+      writeFileSync(join(repo, `.digest/summaries/claude-code-${ID}.p2.json`), JSON.stringify({ ...draft(repo, 2), goal: 'My edit.', editedByDeveloper: true }));
+      expect((await run(['summarize', 'c1a5e001.p2', '--repo', repo], env, { llm })).stdout).toContain('kept: edited summaries are never re-summarised');
+      const replaced = await run(['summarize', 'c1a5e001.p2', '--discard-edits', '--repo', repo], env, { llm });
+      expect(replaced.stdout).toMatch(/^c1a5e001\.p2 +(summarised|cached).*replaced your edits/m);
+      expect(draft(repo, 2)).toMatchObject({ editedByDeveloper: false, status: 'draft' });
+      expect(draft(repo, 2).goal).not.toBe('My edit.');
+    });
+
+    it('never replaces an approved summary, even with --discard-edits', async () => {
+      const { repo, env } = twoPeriodRepo();
+      const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
+      await run(['summarize', 'c1a5e001.p2', '--repo', repo], env, { llm });
+      await run(['approve', 'c1a5e001.p2', '--repo', repo], env);
+      expect((await run(['summarize', 'c1a5e001.p2', '--discard-edits', '--repo', repo], env, { llm })).stdout).toContain('kept: approved summaries are never re-summarised');
+    });
+
+    it('explains an unknown period', async () => {
+      const { repo, env } = twoPeriodRepo();
+      expect((await run(['summarize', 'c1a5e001.p9', '--repo', repo], env)).stderr).toContain('c1a5e001 has 2 work periods; there is no p9');
+    });
+
     it('is a flag: without it the session is still summarised whole', async () => {
       const { repo, env } = twoPeriodRepo();
       const whole = await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm: new FakeLlmClient(reply, 'claude-haiku-5-5') });
@@ -289,7 +317,7 @@ describe('sprintdigest summarize', () => {
       writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ summarize: { chunkTokens: 20_000 } })); // a cache miss
       const llm = new FakeLlmClient(reply, 'claude-haiku-5-5');
       const byId = await run(['summarize', 'c1a5e001', '--repo', repo], env, { llm });
-      expect(byId.stdout).toMatch(new RegExp(`^c1a5e001 +kept: ${label} summaries are never re-summarised$`, 'm'));
+      expect(byId.stdout).toMatch(new RegExp(`^c1a5e001 +kept: ${label} summaries are never re-summarised${label === 'edited' ? ' \\(pass --discard-edits to replace it\\)' : ''}$`, 'm'));
       const all = await run(['summarize', '--all', '--yes', '--repo', repo], env, { llm });
       expect(all.stdout).toMatch(/^c1a5e001 +kept/m);
       expect(llm.requests.some((r) => r.messages[0]!.content.includes('Add rate limiting'))).toBe(false);

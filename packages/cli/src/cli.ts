@@ -84,9 +84,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .option('--all', 'summarise every non-empty session for the repo')
     .option('--estimate', 'print how many sessions would be sent and the estimated cost, then stop')
     .option('--yes', 'skip the confirmation before sending more than one session')
-    .option('--by-period', 'write one summary per work period (split at gaps of 6 hours or more) instead of one per session')
+    .option('--by-period', 'write one summary per work period (split at gaps of 6 hours or more) instead of one per session; or name one period, e.g. fe5d7843.p3')
+    .option('--discard-edits', 'replace an edited draft with a fresh summary (approved summaries are never replaced)')
     .option('--repo <path>', 'repo the sessions belong to (default: the git repo containing the current directory)')
-    .action((sessionId: string | undefined, options: { all?: boolean; estimate?: boolean; yes?: boolean; byPeriod?: boolean; repo?: string }) =>
+    .action((sessionId: string | undefined, options: { all?: boolean; estimate?: boolean; yes?: boolean; byPeriod?: boolean; discardEdits?: boolean; repo?: string }) =>
       guarded('summarize', () => summarizeCommand(sessionId, options, ctx)),
     );
 
