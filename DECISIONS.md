@@ -856,3 +856,14 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Rendering:** the heading combines the group ("## LOGS-4: Developer review · LOGS-5: Shared team store"), and the content isn't repeated.
   - **Partial overlap:** a ticket whose work only overlaps a group's stays separate.
 - **Why:** per-period summaries tagged with several tickets repeated the same text and decisions two or three times (Sprint 1: three pairs). That's how the digest reached 128 lines.
+
+## D67. Ticket titles without a tracker
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - **Command:** `sprintdigest ticket title <KEY> "<title>"` calls `PUT /v1/ticket-titles`.
+    - Developer tokens only.
+    - Keys must be a single safe word. Titles must be 1–200 characters and pass the secret detectors.
+  - **Storage:** the server keeps one title per key per repo, with who set it and when, in a `ticket_titles` table (migration 7).
+  - **Use:** reports, `sprintdigest tickets` and digests use the tracker's title when there is one, and this title otherwise. Headings read "LOGS-1: Session parsing".
+- **Why:** with no tracker connected, the Sprint 1 digest's headings were bare keys a reader couldn't place.

@@ -241,4 +241,14 @@ describe('digest server HTTP API', () => {
     expect(await (await retract(token)).json()).toMatchObject({ status: 'already' });
     expect((await (await call(`/v1/summaries?repoId=${encodeURIComponent(REPO)}`, { token })).json()).summaries).toEqual([]);
   });
+
+  it('sets a ticket title with a developer token (200), refuses readers (403) and bad input (422) (DECISIONS.md D67)', async () => {
+    const { store, call, token } = await start();
+    const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+    const put = (as: string, body: object) => call('/v1/ticket-titles', { method: 'PUT', token: as, body: { repoId: REPO, ...body } });
+    expect((await put(token, { ticket: 'LOGS-1', title: 'Session parsing' })).status).toBe(200);
+    expect((await put(reader, { ticket: 'LOGS-2', title: 'Secret redaction' })).status).toBe(403);
+    expect((await put(token, { ticket: 'LOGS-3', title: '' })).status).toBe(422);
+    expect(await store.ticketTitles(REPO)).toMatchObject([{ key: 'LOGS-1', title: 'Session parsing', setBy: 'alice' }]);
+  });
 });

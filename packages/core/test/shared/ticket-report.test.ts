@@ -98,4 +98,13 @@ describe('ticketReport', () => {
   it('returns no groups for an empty selection', async () => {
     expect(await ticketReport(store, REPO, { sprint: 'Sprint 9' })).toMatchObject({ summaryCount: 0, developerCount: 0, sprints: [] });
   });
+
+  it('uses a title set by hand when the tracker has none, and the tracker title when it has one (DECISIONS.md D67)', async () => {
+    await store.setTicketTitle(alice, 'PROJ-1', 'Login hardening');
+    await store.setTicketTitle(alice, 'PROJ-2', 'Hand title');
+    await store.saveTrackerTickets(REPO, [{ key: 'PROJ-2', title: 'Search speed', sprint: 'Sprint 1' }]);
+    const report = await ticketReport(store, REPO, { sprint: 'Sprint 1' });
+    const titles = Object.fromEntries(report.sprints.flatMap((g) => g.tickets.map((t) => [t.key, t.title])));
+    expect(titles).toEqual({ 'PROJ-1': 'Login hardening', 'PROJ-2': 'Search speed' });
+  });
 });

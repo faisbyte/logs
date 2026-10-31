@@ -7,7 +7,7 @@ import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
 import { previewCommand, reportCommand } from './report.js';
 import { retractCommand } from './retract.js';
-import { linkCommand, ticketsCommand } from './tickets.js';
+import { linkCommand, ticketsCommand, ticketTitleCommand } from './tickets.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
 import { summarizeCommand } from './summarize.js';
@@ -146,6 +146,16 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       .option(...repoOption)
       .action((sessionId: string, ticket: string, options: { repo?: string }) => guarded(action, () => linkCommand(action, sessionId, ticket, options, ctx)));
   }
+
+  program
+    .command('ticket')
+    .description('Ticket settings on the shared store')
+    .command('title')
+    .argument('<key>', 'ticket key, e.g. LOGS-1')
+    .argument('<title>', 'the title to show in reports and digests when no tracker gives one')
+    .description('Set a ticket title, used when no tracker title exists')
+    .option(...repoOption)
+    .action((key: string, title: string, options: { repo?: string }) => guarded('ticket title', () => ticketTitleCommand(key, title, options, ctx)));
 
   program
     .command('tickets')

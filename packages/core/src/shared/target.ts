@@ -2,7 +2,7 @@ import type { UploadPayload } from './payload.js';
 import { READER_REFUSAL, receivePush, type PushIdentity, type RetractResult } from './store.js';
 import { ticketReport, type TicketReport, type TicketReportFilter } from './ticket-report.js';
 import type { StoredDigest } from './digests.js';
-import type { LinkResult, SharedStore, Sprint, SummaryRef, UnlinkResult } from './tickets.js';
+import type { LinkResult, SharedStore, Sprint, SummaryRef, TitleResult, UnlinkResult } from './tickets.js';
 
 // What the CLI talks to: the shared store behind its token. The token lives inside the target, never in a summary.
 
@@ -17,6 +17,7 @@ export type LinkOutcome = LinkResult | Refused;
 export type UnlinkOutcome = UnlinkResult | Refused;
 export type TicketsOutcome = { status: 'ok'; report: TicketReport } | Refused;
 export type RetractOutcome = RetractResult | Refused;
+export type TitleOutcome = TitleResult | Refused;
 export type SprintsOutcome = { status: 'ok'; sprints: Sprint[] } | Refused;
 export type PreviewsOutcome = { status: 'ok'; digests: StoredDigest[] } | Refused;
 
@@ -27,6 +28,8 @@ export interface PushTarget {
   unlink(repoId: string, ref: SummaryRef, ticket: string): Promise<UnlinkOutcome>;
   /** Summaries grouped by sprint, then ticket (D46). */
   tickets(repoId: string, filter: TicketReportFilter): Promise<TicketsOutcome>;
+  /** Set a ticket's title for reports and digests, when no tracker gives one (D67). */
+  setTicketTitle(repoId: string, ticket: string, title: string): Promise<TitleOutcome>;
   /** The repo's sprints, earliest first. */
   sprints(repoId: string): Promise<SprintsOutcome>;
   /** Withdraw a pushed summary; only the developer who pushed it can (D60). */
@@ -58,6 +61,10 @@ export function localPushTarget(store: SharedStore, token: string): PushTarget {
     async tickets(repoId, filter) {
       const identity = await as(repoId);
       return refused(identity) ? identity : { status: 'ok', report: await ticketReport(store, repoId, filter) };
+    },
+    async setTicketTitle(repoId, ticket, title) {
+      const identity = await as(repoId);
+      return refused(identity) ? identity : store.setTicketTitle(identity, ticket, title);
     },
     async sprints(repoId) {
       const identity = await as(repoId);

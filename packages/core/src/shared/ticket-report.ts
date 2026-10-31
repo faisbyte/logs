@@ -1,5 +1,5 @@
 import { bySessionStart, type StoredSummary } from './store.js';
-import { byFrom, type ManualTicketLink, type SharedStore, type Sprint, type TicketLink, type TrackerTicket } from './tickets.js';
+import { byFrom, type ManualTicketLink, type SharedStore, type Sprint, type TicketLink, type TicketTitle, type TrackerTicket } from './tickets.js';
 
 // Summaries grouped by sprint, then by ticket (DECISIONS.md D46). The sprint of a link is the tracker's sprint
 // for a ticket the tracker knows, and otherwise the dated sprint containing the session's start.
@@ -44,8 +44,9 @@ export function linksOf(stored: StoredSummary, manual: readonly ManualTicketLink
 
 const byKey = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
 
-export function groupByTicket(input: { summaries: StoredSummary[]; manual: ManualTicketLink[]; sprints: Sprint[]; tracker: TrackerTicket[]; onlySprint?: string }): SprintGroup[] {
+export function groupByTicket(input: { summaries: StoredSummary[]; manual: ManualTicketLink[]; sprints: Sprint[]; tracker: TrackerTicket[]; titles?: TicketTitle[]; onlySprint?: string }): SprintGroup[] {
   const tracker = new Map(input.tracker.map((t) => [t.key, t]));
+  const titled = new Map((input.titles ?? []).map((t) => [t.key, t.title]));
   const dated = (s: StoredSummary) => {
     const start = new Date(s.summary.startedAt).toISOString();
     return input.sprints.find((sp) => sp.from <= start && start < sp.to)?.name ?? null;
@@ -81,7 +82,7 @@ export function groupByTicket(input: { summaries: StoredSummary[]; manual: Manua
       const sprint = known.get(name ?? '');
       return {
         sprint: name === null ? null : { name, from: sprint?.from ?? null, to: sprint?.to ?? null },
-        tickets: [...g.tickets.keys()].sort(byKey).map((key) => ({ key, title: tracker.get(key)?.title ?? null, summaries: g.tickets.get(key)! })),
+        tickets: [...g.tickets.keys()].sort(byKey).map((key) => ({ key, title: tracker.get(key)?.title ?? titled.get(key) ?? null, summaries: g.tickets.get(key)! })),
         unlinked: g.unlinked,
       };
     });
@@ -89,13 +90,14 @@ export function groupByTicket(input: { summaries: StoredSummary[]; manual: Manua
 
 /** The grouped view of a repo for a date range (sessions overlapping it) or for one sprint. */
 export async function ticketReport(store: SharedStore, repoId: string, filter: TicketReportFilter): Promise<TicketReport> {
-  const [summaries, manual, sprints, tracker] = await Promise.all([
+  const [summaries, manual, sprints, tracker, titles] = await Promise.all([
     store.list('sprint' in filter ? { repoId } : { repoId, from: filter.from, to: filter.to }),
     store.ticketLinks(repoId),
     store.sprints(repoId),
     store.trackerTickets(repoId),
+    store.ticketTitles(repoId),
   ]);
-  const sprintGroups = groupByTicket({ summaries, manual, sprints: [...sprints].sort(byFrom), tracker, ...('sprint' in filter ? { onlySprint: filter.sprint } : {}) });
+  const sprintGroups = groupByTicket({ summaries, manual, sprints: [...sprints].sort(byFrom), tracker, titles, ...('sprint' in filter ? { onlySprint: filter.sprint } : {}) });
   const shown = new Map<string, StoredSummary>();
   for (const g of sprintGroups) for (const s of [...g.unlinked, ...g.tickets.flatMap((t) => t.summaries.map((e) => e.summary))]) shown.set(`${s.summary.agent}/${s.summary.sessionId}`, s);
   return { repoId, filter, summaryCount: shown.size, developerCount: new Set([...shown.values()].map((s) => s.developerId)).size, sprints: sprintGroups };

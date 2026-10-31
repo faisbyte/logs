@@ -88,3 +88,12 @@ export async function ticketsCommand(options: { repo?: string; from?: string; to
   ctx.stdout(`${[...report.sprints.flatMap(formatGroup), '', `${count(report.summaryCount, 'summary', 'summaries')} from ${count(report.developerCount, 'developer', 'developers')}.`].join('\n')}\n`);
   return 0;
 }
+
+/** sprintdigest ticket title <KEY> "<title>": a title for repos without a tracker (DECISIONS.md D67). */
+export async function ticketTitleCommand(ticket: string, title: string, options: { repo?: string }, ctx: CliContext): Promise<number> {
+  const c = connect('ticket title', options.repo, ctx);
+  if ('exit' in c) return c.exit;
+  const result = await c.target.setTicketTitle(c.repoId, ticket, title);
+  if (result.status === 'saved') return (ctx.stdout(`${ticket} is titled "${title.trim()}".\n`), 0);
+  return c.fail(result.status === 'rejected' ? result.reason : `the store refused the token: ${result.reason}`);
+}

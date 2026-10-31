@@ -94,3 +94,14 @@ describe('sprintdigest tickets', () => {
     expect((await run(['tickets', '--sprint', 'Nope', '--repo', repo], { pushTarget })).stdout).toBe('Nothing pushed for that selection.\n');
   });
 });
+
+describe('sprintdigest ticket title (DECISIONS.md D67)', () => {
+  it('stores a title on the shared store, used in the grouped view', async () => {
+    const { store, pushTarget, repo } = await setup();
+    expect(await run(['ticket', 'title', 'PROJ-142', 'Rate limit login', '--repo', repo], { pushTarget })).toMatchObject({ exitCode: 0, stdout: 'PROJ-142 is titled "Rate limit login".\n' });
+    expect(await store.ticketTitles(REPO_ID)).toMatchObject([{ key: 'PROJ-142', title: 'Rate limit login' }]);
+    expect((await run(['tickets', '--from', '2026-03-01', '--to', '2026-04-01', '--repo', repo], { pushTarget })).stdout).toContain('  PROJ-142  Rate limit login');
+    expect((await run(['ticket', 'title', 'PROJ-142', '', '--repo', repo], { pushTarget })).stderr).toContain('title: must not be empty');
+  });
+});
+
