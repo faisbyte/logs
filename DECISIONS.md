@@ -927,3 +927,89 @@ Option A. The requirement that stakeholders read reports without repo access, pl
 - **Date:** 2026-10-31
 - **Bug:** `send-due` read the clock once when the run started and used it for every delivery and for `sentAt`. Writing the digest took 25 seconds, so the corrected Sprint 1 digest showed `sentAt` 05:51:42, earlier than its `createdAt` of 05:52:07.
 - **Decision:** each channel's delivery time is taken right after its send, and `sentAt` after the last one. Which periods are due, and the preview window, still use the time the run started.
+
+## D73. Phase 7 is accepted as built; its reader test is still outstanding
+
+- **Date:** 2026-10-31
+- **Decision:** the owner accepted Phase 7 as built, and Phase 8 starts.
+- **Still outstanding:** Phase 7's "Done when" says a non-technical person must understand a real sprint's digest. That reader test hasn't happened yet. It will use `.digest/sprint-1-reader-copy.md` (the corrected Sprint 1 digest with three dogfood-only lines removed) and `docs/po-feedback-checklist.md`. As with D57, the "Done when" isn't met until it has.
+- **Known misses to watch in that test:**
+  - the digest still listed "read-only access for stakeholders is not built", although p3 says reader tokens were built (D65 didn't catch it);
+  - the resolved-follow-ups eval passes but doesn't cover that kind of miss: one resolved on another ticket, in different words.
+
+## D74. Where and when context distillation runs (open)
+
+- **Date:** 2026-10-31
+- **Status:** open, waiting for the owner. The parts that don't depend on it are built first (D76).
+- **The point:** context items must come from every developer's approved summaries, not only the ones on the machine that runs the extraction.
+
+### Option A: on the server, incrementally, on each push
+
+- **How:** when a push stores a new approved summary, the server extracts items from that one summary against the repo's current active items, with the server's `ANTHROPIC_API_KEY` and under the monthly cost cap it already applies to digests (D53).
+- **Coverage:** automatic. Every developer's summaries reach the server, so every one is distilled, and nobody has to remember to run anything.
+- **Freshness:** items exist seconds after a push.
+- **Costs and risks:**
+  - one model call per pushed summary, even small ones;
+  - the model sees one summary at a time, so it has less to compare against when deciding that a newer decision supersedes an older one;
+  - a push mustn't fail when extraction fails or the cap is reached, so it needs a pending queue that a later push or a cron run retries;
+  - summaries pushed out of date order, such as an old session pushed late, need the date guard on superseding (D76).
+
+### Option B: a batch command on the server, run by cron or by hand
+
+- **How:** `sprintdigest-server context distill`, run like `digest send-due` (D54). It takes every approved summary pushed since the last run, plus the active items, and extracts in batches of a few summaries per call, under the same cost cap. A recorded watermark makes a repeat run do nothing.
+- **Coverage:** it reads every developer's approved summaries from the store, the same way the digest does.
+- **Freshness:** items appear at the next run (for example nightly).
+- **Costs and risks:**
+  - fewer, larger calls;
+  - the model compares several summaries at once, which helps deduplication and superseding;
+  - a failed run is simply retried next time;
+  - it needs a cron entry, which `send-due` already does.
+- **Variant considered and not recommended:** a developer-side `sprintdigest context distill` with the developer's own key. It covers everyone only by fetching all summaries from the server, two developers' runs would race, and one developer would pay for the team.
+
+### Recommendation
+
+Option B. It matches how `send-due` already runs, batches calls, and has no failure path inside a push. The extraction function is the same in both options, so A can be added later by calling it from the push handler.
+
+## D75. How AGENTS.md / CLAUDE.md edits become a pull request (open)
+
+- **Date:** 2026-10-31
+- **Status:** open, waiting for the owner. Nothing in the PR flow is built yet.
+
+### Which file each agent reads (checked against the current docs, 2026-10-31)
+
+- **Claude Code** ([memory docs](https://code.claude.com/docs/en/memory)):
+  - It reads `./CLAUDE.md` or `./.claude/CLAUDE.md`.
+  - From v2.1.277 it reads `AGENTS.md` itself, but only when there's no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the working directory or above it. When a `CLAUDE.md` exists, `AGENTS.md` is ignored unless imported.
+  - A `CLAUDE.md` can import `AGENTS.md` with a line `@AGENTS.md`. The path resolves relative to the importing file, imports nest up to four hops, and an import is never read twice. Some sessions (older versions, some Bedrock or no-telemetry setups) read only `CLAUDE.md`, so the docs recommend the import there.
+- **Codex** ([AGENTS.md guide](https://developers.openai.com/codex/guides/agents-md)):
+  - It reads `AGENTS.override.md`, else `AGENTS.md`, in each directory from the project root down to the current directory, one file per directory, concatenated root first.
+  - Other names count only if listed in `project_doc_fallback_filenames`, so it doesn't read `CLAUDE.md` by default.
+  - Instruction files are capped at 32 KiB combined (`project_doc_max_bytes`).
+  - The guide doesn't say Codex expands `@path` imports, so the notes must be in `AGENTS.md` itself.
+
+### What both options would write
+
+- The notes go into a marked section of the root `AGENTS.md` (`<!-- sprintdigest:context:start -->` … `end`). Text outside the markers is never touched.
+- If a `CLAUDE.md` exists without an `@AGENTS.md` line, the PR adds one. If there's no `CLAUDE.md`, current Claude Code reads `AGENTS.md` directly, and the PR offers an optional one-line `CLAUDE.md` for the sessions that can't.
+- The section stays short, so the combined files stay well under Codex's 32 KiB. It uses the same safety rules as the brief (D76).
+
+### Option A: locally, with the `gh` CLI
+
+- **How:** `sprintdigest context propose` fetches the active items from the server, writes the section on a new branch (`sprintdigest/context-<date>`) in a temporary worktree inside `.digest/`, commits there, and runs `gh pr create`. It never commits to the current branch, and never to the default branch.
+- **Credentials:** the developer's own `gh` login. The server holds no GitHub credentials.
+- **Who runs it:** a developer, by hand or prompted by the pre-push reminder. The PR is authored by a person who then reviews it with the team.
+- **Costs:** `gh` must be installed and logged in. It only happens when someone runs it.
+
+### Option B: on the server, as a GitHub App
+
+- **How:** after a distillation run, the server opens or updates the PR through the GitHub API, as a GitHub App installed on the repo.
+- **Credentials:** the server holds the app's private key and gets per-repo installation tokens with contents and pull-request write access. That's a much bigger security surface than a digest server that only reads summaries.
+- **Who runs it:** nobody. PRs appear automatically, even if no developer remembers.
+- **Costs:**
+  - registering and installing an app, and each self-hoster creating their own;
+  - handling a PR that's still open, or closed without merging;
+  - only works with GitHub.
+
+### Recommendation
+
+Option A first: no repo-write credentials on the server, and a person starts every PR. Option B can follow for teams that want it automatic, as Phase 10 hardening goes in.
