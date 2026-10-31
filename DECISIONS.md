@@ -737,6 +737,12 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Sprints:** a session that crosses a sprint boundary has each period counted in the sprint it happened in (tested).
   - **State:** `.digest/state.json` still tracks the whole session.
 - **It's a flag, not the default.** Whether to make it the default will be decided after the developer's own review of the dogfood sprint (D57).
+- **Evidence (2026-10-31): per-period summaries make stale follow-ups worse.**
+  - A whole-session summary resolves earlier follow-ups in its merge (D33). Separate period summaries can't: each is written without seeing the others.
+  - In the Sprint 1 dogfood, `fe5d7843.p1` still said Phase 4 hadn't started and the chunk-size change wasn't made; `.p2` did both.
+  - `.p2` said reader tokens weren't built; `.p3` built them.
+  - About 10 of the first digest's 14 risks were stale or internal.
+- **Mitigation:** D65. The digest reads every summary in date order and drops follow-ups that later work resolved. `--by-period` stays a flag.
 - **Alternatives:**
   - One summary tagged with every ticket, which repeats one story under each ticket.
   - One umbrella ticket.
