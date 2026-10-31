@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkDigest, DigestBlockedError, DigestError, estimateDigestCost, generateDigest, type DigestOutput } from '../../src/digest/generate.js';
+import { checkDigest, DEFAULT_JARGON, DigestBlockedError, DigestError, estimateDigestCost, generateDigest, jargonIn, type DigestOutput } from '../../src/digest/generate.js';
 import { digestInput, type DigestInput } from '../../src/digest/input.js';
 import { DIGEST_PROMPT_VERSION, digestSystemPrompt } from '../../src/digest/prompt.js';
 import { InMemorySummaryStore } from '../../src/shared/memory-store.js';
@@ -200,5 +200,33 @@ describe('tickets that share exactly the same work (DECISIONS.md D66)', () => {
     expect(llm.requests[0]!.messages[0]!.content).toContain('Ticket LOGS-4: Developer review, LOGS-5: Shared team store (AI involvement overall: heavy): W2');
     expect(checkDigest({ ...out, tickets: [...out.tickets, { ...out.tickets[1]!, key: 'LOGS-5' }] }, input)).toContain('tickets: LOGS-5 shares a section with LOGS-4; write one section for the group');
     expect(checkDigest({ ...out, tickets: [out.tickets[0]!, { ...out.tickets[1]!, key: 'LOGS-5' }] }, input)).toEqual([]);
+  });
+});
+
+describe('developer jargon (DECISIONS.md D68)', () => {
+  it('asks the model to explain or avoid technical terms', () => {
+    expect(digestSystemPrompt()).toContain('Write for someone who has never written software: explain a technical term in a few plain words, or avoid it.');
+  });
+
+  it('retries once, naming the terms, when the reply uses words from the jargon list', async () => {
+    const llm = llmWith(good({ overview: 'Each commit passed an end-to-end test.' }), good());
+    const digest = await generateDigest(await input(), llm, { now });
+    expect(digest.usage.requests).toBe(2);
+    expect(llm.requests[1]!.messages.at(-1)!.content).toContain('Your previous reply used developer terms a product owner may not know: commit, end-to-end test.');
+    expect(digest.warnings).toEqual([]);
+  });
+
+  it('keeps the second reply with a warning if the terms are still there', async () => {
+    const jargony = good({ overview: 'The schema changed.' });
+    const digest = await generateDigest(await input(), llmWith(jargony, jargony), { now });
+    expect(digest.markdown).toContain('The schema changed.');
+    expect(digest.warnings).toEqual(['jargon: schema']);
+  });
+
+  it('matches whole words in any case, from a configurable list', async () => {
+    expect(jargonIn(good({ overview: 'Commits and PROMPTS, but not a commitment.' }), DEFAULT_JARGON)).toEqual(['commit', 'prompt']);
+    expect(jargonIn(good(), ['ratchet'])).toEqual([]);
+    expect(jargonIn(good({ overview: 'The ratchet works.' }), ['ratchet'])).toEqual(['ratchet']);
+    for (const term of ['pnpm', 'schema', 'prompt', 'chunk', 'commit', 'hook', 'end-to-end test', 'work period']) expect(DEFAULT_JARGON).toContain(term);
   });
 });

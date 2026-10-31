@@ -79,7 +79,7 @@ export async function reportCommand(options: ReportOptions, ctx: CliContext): Pr
   }
 
   const llm: LlmClient = ctx.llm ?? AnthropicLlmClient.fromEnv(ctx.env, model, config.effort ?? 'medium');
-  const digest = await generateDigest(input, llm);
+  const digest = await generateDigest(input, llm, config.jargon ? { jargon: config.jargon } : {});
   writeFileSync(join(ensureDigestDir(repoRoot, 'cache', 'reports'), `${key}.md`), digest.markdown);
   emit(digest.markdown);
   return 0;

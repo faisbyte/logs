@@ -89,4 +89,11 @@ describe('onDemandReport', () => {
     expect(llm.requests).toHaveLength(2);
     expect(await store.getDigest(REPO, (first as { digest: { id: string } }).digest.id)).toBeNull();
   });
+
+  it('passes the server jargon list to the digest, which retries once on a hit (DECISIONS.md D68)', async () => {
+    const { llm, deps } = await setup([JSON.stringify(output), JSON.stringify(output)]);
+    await onDemandReport({ ...deps, jargon: ['login'] }, REPO, range);
+    expect(llm.requests).toHaveLength(2);
+    expect(llm.requests[1]!.messages.at(-1)!.content).toContain('may not know: login.');
+  });
 });

@@ -77,6 +77,18 @@ describe('sprintdigest report', () => {
   });
 });
 
+describe('report jargon list (DECISIONS.md D68)', () => {
+  it('uses report.jargon from .digest/config.json', async () => {
+    const { pushTarget, repo } = await setup();
+    mkdirSync(join(repo, '.digest'), { recursive: true });
+    writeFileSync(join(repo, '.digest/config.json'), JSON.stringify({ share: {}, report: { jargon: ['attempts'] } }));
+    const llm = new FakeLlmClient(() => JSON.stringify(output), 'claude-sonnet-5-5');
+    await run(['report', '--from', '2026-03-01', '--to', '2026-04-01', '--yes', '--repo', repo], { pushTarget, llm });
+    expect(llm.requests).toHaveLength(2);
+    expect(llm.requests[1]!.messages.at(-1)!.content).toContain('may not know: attempts.');
+  });
+});
+
 describe('sprintdigest preview', () => {
   it('prints the digests waiting in developer preview', async () => {
     const { store, pushTarget, repo } = await setup();

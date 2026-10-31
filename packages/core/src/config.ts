@@ -77,6 +77,8 @@ export const ReportConfigSchema = z
     /** The model `sprintdigest report` writes with; Sonnet 5.5 by default (DECISIONS.md D48). */
     model: z.string().min(1).optional(),
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
+    /** Terms the report must explain or avoid; replaces the built-in list (DECISIONS.md D68). */
+    jargon: z.array(z.string().min(1)).optional(),
   })
   .strict();
 

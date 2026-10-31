@@ -132,6 +132,11 @@ describe('digestDepsFromEnv (DECISIONS.md D48, D53)', () => {
     expect(JSON.stringify(deps)).not.toContain('test-key-not-real');
   });
 
+  it('reads the jargon list from DIGEST_JARGON, replacing the default (DECISIONS.md D68)', () => {
+    expect(digestDepsFromEnv({ DIGEST_JARGON: 'sprint board, burndown ,' })).toMatchObject({ jargon: ['sprint board', 'burndown'] });
+    expect(digestDepsFromEnv({})).not.toHaveProperty('jargon');
+  });
+
   it('rejects a nonsense cap or effort', () => {
     expect(() => digestDepsFromEnv({ DIGEST_MONTHLY_CAP_USD: 'lots' })).toThrow(/DIGEST_MONTHLY_CAP_USD must be a number of dollars/);
     expect(() => digestDepsFromEnv({ DIGEST_EFFORT: 'extreme' })).toThrow(/DIGEST_EFFORT must be one of low, medium, high, xhigh, max/);

@@ -92,7 +92,7 @@ export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
 export { localPushTarget, type TitleOutcome, type SprintsOutcome, type RetractOutcome, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
 export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type DigestPeriod, type DigestTicket, type DigestWork } from './digest/input.js';
-export { assertDeliverable, checkDigest, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
+export { assertDeliverable, checkDigest, DEFAULT_JARGON, jargonIn, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';
 export { checkNewDigest, defaultRepoSettings, sameReport, type DigestKind, type DigestPatch, type DigestStatus, type DigestStore, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './shared/digests.js';
 export { capRefusal, monthStart, onDemandReport, periodKey, storedFields, writeDigest, type DigestDeps, type ReportResult } from './shared/reports.js';

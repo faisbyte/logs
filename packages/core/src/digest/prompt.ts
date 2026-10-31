@@ -14,7 +14,7 @@ Write markdown:
 
 Rules: no code, no file paths unless essential, no jargon without a short explanation, no judgement of individual developers, no invented facts.`;
 
-export function digestSystemPrompt(): string {
+export function digestSystemPrompt(jargon: readonly string[] = []): string {
   return `${SECTION_6_2}
 
 Reply with a JSON object instead of markdown; it is turned into markdown for you:
@@ -25,7 +25,8 @@ Reply with a JSON object instead of markdown; it is turned into markdown for you
 Only mention ticket keys that appear in the input. Never write code, commands or code formatting. Never name or compare people.
 The work is listed oldest first, with dates. A risk or follow-up from earlier work that later work shows as done, fixed or decided is resolved: leave it out.
 Describe each ticket, and the overview, as things stood at the end of the period, not part-way through.
-"risksAndOpenQuestions": only what a non-technical product owner could act on or should know about: delivery or scope at risk, quality problems people could notice, cost, and decisions they need to make. Leave out developer housekeeping (tests, tooling, versions, configuration, internal checks) and notes about how the work itself was recorded, reviewed or shared.`;
+"risksAndOpenQuestions": only what a non-technical product owner could act on or should know about: delivery or scope at risk, quality problems people could notice, cost, and decisions they need to make. Leave out developer housekeeping (tests, tooling, versions, configuration, internal checks) and notes about how the work itself was recorded, reviewed or shared.
+Write for someone who has never written software: explain a technical term in a few plain words, or avoid it.${jargon.length ? ` Words to avoid or explain: ${jargon.join(', ')}.` : ''}`;
 }
 
 const list = (title: string, items: string[]) => (items.length ? [`  ${title}:`, ...items.map((i) => `    - ${i}`)] : []);

@@ -11,6 +11,7 @@ import { digestMessage } from './prompt.js';
 export const JudgeSchema = z.object({
   claims: z.array(z.object({ claim: z.string(), supported: z.boolean(), reason: z.string() })),
   resolvedStillListed: z.array(z.object({ item: z.string(), laterWork: z.string() })),
+  jargon: z.array(z.object({ term: z.string(), sentence: z.string() })),
 });
 
 export function judgeSystemPrompt(): string {
@@ -21,6 +22,7 @@ Skip the coverage line, headings and ticket titles.
 The work is listed oldest first (W1, W2, ...).
 Reply with a JSON object:
 - "claims": each with "claim" (quoted or closely paraphrased from the digest), "supported" (true or false) and "reason" (one sentence, citing the work number when supported).
+- "jargon": every technical term in the digest that a non-technical product owner would not understand and that is not explained in plain words, each with "term" and the "sentence" it is in. An empty list when there are none.
 - "resolvedStillListed": every risk, follow-up or "not yet done" statement in the digest that later work (a higher W number) shows as done, fixed or decided, each with "item" (from the digest) and "laterWork" (which W resolved it, and how). An empty list when there are none.`;
 }
 
@@ -28,17 +30,19 @@ export interface JudgeVerdict {
   claimCount: number;
   unsupported: { claim: string; reason: string }[];
   resolvedStillListed: { item: string; laterWork: string }[];
+  jargon: { term: string; sentence: string }[];
   usage: Usage;
 }
 
 export async function judgeDigest(input: DigestInput, markdown: string, llm: LlmClient): Promise<JudgeVerdict> {
   const message = `Session summaries:\n${digestMessage(input)}\n\nDigest to check:\n${markdown}`;
   const response = await llm.complete({ source: input, system: judgeSystemPrompt(), messages: [{ role: 'user', content: message }], schema: JudgeSchema, maxTokens: 8_000 });
-  const { claims, resolvedStillListed } = JudgeSchema.parse(JSON.parse(response.text));
+  const { claims, resolvedStillListed, jargon } = JudgeSchema.parse(JSON.parse(response.text));
   return {
     claimCount: claims.length,
     unsupported: claims.filter((c) => !c.supported).map(({ claim, reason }) => ({ claim, reason })),
     resolvedStillListed,
+    jargon,
     usage: { ...response.usage, requests: 1, costUsd: estimateCostUsd(llm.model, response.usage) },
   };
 }

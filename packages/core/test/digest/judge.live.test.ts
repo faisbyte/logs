@@ -74,7 +74,9 @@ describe.skipIf(!process.env.DIGEST_EVAL || !process.env.ANTHROPIC_API_KEY)('liv
       `# Digest eval, resolved follow-ups: writer ${writer.model}, judge ${judge.model}, ${new Date().toISOString()}`,
       '',
       `Planted resolved item "${resolved.plantedResolved}": ${planted.resolvedStillListed.some((r) => r.item.toLowerCase().includes(resolved.plantedResolved)) ? 'flagged' : 'MISSED'}`,
-      `Fresh digest: ${fresh.resolvedStillListed.length} resolved items still listed, ${fresh.unsupported.length} unsupported claims.`,
+      `Planted jargon "${resolved.plantedJargon}": ${planted.jargon.some((j) => j.term.toLowerCase().includes(resolved.plantedJargon)) ? 'flagged' : 'MISSED'}`,
+      `Fresh digest: ${fresh.resolvedStillListed.length} resolved items still listed, ${fresh.unsupported.length} unsupported claims, ${fresh.jargon.length} unexplained terms${digest.warnings.length ? ` (kept with ${digest.warnings.join(', ')})` : ''}.`,
+      ...fresh.jargon.map((j) => `- jargon: ${j.term} in "${j.sentence}"`),
       ...fresh.resolvedStillListed.map((r) => `- still listed: ${r.item} (${r.laterWork})`),
       ...resolved.mustNotAppear.map((p: string) => `- must not appear "${p}": ${lower.includes(p.toLowerCase()) ? 'PRESENT' : 'ok'}`),
       ...resolved.mustAppear.map((p: string) => `- must appear "${p}": ${lower.includes(p.toLowerCase()) ? 'ok' : 'MISSING'}`),
@@ -86,6 +88,7 @@ describe.skipIf(!process.env.DIGEST_EVAL || !process.env.ANTHROPIC_API_KEY)('liv
     writeFileSync(join(ensureDigestDir(REPO_ROOT, 'eval'), `digest-resolved-${Date.now()}.md`), `${lines.join('\n')}\n`);
 
     expect(planted.resolvedStillListed.some((r) => r.item.toLowerCase().includes(resolved.plantedResolved))).toBe(true);
+    expect(planted.jargon.some((j) => j.term.toLowerCase().includes(resolved.plantedJargon))).toBe(true);
     expect(fresh.resolvedStillListed).toEqual([]);
     for (const p of resolved.mustNotAppear) expect(lower, `should not contain "${p}"`).not.toContain(p.toLowerCase());
     for (const p of resolved.mustAppear) expect(lower, `should contain "${p}"`).toContain(p.toLowerCase());
