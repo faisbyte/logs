@@ -1,3 +1,5 @@
+import type { ContextItem } from '../context/item.js';
+import type { RetireResult } from '../context/store.js';
 import type { UploadPayload } from './payload.js';
 import { READER_REFUSAL, receivePush, type PushIdentity, type RetractResult } from './store.js';
 import { ticketReport, type TicketReport, type TicketReportFilter } from './ticket-report.js';
@@ -20,6 +22,8 @@ export type RetractOutcome = RetractResult | Refused;
 export type TitleOutcome = TitleResult | Refused;
 export type SprintsOutcome = { status: 'ok'; sprints: Sprint[] } | Refused;
 export type PreviewsOutcome = { status: 'ok'; digests: StoredDigest[] } | Refused;
+export type ContextItemsOutcome = { status: 'ok'; items: ContextItem[] } | Refused;
+export type RetireOutcome = RetireResult | Refused;
 
 export interface PushTarget {
   push(repoId: string, payload: UploadPayload): Promise<PushOutcome>;
@@ -36,6 +40,10 @@ export interface PushTarget {
   retract(repoId: string, ref: SummaryRef): Promise<RetractOutcome>;
   /** Scheduled digests waiting in developer preview, with their text (D54). */
   previews(repoId: string): Promise<PreviewsOutcome>;
+  /** Every context item, any status, newest first: developers only (D77). */
+  contextItems(repoId: string): Promise<ContextItemsOutcome>;
+  /** Retire a wrong context item; it never comes back automatically (D77). */
+  retireContextItem(repoId: string, id: string): Promise<RetireOutcome>;
 }
 
 /** A PushTarget for a store in this process (tests, and local end-to-end runs). */
@@ -77,6 +85,14 @@ export function localPushTarget(store: SharedStore, token: string): PushTarget {
     async previews(repoId) {
       const identity = await as(repoId);
       return refused(identity) ? identity : { status: 'ok', digests: await store.digests(repoId, { statuses: ['preview'] }) };
+    },
+    async contextItems(repoId) {
+      const identity = await as(repoId);
+      return refused(identity) ? identity : { status: 'ok', items: await store.contextItems(repoId) };
+    },
+    async retireContextItem(repoId, id) {
+      const identity = await as(repoId);
+      return refused(identity) ? identity : store.retireContextItem(identity, id);
     },
   };
 }

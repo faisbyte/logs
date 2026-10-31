@@ -104,6 +104,8 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/team-report': ['GET'],
       '/v1/ticket-links': ['POST', 'DELETE'],
       '/v1/retractions': ['POST'],
+      '/v1/context-items': ['GET'],
+      '/v1/context-retirements': ['POST'],
       '/v1/sprints': ['GET'],
       '/v1/ticket-titles': ['PUT'],
       '/v1/tickets': ['GET'],
@@ -149,6 +151,21 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       if (!repoId) throw new HttpError(400, 'repoId is required');
       await reader(req, repoId);
       return [200, { sprints: await store.sprints(repoId) }];
+    }
+    // Context items are for developers and their agents, not readers (DECISIONS.md D77).
+    if (url.pathname === '/v1/context-items') {
+      const repoId = url.searchParams.get('repoId');
+      if (!repoId) throw new HttpError(400, 'repoId is required');
+      await developer(req, repoId);
+      return [200, { items: await store.contextItems(repoId) }];
+    }
+    if (url.pathname === '/v1/context-retirements') {
+      const body = (await readJson(req)) as Record<string, unknown> | null;
+      const repoId = body?.repoId;
+      if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
+      if (typeof body?.id !== 'string' || !body.id) throw new HttpError(400, 'id is required');
+      const result = await store.retireContextItem(await developer(req, repoId), body.id);
+      return [result.status === 'not-found' ? 404 : 200, result];
     }
     if (url.pathname === '/v1/retractions') {
       const { repoId, ref } = linkTarget(await readJson(req));

@@ -1049,3 +1049,14 @@ Option A first: no repo-write credentials on the server, and a person starts eve
 - **Limits:**
   - The safety rules are strict. A legitimate fact such as "the API key is read from the environment" is refused, and the model is asked to rephrase it.
   - Text similarity can't tell two versions of a number apart ("3 failed logins" and "5 failed logins" score 0.83). That's why superseding must be explicit, and why it overrides the merge.
+
+## D77. Stored context items: never deleted, retired by developers or by retraction, developers only
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - **Store:** a `ContextStore` on every shared store (in memory, and Postgres through migration 10's `context_items` table), covered by one contract test.
+    - `applyContextChanges` lands one extraction's changes at once (a transaction in Postgres). It runs the D76 item checks again first, secret detectors included, so an unsafe item refuses the whole change. That makes the store a second line of defence after extraction.
+    - An added item whose id is already stored is skipped. Merges and supersessions change active items only.
+  - **Retire:** `retireContextItem` lets any developer on the repo retire an item, recording who did it and when. Retiring twice reports "already". Retired items stay stored, and extraction never brings them back (D76).
+  - **Retraction:** when a retraction leaves every source summary of an item retracted, the item is retired with `retiredBy: "retraction"`. Items that still have another source stay active. A later push of a retracted session doesn't bring its items back, in line with "retired items never return automatically".
+  - **Access:** `GET /v1/context-items` and `POST /v1/context-retirements` are for developer tokens only. Reader tokens get 403, like per-session summaries (D51). There is no write route for new items yet, because where extraction runs is still open (D74).

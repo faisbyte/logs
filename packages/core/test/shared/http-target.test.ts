@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { httpPushTarget } from '../../src/shared/http-target.js';
+import { contextItem } from './context-contract.js';
 import { payloadFor } from './store-contract.js';
 
 const TOKEN = 'dgt_test_token_value_0123456789';
@@ -90,5 +91,26 @@ describe('httpPushTarget', () => {
     expect(await target.retract('github.com/acme/webapp', { agent: 'claude-code', sessionId: 'c1a5e001' })).toEqual(expected);
     expect(calls[0]!.url).toBe('https://digest.example.com/v1/retractions');
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp', agent: 'claude-code', sessionId: 'c1a5e001' });
+  });
+
+  it.each([
+    [200, { items: [contextItem()] }, { status: 'ok', items: [contextItem()] }],
+    [403, { error: 'reader tokens can read digests and reports only' }, { status: 'forbidden', reason: 'reader tokens can read digests and reports only' }],
+  ])('maps HTTP %i on reading context items (DECISIONS.md D77)', async (status, body, expected) => {
+    const { calls, target } = stub(status, body);
+    expect(await target.contextItems('github.com/acme/webapp')).toEqual(expected);
+    expect(calls[0]!.url).toBe('https://digest.example.com/v1/context-items?repoId=github.com%2Facme%2Fwebapp');
+  });
+
+  it.each([
+    [200, { status: 'retired', retiredAt: '2026-10-31T12:00:00.000Z' }, { status: 'retired', retiredAt: '2026-10-31T12:00:00.000Z' }],
+    [200, { status: 'already', retiredAt: '2026-10-31T12:00:00.000Z' }, { status: 'already', retiredAt: '2026-10-31T12:00:00.000Z' }],
+    [404, { status: 'not-found' }, { status: 'not-found' }],
+    [401, { error: 'unknown or revoked token' }, { status: 'unauthorized', reason: 'unknown or revoked token' }],
+  ])('maps HTTP %i on retiring a context item (DECISIONS.md D77)', async (status, body, expected) => {
+    const { calls, target } = stub(status, body);
+    expect(await target.retireContextItem('github.com/acme/webapp', 'ctx-0000000a')).toEqual(expected);
+    expect(calls[0]!.url).toBe('https://digest.example.com/v1/context-retirements');
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp', id: 'ctx-0000000a' });
   });
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ContextStore } from '../context/store.js';
 import type { Agent } from '../schema.js';
 import { contentProblems } from './payload.js';
 import type { DigestStore } from './digests.js';
@@ -81,7 +82,7 @@ export interface TicketStore {
   ticketTitles(repoId: string): Promise<TicketTitle[]>;
 }
 
-export type SharedStore = SummaryStore & TokenStore & TicketStore & DigestStore;
+export type SharedStore = SummaryStore & TokenStore & TicketStore & DigestStore & ContextStore;
 
 const TicketKeySchema = z.string().min(1, 'must not be empty').max(100, 'must be at most 100 characters').regex(/^\S+$/, 'must be a single word such as PROJ-142');
 
