@@ -230,3 +230,30 @@ describe('developer jargon (DECISIONS.md D68)', () => {
     for (const term of ['pnpm', 'schema', 'prompt', 'chunk', 'commit', 'hook', 'end-to-end test', 'work period']) expect(DEFAULT_JARGON).toContain(term);
   });
 });
+
+describe('one AI involvement level for every ticket (DECISIONS.md D69)', () => {
+  it('is stated once after the overview and left out of each section', async () => {
+    const store = new InMemorySummaryStore();
+    await store.push(alice, payloadFor({ sessionId: 'a1', ticketRefs: ['PROJ-1'], branch: 'main', aiInvolvement: 'heavy' }));
+    await store.push(alice, payloadFor({ sessionId: 'a2', ticketRefs: ['PROJ-2'], branch: 'main', aiInvolvement: 'heavy' }));
+    const same = digestInput(await ticketReport(store, REPO, { from: '2026-03-01T00:00:00.000Z', to: '2026-04-01T00:00:00.000Z' }));
+    const out: DigestOutput = {
+      overview: 'Two things got done.',
+      tickets: [
+        { key: 'PROJ-1', achieved: 'One.', aiInvolvement: 'AI wrote it.', keyDecisions: [] },
+        { key: 'PROJ-2', achieved: 'Two.', aiInvolvement: 'AI wrote this too.', keyDecisions: [] },
+      ],
+      otherWork: null,
+      risksAndOpenQuestions: [],
+    };
+    const md = (await generateDigest(same, llmWith(out), { now })).markdown;
+    expect(md).toContain('Two things got done.\n\n**AI involvement: heavy for every ticket.** AI wrote most of the changes.\n\n## PROJ-1');
+    expect(md.match(/\*\*AI involvement/g)).toHaveLength(1);
+    expect(md).not.toContain('AI wrote this too.');
+  });
+
+  it('keeps a line per section when the levels differ', async () => {
+    const md = (await generateDigest(await input(), llmWith(good()), { now })).markdown;
+    expect(md.match(/\*\*AI involvement: (heavy|moderate)\.\*\*/g)).toHaveLength(2);
+  });
+});

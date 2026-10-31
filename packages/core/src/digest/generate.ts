@@ -95,14 +95,26 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const coverageLine = (c: Digest['coverage']) =>
   `_Based on ${plural(c.summaryCount, 'summary', 'summaries')} that ${plural(c.developerCount, 'developer', 'developers')} chose to share._`;
 
+/** The summariser's own definitions of the levels (PROJECT_PLAN.md section 6.1), in plain words. */
+const PLAIN_LEVEL = {
+  light: 'AI was used mainly for questions and explanations.',
+  moderate: 'AI wrote parts of the changes.',
+  heavy: 'AI wrote most of the changes.',
+} as const;
+
 export function renderDigest(out: DigestOutput | null, input: DigestInput): string {
   const lines = [`# AI work update: ${input.period.label}`, ''];
   if (!out) return [...lines, 'No AI-assisted work was shared for this period.', '', coverageLine(input.coverage), ''].join('\n');
   lines.push(out.overview, '');
+  // One level for every ticket is said once, in plain words, instead of in each section (D69).
+  const levels = new Set(input.tickets.map((t) => t.aiInvolvement));
+  const shared = input.tickets.length > 1 && levels.size === 1 ? input.tickets[0]!.aiInvolvement : null;
+  if (shared) lines.push(`**AI involvement: ${shared} for every ticket.** ${PLAIN_LEVEL[shared]}`, '');
   const leadOf = groupLeads(input);
   for (const t of input.tickets) {
     const section = out.tickets.find((s) => leadOf.get(s.key) === t.key)!;
-    lines.push(`## ${t.keys.map((k, i) => `${k}${t.titles[i] ? `: ${t.titles[i]}` : ''}`).join(' · ')}`, '', section.achieved, '', `**AI involvement: ${t.aiInvolvement}.** ${section.aiInvolvement}`, '');
+    lines.push(`## ${t.keys.map((k, i) => `${k}${t.titles[i] ? `: ${t.titles[i]}` : ''}`).join(' · ')}`, '', section.achieved, '');
+    if (!shared) lines.push(`**AI involvement: ${t.aiInvolvement}.** ${section.aiInvolvement}`, '');
     if (section.keyDecisions.length) lines.push('**Key decisions:**', '', ...section.keyDecisions.map((d) => `- ${d}`), '');
   }
   if (out.otherWork) lines.push('## Other work', '', out.otherWork, '');
