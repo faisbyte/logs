@@ -52,7 +52,12 @@ describe('digest prompt', () => {
     ]) {
       expect(prompt).toContain(line);
     }
-    expect(DIGEST_PROMPT_VERSION).toBe('digest-v1');
+    expect(DIGEST_PROMPT_VERSION).toBe('digest-v2');
+    // D65: stale follow-ups, PO-only risks, and the state at the end of the period.
+    expect(prompt).toContain('The work is listed oldest first, with dates. A risk or follow-up from earlier work that later work shows as done, fixed or decided is resolved: leave it out.');
+    expect(prompt).toContain('Describe each ticket, and the overview, as things stood at the end of the period, not part-way through.');
+    expect(prompt).toContain('"risksAndOpenQuestions": only what a non-technical product owner could act on or should know about: delivery or scope at risk, quality problems people could notice, cost, and decisions they need to make.');
+    expect(prompt).toContain('Leave out developer housekeeping (tests, tooling, versions, configuration, internal checks) and notes about how the work itself was recorded, reviewed or shared.');
   });
 });
 
@@ -94,8 +99,13 @@ describe('generateDigest', () => {
         '',
       ].join('\n'),
     );
-    expect(digest).toMatchObject({ model: 'claude-sonnet-5-5', promptVersion: 'digest-v1', generatedAt: '2026-03-16T08:00:00.000Z', usage: { requests: 1, costUsd: expect.any(Number) } });
-    expect(llm.requests[0]!.messages[0]!.content).toContain('Ticket PROJ-142: Rate limit login');
+    expect(digest).toMatchObject({ model: 'claude-sonnet-5-5', promptVersion: 'digest-v2', generatedAt: '2026-03-16T08:00:00.000Z', usage: { requests: 1, costUsd: expect.any(Number) } });
+    const sent = llm.requests[0]!.messages[0]!.content;
+    expect(sent).toContain('All work in this period, oldest first:');
+    expect(sent).toMatch(/^W1 \(2026-03-02 to 2026-03-02; tickets PROJ-142\):$/m);
+    expect(sent).toMatch(/^W3 \(2026-03-02 to 2026-03-02; no ticket\):$/m);
+    expect(sent).toContain('Ticket PROJ-142: Rate limit login (AI involvement overall: heavy): W1');
+    expect(sent).toContain('Work not linked to a ticket: W3');
   });
 
   it.each([

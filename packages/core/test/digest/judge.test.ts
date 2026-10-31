@@ -21,10 +21,16 @@ describe('judgeDigest', () => {
         { claim: 'Login now limits repeated attempts.', supported: true, reason: 'Work 1 added a limiter.' },
         { claim: 'The change shipped to production.', supported: false, reason: 'No summary mentions a release.' },
       ],
+      resolvedStillListed: [{ item: 'Lockout is not built yet.', laterWork: 'W2 built the lockout.' }],
     };
     const llm = new FakeLlmClient([JSON.stringify(reply)], 'claude-opus-5-5');
     const verdict = await judgeDigest(input, '# Update\n\nLogin now limits repeated attempts. The change shipped to production.\n', llm);
-    expect(verdict).toMatchObject({ claimCount: 2, unsupported: [{ claim: 'The change shipped to production.', reason: 'No summary mentions a release.' }], usage: { requests: 1 } });
+    expect(verdict).toMatchObject({
+      claimCount: 2,
+      unsupported: [{ claim: 'The change shipped to production.', reason: 'No summary mentions a release.' }],
+      resolvedStillListed: [{ item: 'Lockout is not built yet.', laterWork: 'W2 built the lockout.' }],
+      usage: { requests: 1 },
+    });
     const sent = llm.requests[0]!;
     expect(sent.source).toBe(input);
     expect(sent.messages[0]!.content).toContain('Ticket PROJ-142');
@@ -34,5 +40,6 @@ describe('judgeDigest', () => {
   it('asks for every factual claim, judged only against the summaries', () => {
     expect(judgeSystemPrompt()).toContain('List every factual claim the digest makes');
     expect(judgeSystemPrompt()).toContain('supported only if the summaries state it or plainly imply it');
+    expect(judgeSystemPrompt()).toContain('"resolvedStillListed": every risk, follow-up or "not yet done" statement in the digest that later work (a higher W number) shows as done, fixed or decided');
   });
 });

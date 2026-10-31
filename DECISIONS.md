@@ -832,3 +832,17 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **One period:** `sprintdigest summarize <id>.p<n>` summarises just that work period.
   - **`--discard-edits`:** replaces an edited draft, which D37 otherwise protects. Approved summaries are never replaced.
 - **Not yet verified live:** that the re-summarised p3 now covers Phase 7. Check it in review.
+
+## D65. The digest resolves stale follow-ups itself (digest-v2)
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - **Input:** the digest model now gets one timeline of all work, oldest first (W1, W2, …), each item with its dates and tickets. Tickets point to their work items instead of repeating them.
+  - **Prompt rules (digest-v2):**
+    - A risk or follow-up that later work shows as done, fixed or decided is left out.
+    - Each ticket, and the overview, describe the state at the end of the period.
+    - "Risks and open questions" holds only what a non-technical product owner could act on or should know: delivery or scope at risk, quality problems people could notice, cost, and decisions they need to make. Developer housekeeping and notes about how the work was recorded, reviewed or shared stay out.
+  - **Judge:** it now reports `resolvedStillListed`: items in the digest that later work resolved.
+  - **Golden fixture:** a new one (`golden-resolved.json`) holds early follow-ups resolved later, a housekeeping item, a process note, and two open items a PO should see. The opt-in eval requires the judge to catch a planted resolved item, and requires a fresh digest to list none and to keep both open items.
+- **Why:** the first real Sprint 1 digest listed about 10 of 14 risks that were already resolved or internal. A real team won't clean follow-ups by hand every sprint, so the digest has to.
+- **Not yet verified live:** the eval is opt-in and costs money.
