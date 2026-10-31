@@ -880,3 +880,13 @@ Option A. The requirement that stakeholders read reports without repo access, pl
     - A hit causes one retry that names the terms. If the second reply still uses them, it is kept, with a warning recorded on the digest (`warnings: ["jargon: schema"]`), not refused.
   - **Judge:** the eval judge reports unexplained jargon, and the golden fixture has a planted term ("payload") it must catch.
 - **Alternative:** refuse a digest that still has jargon after the retry. That's too strict: one unavoidable word would block a whole sprint update.
+
+## D69. One AI involvement level for every ticket is said once
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - When every ticket section (two or more) has the same AI involvement level, it is stated once, right after the overview, in fixed plain words for that level: "**AI involvement: heavy for every ticket.** AI wrote most of the changes."
+  - Each section then leaves the line out.
+  - Mixed levels keep a line per section, with the model's sentence.
+  - The wording follows the summariser's own definitions (light, moderate, heavy).
+- **Why:** in the Sprint 1 digest every section said "AI involvement: heavy", which told the reader nothing new seven times.
