@@ -108,6 +108,17 @@ describe('chunkTurns', () => {
     expect(chunks.join('\n')).toBe(turns.join('\n'));
   });
 
+  it('gives a turn that fills 40% or more of the budget a chunk of its own, so a later request cannot crowd it out (DECISIONS.md D64)', () => {
+    const small = (n: number) => `USER: request ${n}\nASSISTANT: ${'done '.repeat(40)}`;
+    const large = `USER: big request\n${'TOOL Edit src/file.ts\n'.repeat(60)}ASSISTANT: built it`;
+    expect(estimateTokens(large)).toBeGreaterThanOrEqual(400);
+    expect(estimateTokens(large)).toBeLessThan(1_000);
+    const chunks = chunkTurns([small(1), large, small(2), small(3)], 1_000);
+    expect(chunks).toEqual([small(1), large, `${small(2)}\n${small(3)}`]);
+    const justUnder = 'x'.repeat(Math.floor(0.39 * 1_000 * 2.5));
+    expect(chunkTurns([small(1), justUnder], 1_000)).toEqual([`${small(1)}\n${justUnder}`]);
+  });
+
   it('splits a single turn that is bigger than the budget', () => {
     const big = Array.from({ length: 200 }, (_, i) => `TOOL Edit src/file${i}.ts`).join('\n');
     const chunks = chunkTurns([big], 100);

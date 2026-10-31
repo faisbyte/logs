@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { ensureDigestDir } from '../digest-dir.js';
 import { isReviewed, readSummaryFile, saveSummary, summaryPath } from '../review/store.js';
 import type { RedactedSession } from '../redact/session.js';
-import { condenseSession } from './condense.js';
+import { CHUNKING_VERSION, condenseSession } from './condense.js';
 import type { LlmClient } from './llm.js';
 import { PROMPT_VERSION } from './prompt.js';
 import { SessionSummarySchema, type SessionSummary } from './schema.js';
@@ -20,7 +20,7 @@ export const cacheKey = (k: { sessionId: string; contentHash: string; promptVers
   sha256(JSON.stringify([k.sessionId, k.contentHash, k.promptVersion, k.model]));
 
 /** Hash of exactly what the model would be sent: the condensed, redacted session and how it is chunked. */
-export const contentHash = (redacted: RedactedSession, chunkTokens: number) => sha256(JSON.stringify([condenseSession(redacted), chunkTokens]));
+export const contentHash = (redacted: RedactedSession, chunkTokens: number) => sha256(JSON.stringify([condenseSession(redacted), chunkTokens, CHUNKING_VERSION]));
 
 const cacheFile = (repoRoot: string, key: string) => join(repoRoot, '.digest', 'cache', 'summaries', `${key}.json`);
 

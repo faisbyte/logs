@@ -27,6 +27,17 @@ describe('cacheKey', () => {
     expect(cacheKey(base)).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('puts the chunking rule into the content hash, so a new rule regenerates summaries (DECISIONS.md D64)', async () => {
+    const { createHash } = await import('node:crypto');
+    const { condenseSession } = await import('../../src/summarize/condense.js');
+    const { redactSession } = await import('../../src/redact/session.js');
+    const { parseClaudeCodeFile } = await import('../../src/parsers/claude-code.js');
+    const { claude } = await import('../fixtures.js');
+    const r = redactSession(parseClaudeCodeFile(claude.basic)!, { home: false });
+    const withoutRule = createHash('sha256').update(JSON.stringify([condenseSession(r), 15_000])).digest('hex');
+    expect(contentHash(r, 15_000)).not.toBe(withoutRule);
+  });
+
   it.each(['sessionId', 'contentHash', 'promptVersion', 'model'] as const)('changes when %s changes', (field) => {
     expect(cacheKey({ ...base, [field]: 'other' })).not.toBe(cacheKey(base));
   });

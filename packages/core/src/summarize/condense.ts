@@ -135,21 +135,32 @@ export interface Chunk {
  * Packs whole turns into chunks of at most `budgetTokens`, never across a work-period boundary;
  * a turn larger than the budget is split by line.
  */
+/** Bumped whenever the chunking rule changes, so cached summaries made with the old rule are regenerated. */
+export const CHUNKING_VERSION = 2;
+
+/** A turn this large a share of the budget is summarised on its own (DECISIONS.md D64). */
+const LARGE_TURN_SHARE = 0.4;
+
 export function chunkSession(turns: string[], budgetTokens: number, segmentStarts: number[] = [0]): Chunk[] {
   const maxChars = Math.floor(budgetTokens * 2.5);
   const periodOf = (turn: number) => segmentStarts.filter((start) => start <= turn).length;
   const pieces = turns.flatMap((turn, i) => {
     const lines = estimateTokens(turn) <= budgetTokens ? [turn] : turn.split('\n').flatMap((line) => (line.length <= maxChars ? [line] : (line.match(new RegExp(`[\\s\\S]{1,${maxChars}}`, 'g')) ?? [])));
-    return lines.map((text) => ({ text, period: Math.max(1, periodOf(i)) }));
+    const alone = estimateTokens(turn) >= budgetTokens * LARGE_TURN_SHARE;
+    return lines.map((text) => ({ text, period: Math.max(1, periodOf(i)), turn: i, alone }));
   });
 
-  const chunks: Chunk[] = [];
-  for (const { text, period } of pieces) {
+  const chunks: (Chunk & { turn: number; alone: boolean })[] = [];
+  for (const piece of pieces) {
     const last = chunks.at(-1);
-    if (last !== undefined && last.period === period && estimateTokens(`${last.text}\n${text}`) <= budgetTokens) last.text = `${last.text}\n${text}`;
-    else chunks.push({ text, period });
+    // A large turn shares its chunks with nothing else: in a mixed chunk the model favoured the later requests.
+    const shareable = last !== undefined && last.period === piece.period && (last.turn === piece.turn || (!last.alone && !piece.alone));
+    if (shareable && estimateTokens(`${last.text}\n${piece.text}`) <= budgetTokens) {
+      last.text = `${last.text}\n${piece.text}`;
+      last.turn = piece.turn;
+    } else chunks.push({ ...piece });
   }
-  return chunks;
+  return chunks.map(({ text, period }) => ({ text, period }));
 }
 
 export const chunkTurns = (turns: string[], budgetTokens: number, segmentStarts: number[] = [0]): string[] =>
