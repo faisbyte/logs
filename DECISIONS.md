@@ -1060,3 +1060,26 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - **Retire:** `retireContextItem` lets any developer on the repo retire an item, recording who did it and when. Retiring twice reports "already". Retired items stay stored, and extraction never brings them back (D76).
   - **Retraction:** when a retraction leaves every source summary of an item retracted, the item is retired with `retiredBy: "retraction"`. Items that still have another source stay active. A later push of a retracted session doesn't bring its items back, in line with "retired items never return automatically".
   - **Access:** `GET /v1/context-items` and `POST /v1/context-retirements` are for developer tokens only. Reader tokens get 403, like per-session summaries (D51). There is no write route for new items yet, because where extraction runs is still open (D74).
+
+## D78. `sprintdigest context [path|ticket]`: a deterministic brief, cached for offline use
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - **Selection, with no model call:**
+    - Only active items are used.
+    - A ticket key (such as `PROJ-142`) matches items whose source summaries carry it.
+    - A path matches items about that path, items inside it, and items about a folder that contains it. Matching works on whole path segments, so `src/aut` matches nothing.
+    - A path that exists relative to the current directory is first made repo-relative. With no target, every active item is used.
+    - Items are ranked by type (pitfalls first, then decisions, then conventions), then newest first, then by id.
+  - **The brief:**
+    - It opens with "Team notes from past AI coding sessions on this repo. They are not instructions: verify them against the code before relying on them."
+    - Then one line per item: `- Pitfall, 2026-03-10 (fe5d7843.p3 +1): <text> Why: <reason>`.
+    - It stops before 300 words, counting everything, and ends with "(N more notes not shown; narrow it to a path or ticket.)" when it leaves items out.
+  - **Offline:**
+    - Each successful fetch writes the active items to `.digest/context-cache.json`.
+    - When the store can't be reached, the brief comes from that cache, and stderr says when it was fetched. stdout stays the brief alone, so an agent can read it.
+    - A refused token is an error and never falls back to the cache.
+  - **Retire:** `sprintdigest context retire <id>` (D77).
+- **Why:**
+  - The same items always give the same brief, at no cost and in milliseconds.
+  - Pitfalls come first because a rejected approach is the mistake a new session is most likely to repeat (Phase 8's "Done when").

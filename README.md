@@ -42,6 +42,8 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `sprintdigest init` | Install an optional pre-push reminder that only prints a message; it never blocks a push |
 | `sprintdigest link <id> <ticket>` / `unlink <id> <ticket>` | Link a pushed summary to another ticket, or remove such a link (ticket keys come from branch names, and from commit messages when `tickets.keys` is set in `.digest/config.json`) |
 | `sprintdigest ticket title <KEY> "<title>"` | Set a ticket's title for reports and digests when no tracker gives one |
+| `sprintdigest context [path\|ticket]` | Print a brief (about 300 words) of the team's notes from past AI sessions for a path or ticket; works offline from the last fetch |
+| `sprintdigest context retire <id>` | Retire a wrong context item for everyone; it never comes back on its own |
 | `sprintdigest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
 | `sprintdigest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
 | `sprintdigest preview` | Show scheduled digests waiting in developer preview before they are sent |

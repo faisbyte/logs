@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { LlmClient, PushTarget } from '@digest/core';
 import { Command, CommanderError } from 'commander';
+import { contextCommand, contextRetireCommand } from './context.js';
 import { initCommand } from './init.js';
 import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
@@ -165,6 +166,20 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .option('--sprint <name>', 'one sprint by name instead of a date range')
     .option(...repoOption)
     .action((options: { from?: string; to?: string; sprint?: string; repo?: string }) => guarded('tickets', () => ticketsCommand(options, ctx)));
+
+  const context = program
+    .command('context')
+    .argument('[target]', 'a repo path or a ticket key, e.g. packages/core/src/summarize or PROJ-142 (default: the whole repo)')
+    .description("Print a short brief of the team's notes from past AI sessions for a path or ticket (no model call; works offline from the last fetch)")
+    .option(...repoOption)
+    .action((target: string | undefined, options: { repo?: string }) => guarded('context', () => contextCommand(target, options, ctx)));
+  context
+    .command('retire')
+    .argument('<id>', 'the context item id, e.g. ctx-3f9a1c2b')
+    .description('Retire a wrong context item for everyone; it never comes back on its own')
+    .option(...repoOption)
+    // The parent command takes --repo wherever it appears, so read it from there too.
+    .action((id: string, options: { repo?: string }) => guarded('context retire', () => contextRetireCommand(id, { repo: options.repo ?? context.opts<{ repo?: string }>().repo }, ctx)));
 
   program
     .command('retract')

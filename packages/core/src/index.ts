@@ -102,3 +102,4 @@ export { itemProblems, MAX_SENTENCE, type ContextItem, type ContextItemStatus, t
 export { contextInput, isContextInput, type ContextInput, type ContextSource } from './context/input.js';
 export { CONTEXT_PROMPT_VERSION, ContextError, contextMessage, contextSystemPrompt, estimateContextCost, extractContext, ExtractedItemSchema, type ContextChanges, type ExtractedItem, type Extraction } from './context/extract.js';
 export { allSourcesRetracted, byNewest, checkContextChanges, ContextBlockedError, type ContextStore, type RetireResult } from './context/store.js';
+export { BRIEF_HEADER, BRIEF_MAX_WORDS, contextBrief, selectItems, shortSource } from './context/brief.js';
