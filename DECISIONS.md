@@ -1099,3 +1099,18 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - **Offline test:** scripted replies pass the checker. A bad reply that misses the supersession and keeps a temporary item fails it.
   - **Live eval:** `extract.live.test.ts`, opt-in with `CONTEXT_EVAL=1` and `ANTHROPIC_API_KEY`, using Sonnet 5.5 at medium effort (`CONTEXT_EVAL_MODEL` overrides it). The report goes to `.digest/eval/`.
 - **Found while building it:** the credential rule (D76) refused "Password-reset emails go through a test mail account". A credential word now counts only next to a handling word: paste, commit, share, use, put, send, print or log, or "in the README", "in the config", "in chat" and similar. So "passwords are hashed before they are stored" is allowed, and "the deploy password is in the README" is still refused.
+
+## D80. Phase 8 "Done when": a scripted A/B test with a planted trap (designed, not run)
+
+- **Date:** 2026-10-31
+- **Status:** designed in `docs/context-experiment.md`. It waits for the owner's go.
+- **Decision:**
+  - **Fixture:** a generated `login-service` fixture with a planted trap. An in-process cache is the obvious place to count failed logins, but production runs three instances and redeploys often, and nothing in the code says so.
+  - **The teammate's record:** a second developer's approved summary records that approach as tried and dropped. Real extraction turns it into the brief once.
+  - **Runs:** `claude -p` runs on the same lockout task, with the brief and without, 10 per arm, after a pilot of 2 per arm.
+  - **Scoring:** hidden tests, not a model judge. A single-instance test checks the task was done, and a two-instance test with a shared store and a restart checks the trap was avoided.
+  - **Estimated cost:** about $6 typical, about $17 worst case.
+- **Why this shape:**
+  - The trap's reason can't be found in the code, so only the brief can carry it, which is exactly the "Done when".
+  - Hidden behavioural tests make "fell in" a fact, not an opinion.
+  - The pilot shows whether the trap is subtle enough before most of the money is spent.
