@@ -161,3 +161,44 @@ describe('estimateDigestCost', () => {
     expect(estimateDigestCost(i, 'unknown-model').costUsd).toBeNull();
   });
 });
+
+describe('tickets that share exactly the same work (DECISIONS.md D66)', () => {
+  async function shared() {
+    const store = new InMemorySummaryStore();
+    await store.saveTrackerTickets(REPO, [
+      { key: 'LOGS-4', title: 'Developer review', sprint: null },
+      { key: 'LOGS-5', title: 'Shared team store', sprint: null },
+    ]);
+    await store.push(alice, payloadFor({ sessionId: 'p1', ticketRefs: ['LOGS-3'], branch: 'main' }));
+    await store.push(alice, payloadFor({ sessionId: 'p2', ticketRefs: ['LOGS-3', 'LOGS-4', 'LOGS-5'], branch: 'main' }));
+    return digestInput(await ticketReport(store, REPO, { from: '2026-03-01T00:00:00.000Z', to: '2026-04-01T00:00:00.000Z' }));
+  }
+
+  it('become one group, in key order, while a ticket with a different set stays apart', async () => {
+    const input = await shared();
+    expect(input.tickets.map((t) => [t.key, t.keys, t.titles, t.work.length])).toEqual([
+      ['LOGS-3', ['LOGS-3'], [null], 2],
+      ['LOGS-4', ['LOGS-4', 'LOGS-5'], ['Developer review', 'Shared team store'], 1],
+    ]);
+  });
+
+  it('get one section with a combined heading, and the model is asked for one section per group', async () => {
+    const input = await shared();
+    const out: DigestOutput = {
+      overview: 'Review and the shared store were built.',
+      tickets: [
+        { key: 'LOGS-3', achieved: 'Summaries improved.', aiInvolvement: 'AI did most of it.', keyDecisions: [] },
+        { key: 'LOGS-4', achieved: 'Review and the shared store were built.', aiInvolvement: 'AI did most of it.', keyDecisions: [] },
+      ],
+      otherWork: null,
+      risksAndOpenQuestions: [],
+    };
+    const llm = llmWith(out);
+    const digest = await generateDigest(input, llm, { now });
+    expect(digest.markdown).toContain('## LOGS-4: Developer review · LOGS-5: Shared team store\n\nReview and the shared store were built.');
+    expect(digest.markdown.match(/Review and the shared store were built\./g)).toHaveLength(2); // overview and one section, not two
+    expect(llm.requests[0]!.messages[0]!.content).toContain('Ticket LOGS-4: Developer review, LOGS-5: Shared team store (AI involvement overall: heavy): W2');
+    expect(checkDigest({ ...out, tickets: [...out.tickets, { ...out.tickets[1]!, key: 'LOGS-5' }] }, input)).toContain('tickets: LOGS-5 shares a section with LOGS-4; write one section for the group');
+    expect(checkDigest({ ...out, tickets: [out.tickets[0]!, { ...out.tickets[1]!, key: 'LOGS-5' }] }, input)).toEqual([]);
+  });
+});

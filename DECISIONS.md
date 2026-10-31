@@ -846,3 +846,13 @@ Option A. The requirement that stakeholders read reports without repo access, pl
   - **Golden fixture:** a new one (`golden-resolved.json`) holds early follow-ups resolved later, a housekeeping item, a process note, and two open items a PO should see. The opt-in eval requires the judge to catch a planted resolved item, and requires a fresh digest to list none and to keep both open items.
 - **Why:** the first real Sprint 1 digest listed about 10 of 14 risks that were already resolved or internal. A real team won't clean follow-ups by hand every sprint, so the digest has to.
 - **Not yet verified live:** the eval is opt-in and costs money.
+
+## D66. Tickets that share exactly the same work get one section
+
+- **Date:** 2026-10-31
+- **Decision:**
+  - **Grouping:** `digestInput` groups tickets whose sets of summaries are identical. This is deterministic, in key order, and the first key leads.
+  - **The model:** it sees one line per group ("Ticket LOGS-4: Developer review, LOGS-5: Shared team store: W2") and writes one section for it. Any key of the group may name that section; a second section for the same group is refused and retried.
+  - **Rendering:** the heading combines the group ("## LOGS-4: Developer review · LOGS-5: Shared team store"), and the content isn't repeated.
+  - **Partial overlap:** a ticket whose work only overlaps a group's stays separate.
+- **Why:** per-period summaries tagged with several tickets repeated the same text and decisions two or three times (Sprint 1: three pairs). That's how the digest reached 128 lines.

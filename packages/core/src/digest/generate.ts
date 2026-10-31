@@ -63,17 +63,24 @@ const strings = (out: DigestOutput): [string, string][] => [
  * Faithfulness checks: exactly the input's tickets, no other ticket keys mentioned, no code, and other work
  * only when there was some. Keys are checked for the input's own project prefixes, so UTF-8 or SHA-256 pass.
  */
+/** Every key of the input, mapped to the first key of its group (D66). */
+const groupLeads = (input: DigestInput) => new Map(input.tickets.flatMap((t) => t.keys.map((k) => [k, t.key] as const)));
+
 export function checkDigest(out: DigestOutput, input: DigestInput): string[] {
-  const keys = new Set(input.tickets.map((t) => t.key));
+  const leadOf = groupLeads(input);
+  const keys = new Set(leadOf.keys());
   const projects = new Set([...keys].map((k) => k.split('-')[0]!));
   const errors: string[] = [];
-  const seen = new Set<string>();
+  // Group lead → the key the section used.
+  const seen = new Map<string, string>();
   for (const t of out.tickets) {
-    if (!keys.has(t.key)) errors.push(`tickets: ${t.key} is not in the input`);
-    else if (seen.has(t.key)) errors.push(`tickets: ${t.key} has more than one section`);
-    seen.add(t.key);
+    const lead = leadOf.get(t.key);
+    if (!lead) errors.push(`tickets: ${t.key} is not in the input`);
+    else if (seen.get(lead) === t.key) errors.push(`tickets: ${t.key} has more than one section`);
+    else if (seen.has(lead)) errors.push(`tickets: ${t.key} shares a section with ${seen.get(lead)}; write one section for the group`);
+    else seen.set(lead, t.key);
   }
-  for (const key of keys) if (!seen.has(key)) errors.push(`tickets: no section for ${key}`);
+  for (const t of input.tickets) if (!seen.has(t.key)) errors.push(`tickets: no section for ${t.key}`);
   for (const [path, text] of strings(out)) {
     if (/```|`[^`]+`/.test(text)) errors.push(`${path}: contains code formatting`);
     for (const [key, project] of text.matchAll(KEY)) if (projects.has(project!) && !keys.has(key)) errors.push(`${path}: mentions ${key}, which is not in the input`);
@@ -90,9 +97,10 @@ export function renderDigest(out: DigestOutput | null, input: DigestInput): stri
   const lines = [`# AI work update: ${input.period.label}`, ''];
   if (!out) return [...lines, 'No AI-assisted work was shared for this period.', '', coverageLine(input.coverage), ''].join('\n');
   lines.push(out.overview, '');
+  const leadOf = groupLeads(input);
   for (const t of input.tickets) {
-    const section = out.tickets.find((s) => s.key === t.key)!;
-    lines.push(`## ${t.key}${t.title ? `: ${t.title}` : ''}`, '', section.achieved, '', `**AI involvement: ${t.aiInvolvement}.** ${section.aiInvolvement}`, '');
+    const section = out.tickets.find((s) => leadOf.get(s.key) === t.key)!;
+    lines.push(`## ${t.keys.map((k, i) => `${k}${t.titles[i] ? `: ${t.titles[i]}` : ''}`).join(' · ')}`, '', section.achieved, '', `**AI involvement: ${t.aiInvolvement}.** ${section.aiInvolvement}`, '');
     if (section.keyDecisions.length) lines.push('**Key decisions:**', '', ...section.keyDecisions.map((d) => `- ${d}`), '');
   }
   if (out.otherWork) lines.push('## Other work', '', out.otherWork, '');
