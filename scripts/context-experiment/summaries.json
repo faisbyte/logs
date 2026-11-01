@@ -1,0 +1,81 @@
+{
+  "about": "Hand-written approved summaries for the context experiment's brief (DECISIONS.md D84). bob's paused lockout attempt holds the trap's reason; alice, chen and dana add unrelated but plausible items on other files under src/auth and on src as a whole.",
+  "repoId": "github.com/acme/login-service",
+  "trapPhrase": "cache",
+  "summaries": [
+    {
+      "developer": "chen",
+      "sessionId": "5e551017-0000-4000-8000-000000000017",
+      "startedAt": "2026-02-02T09:00:00.000Z",
+      "endedAt": "2026-02-02T12:00:00.000Z",
+      "branch": "feature/AUTH-17-password-hashing",
+      "ticketRefs": ["AUTH-17"],
+      "goal": "Hash passwords properly.",
+      "outcome": "completed",
+      "whatWasDone": "Replaced plain SHA-256 password hashes with scrypt and a random 16-byte salt per user, stored as salt:hash, and compared with a timing-safe check.",
+      "decisions": [
+        { "decision": "Passwords are hashed with scrypt and a random 16-byte salt per user.", "reason": "SHA-256 is too fast to slow down guessing if the user table leaks." }
+      ],
+      "rejectedApproaches": [
+        { "approach": "Using the native bcrypt module for hashing.", "reason": "It needs a compiler at install time and the build failed on the slim production image." }
+      ],
+      "risksOrFollowUps": [],
+      "filesTouched": ["src/auth/password.js", "test/password.test.js"]
+    },
+    {
+      "developer": "bob",
+      "sessionId": "b0b10021-0000-4000-8000-000000000021",
+      "startedAt": "2026-02-09T09:00:00.000Z",
+      "endedAt": "2026-02-09T11:30:00.000Z",
+      "branch": "feature/AUTH-21-lockout",
+      "ticketRefs": ["AUTH-21"],
+      "goal": "Lock accounts after repeated failed logins.",
+      "outcome": "abandoned",
+      "whatWasDone": "Started an account lockout in the login handler, then paused the ticket for the billing release before it was finished.",
+      "decisions": [],
+      "rejectedApproaches": [
+        { "approach": "Counting failed logins per account in the in-process cache in src/lib/cache.js.", "reason": "Production runs three instances behind the load balancer and redeploys several times a day, so each instance keeps its own count and every deploy resets it, which gives an attacker far more than 5 tries." }
+      ],
+      "risksOrFollowUps": ["Finish the lockout after the billing release."],
+      "filesTouched": ["src/auth/login.js", "src/lib/cache.js"]
+    },
+    {
+      "developer": "alice",
+      "sessionId": "a11ce015-0000-4000-8000-000000000015",
+      "startedAt": "2026-02-16T09:00:00.000Z",
+      "endedAt": "2026-02-16T13:00:00.000Z",
+      "branch": "feature/AUTH-15-sessions",
+      "ticketRefs": ["AUTH-15"],
+      "goal": "Give logged-in users a session.",
+      "outcome": "completed",
+      "whatWasDone": "Login now creates a session token of 32 random bytes, stored in the shared key-value store under session:<token> for 24 hours.",
+      "decisions": [
+        { "decision": "Session tokens are 32 random bytes kept in the key-value store for 24 hours.", "reason": "A server-side session can be ended at once on logout or when an account is compromised." }
+      ],
+      "rejectedApproaches": [
+        { "approach": "Signed JWT sessions with no server-side state.", "reason": "A JWT can't be revoked before it expires, so logging out or blocking a stolen session wouldn't work." }
+      ],
+      "risksOrFollowUps": ["Add a logout endpoint."],
+      "filesTouched": ["src/auth/session.js", "src/auth/login.js", "test/login.test.js"]
+    },
+    {
+      "developer": "dana",
+      "sessionId": "da7a0019-0000-4000-8000-000000000019",
+      "startedAt": "2026-02-23T09:00:00.000Z",
+      "endedAt": "2026-02-23T11:00:00.000Z",
+      "branch": "feature/AUTH-19-handler-results",
+      "ticketRefs": ["AUTH-19"],
+      "goal": "Make login errors consistent.",
+      "outcome": "completed",
+      "whatWasDone": "Every handler under src now returns an { ok, reason } object instead of throwing for expected failures. Emails are trimmed and lower-cased before lookup, and log lines no longer include email addresses.",
+      "decisions": [
+        { "decision": "Handlers return { ok, reason } objects for expected failures instead of throwing.", "reason": "Callers branch on the reason code, and thrown errors were turning into 500 responses." },
+        { "decision": "Email addresses are trimmed and lower-cased before a user lookup.", "reason": "Users typed their email with capitals or a trailing space and were told the account didn't exist." },
+        { "decision": "Log lines never include email addresses.", "reason": "The logs go to a third-party service that isn't covered by the privacy policy." }
+      ],
+      "rejectedApproaches": [],
+      "risksOrFollowUps": [],
+      "filesTouched": ["src/auth/login.js", "src/users/store.js", "src/users/profile.js", "src/app.js"]
+    }
+  ]
+}
