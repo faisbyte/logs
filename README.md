@@ -44,6 +44,7 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `sprintdigest ticket title <KEY> "<title>"` | Set a ticket's title for reports and digests when no tracker gives one |
 | `sprintdigest context [path\|ticket]` | Print a brief (about 300 words) of the team's notes from past AI sessions for a path or ticket; works offline from the last fetch |
 | `sprintdigest context retire <id>` | Retire a wrong context item for everyone; it never comes back on its own |
+| `sprintdigest context propose` | Propose the active notes as a marked `AGENTS.md` section in a pull request via `gh`, showing the diff first |
 | `sprintdigest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
 | `sprintdigest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
 | `sprintdigest preview` | Show scheduled digests waiting in developer preview before they are sent |

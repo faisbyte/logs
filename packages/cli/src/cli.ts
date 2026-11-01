@@ -1,9 +1,11 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { LlmClient, PushTarget } from '@digest/core';
 import { Command, CommanderError } from 'commander';
 import { contextCommand, contextRetireCommand } from './context.js';
 import { initCommand } from './init.js';
+import { contextProposeCommand } from './propose.js';
 import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
 import { previewCommand, reportCommand } from './report.js';
@@ -34,6 +36,8 @@ export interface CliIo {
   pushTarget?: PushTarget;
   /** The clock; tests pass a fixed one. */
   now?: () => Date;
+  /** Runs a program (git, gh) without a shell; tests pass a fake gh. */
+  run?: (command: string, args: string[], cwd: string) => { status: number | null; stdout: string; stderr: string };
 }
 
 type Optional = 'timeZone' | 'llm' | 'confirm' | 'ask' | 'editor' | 'pushTarget';
@@ -44,7 +48,11 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 };
 
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
-  const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), now: () => new Date(), ...io };
+  const run: NonNullable<CliIo['run']> = (command, args, cwd) => {
+    const r = spawnSync(command, args, { cwd, encoding: 'utf8' });
+    return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? (r.error ? r.error.message : '') };
+  };
+  const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), now: () => new Date(), run, ...io };
   let exitCode = 0;
   // Runs a command, turning an expected failure (bad state or config file) into a message and exit code 1.
   const guarded = async (name: string, command: () => number | Promise<number>) => {
@@ -180,6 +188,12 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .option(...repoOption)
     // The parent command takes --repo wherever it appears, so read it from there too.
     .action((id: string, options: { repo?: string }) => guarded('context retire', () => contextRetireCommand(id, { repo: options.repo ?? context.opts<{ repo?: string }>().repo }, ctx)));
+  context
+    .command('propose')
+    .description('Propose the active notes as a marked AGENTS.md section in a pull request (via gh): shows the diff first, never touches text outside the markers or the default branch')
+    .option('--yes', 'commit, push the proposal branch and open the pull request without asking (the diff is still shown)')
+    .option(...repoOption)
+    .action((options: { repo?: string; yes?: boolean }) => guarded('context propose', () => contextProposeCommand({ ...options, repo: options.repo ?? context.opts<{ repo?: string }>().repo }, ctx)));
 
   program
     .command('retract')
