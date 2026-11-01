@@ -13,7 +13,7 @@ afterAll(() => db.close());
 
 const fresh = async () => {
   await ready;
-  await db.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items');
+  await db.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items, context_runs');
   return new PostgresSummaryStore(db);
 };
 summaryStoreContract('PostgresSummaryStore (PGlite)', fresh);
@@ -26,6 +26,6 @@ describe('migrations', () => {
     await ready;
     await migrate(db);
     const { rows } = await db.query<{ version: number }>('select version from schema_migrations order by version');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   });
 });

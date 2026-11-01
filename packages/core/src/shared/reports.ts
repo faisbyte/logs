@@ -33,7 +33,11 @@ const NO_KEY = 'The digest server has no ANTHROPIC_API_KEY, so it can only serve
 
 /** null when the call fits under the cap; otherwise why not. */
 export async function capRefusal(deps: DigestDeps, repoId: string, input: DigestInput, what: string): Promise<string | null> {
-  const estimate = estimateDigestCost(input, deps.model).costUsd;
+  return costCapRefusal(deps, repoId, estimateDigestCost(input, deps.model).costUsd, what);
+}
+
+/** The same cap for any model call with a cost estimate, such as context distillation (D82). */
+export async function costCapRefusal(deps: Omit<DigestDeps, 'llm' | 'jargon'>, repoId: string, estimate: number | null, what: string): Promise<string | null> {
   if (estimate === 0) return null;
   if (estimate === null) return `There is no known price for ${deps.model}, so the monthly cost cap can't be applied; set DIGEST_MODEL to a priced model.`;
   const now = (deps.now ?? (() => new Date()))();

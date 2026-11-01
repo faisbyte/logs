@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { payloadFor } from '../../core/test/shared/store-contract.js';
 import { digestDepsFromEnv, openStore, serverCli, startServer } from '../src/cli.js';
 
 async function cli(argv: string[], env: Record<string, string | undefined> = {}, fetchImpl?: typeof fetch) {
@@ -151,5 +152,17 @@ describe('startServer', () => {
     expect((await fetch(`${server.url}/healthz`)).status).toBe(200);
     await server.close();
     await close();
+  });
+});
+
+describe('sprintdigest-server context distill (DECISIONS.md D82)', () => {
+  it('reports each repo, and exits 1 when summaries were left unread, so cron can alert', async () => {
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
+    expect(await cli(['context', 'distill', '--data', data])).toMatchObject({ exitCode: 0, stdout: 'No shared summaries to distill.\n' });
+    const { store, close } = await openStore({ dataDir: data });
+    await store.push({ repoId: 'github.com/acme/webapp', developerId: 'alice', developerName: 'Alice' }, payloadFor());
+    await close();
+    expect(await cli(['context', 'distill', '--data', data])).toMatchObject({ exitCode: 1, stdout: 'github.com/acme/webapp  not run: the server has no ANTHROPIC_API_KEY\n' });
+    expect((await cli(['context', '--data', data])).stderr).toContain('usage: sprintdigest-server');
   });
 });

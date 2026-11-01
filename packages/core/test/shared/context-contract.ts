@@ -76,6 +76,30 @@ export function contextStoreContract(name: string, make: () => Promise<SharedSto
       expect(await store.retireContextItem({ ...alice, repoId: 'github.com/other/repo' }, 'ctx-0000000a')).toEqual({ status: 'not-found' });
     });
 
+    it('records a distillation run with its changes, at once, and remembers which summaries it read (DECISIONS.md D82)', async () => {
+      const run = { repoId: REPO, at: '2026-03-20T12:00:00.000Z', model: 'claude-sonnet-5-5', promptVersion: 'context-v1', summaries: [{ key: 'claude-code/b2', payloadHash: 'h2' }], added: 1, merged: 0, superseded: 0, dropped: ['items.1: is about pinning a version; left out'], retryReasons: ['items.0: text: contains a URL'], costUsd: 0.0123 };
+      await store.applyContextChanges(REPO, { ...none, added: [contextItem()] }, run);
+      expect(await store.contextRuns(REPO)).toEqual([run]);
+      expect(await store.distilledSummaries(REPO)).toEqual([{ key: 'claude-code/b2', payloadHash: 'h2' }]);
+      const later = { ...run, at: '2026-03-21T12:00:00.000Z', summaries: [{ key: 'claude-code/a1', payloadHash: 'h1' }], added: 0, dropped: [], retryReasons: [], costUsd: null };
+      await store.applyContextChanges(REPO, none, later);
+      expect((await store.contextRuns(REPO)).map((r) => r.at)).toEqual([later.at, run.at]);
+      expect(await store.distilledSummaries(REPO)).toEqual([{ key: 'claude-code/a1', payloadHash: 'h1' }, { key: 'claude-code/b2', payloadHash: 'h2' }]);
+      // A refused change records no run either.
+      await expect(store.applyContextChanges(REPO, { ...none, added: [contextItem({ id: 'ctx-0000000d', reason: `Token ${fakeGithub}.` })] }, { ...run, at: '2026-03-22T00:00:00.000Z' })).rejects.toThrow(ContextBlockedError);
+      expect(await store.contextRuns(REPO)).toHaveLength(2);
+      expect(await store.contextRuns('github.com/other/repo')).toEqual([]);
+    });
+
+    it('lists the repos that have pushed summaries still shared', async () => {
+      expect(await store.contextRepos()).toEqual([]);
+      await store.push(alice, payloadFor({ sessionId: 'a1' }));
+      await store.push({ ...alice, repoId: 'github.com/acme/api' }, payloadFor({ sessionId: 'x1' }));
+      expect(await store.contextRepos()).toEqual(['github.com/acme/api', REPO]);
+      await store.retract(alice, { agent: 'claude-code', sessionId: 'a1' });
+      expect(await store.contextRepos()).toEqual(['github.com/acme/api']);
+    });
+
     it('retires items whose every source summary was retracted, and keeps items that still have one', async () => {
       await store.push(alice, payloadFor({ sessionId: 'a1' }));
       await store.push(bob, payloadFor({ sessionId: 'b2' }));

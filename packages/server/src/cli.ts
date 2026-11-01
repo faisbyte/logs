@@ -7,6 +7,7 @@ import pg from 'pg';
 import { createHandler, type HandlerOptions } from './http.js';
 import { openPGlite } from './pglite.js';
 import { migrate, PostgresSummaryStore } from './postgres-store.js';
+import { distill, distillNeedsAttention } from './distill.js';
 import { needsAttention, sendDue } from './schedule.js';
 
 // sprintdigest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
@@ -27,6 +28,7 @@ const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
                           [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default] [--data <dir>]
        sprintdigest-server digest send-due [--data <dir>]
+       sprintdigest-server context distill [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
 export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
@@ -217,10 +219,30 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   } catch (err) {
     return fail(`${(err as Error).message}\n${USAGE}`);
   }
-  if (!['serve', 'token', 'sprint', 'repo', 'digest'].includes(command ?? '')) return fail(USAGE);
-  if (command === 'digest' ? positionals.join(' ') !== 'send-due' : positionals.length) return fail(USAGE);
+  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context'].includes(command ?? '')) return fail(USAGE);
+  const sub = { digest: 'send-due', context: 'distill' }[command as string];
+  if (sub ? positionals.join(' ') !== sub : positionals.length) return fail(USAGE);
   const storage = { databaseUrl: io.env.DATABASE_URL, dataDir: values.data };
   if (!storage.databaseUrl && !storage.dataDir) return fail('set DATABASE_URL or pass --data <dir> for a local database.');
+
+  if (command === 'context') {
+    let deps: ReturnType<typeof digestDepsFromEnv>;
+    try {
+      deps = digestDepsFromEnv(io.env);
+    } catch (err) {
+      return fail((err as Error).message);
+    }
+    const { store, close } = await openStore(storage);
+    try {
+      const results = await distill({ ...deps, store });
+      for (const r of results) io.stdout(`${r.repoId}  ${r.result}\n`);
+      if (!results.length) io.stdout('No shared summaries to distill.\n');
+      // Summaries left unread (no key, the cap, a failed call), so cron can alert (D82).
+      return results.some((r) => distillNeedsAttention(r.result)) ? 1 : 0;
+    } finally {
+      await close();
+    }
+  }
 
   if (command === 'digest') {
     let deps: ReturnType<typeof digestDepsFromEnv>;

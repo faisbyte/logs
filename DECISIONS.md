@@ -940,7 +940,7 @@ Option A. The requirement that stakeholders read reports without repo access, pl
 ## D74. Where and when context distillation runs (open)
 
 - **Date:** 2026-10-31
-- **Status:** open, waiting for the owner. The parts that don't depend on it are built first (D76).
+- **Status:** Accepted 2026-11-01: Option B, a server batch command run by cron (built as D82).
 - **The point:** context items must come from every developer's approved summaries, not only the ones on the machine that runs the extraction.
 
 ### Option A: on the server, incrementally, on each push
@@ -1122,3 +1122,14 @@ Option A first: no repo-write credentials on the server, and a person starts eve
 - **Decision:**
   - An item is about a version pin when its text has a pin word (pin, pinned, held at, kept at, locked at or to, frozen at, stays on) and a version number (`4.6`, `10.x`, `version 4`, `v2`). Such items are dropped after the checks and noted as "is about pinning a version; left out". They aren't retried, because a rewrite wouldn't make a pin durable. A version number without a pin word (for example "with the 3.2 release") is kept.
   - `Extraction.retryReasons` holds the first reply's problems whenever the checks sent it back. Like the other problem lists, it names fields, never values. `retried` is now derived from it. A distillation run stores it (D82).
+
+## D82. `sprintdigest-server context distill`: a cron batch over undistilled summaries
+
+- **Date:** 2026-11-01
+- **Decision:** this is the build of D74 option B.
+  - **What it reads:** for every repo with shared summaries (`contextRepos`), the approved summaries that no run has read yet. "Read" is tracked by summary key and payload hash, so a retracted and re-pushed summary with new content is read again.
+  - **How:** oldest first, in batches of 4 per call. Each call sees the items the earlier calls in the same run stored.
+  - **Model and cost:** the same model, key and monthly cost cap as digests (`DIGEST_MODEL`, `ANTHROPIC_API_KEY`, `costCapRefusal`, shared with D53), with spend recorded per call.
+  - **Run record:** each call stores a run (migration 11 `context_runs`) with its summaries, the counts it added, merged and superseded, what it dropped, its `retryReasons` (D81) and its cost. The run is stored in the same transaction as the item changes, so an item change and the record of having read its summaries can't come apart.
+  - **Output:** one line per repo, for example "distilled 3 summaries in 1 call: 5 added, 1 merged, 1 superseded, 0 dropped, $0.0123; retried once: items.0: text: contains a URL". It reports "nothing new" on a repeat run.
+  - **Cron:** "not run" (no key, or the cap) and "failed" exit 1 so cron can alert. A failed call's spend is recorded, and its summaries stay unread for the next run.
