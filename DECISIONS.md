@@ -1178,3 +1178,22 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - **Hidden tests:** they exist only in the harness code until the agent has exited.
   - **Pilot gate:** 2 runs per arm. The no-brief arm must fall into the trap at least once, or the experiment stops for a redesign.
   - **Fixture:** plain JavaScript with `node --test`, so a run needs no package install.
+
+## D85. Context experiment pilot: the gate failed, because the trap is too easy (redesign open)
+
+- **Date:** 2026-11-01
+- **Result:** 4 runs, all `claude-sonnet-5-5` on Claude Code 2.1.314, $0.26 in total. Results are in `.digest/experiment/pilot.json`.
+
+  | Run | Arm | Task done | Trap | Cost | Turns |
+  |---|---|---|---|---|---|
+  | 1 | A, brief | yes | avoided | $0.070 | 8 |
+  | 2 | B, none | yes | avoided | $0.060 | 8 |
+  | 3 | A, brief | yes | avoided | $0.076 | 9 |
+  | 4 | B, none | yes | avoided | $0.057 | 8 |
+
+- **Gate:** the no-brief arm fell in 0 of 2 times, so the experiment stops (D84).
+- **Why:** `createLogin` already receives `kv` and uses it for sessions. The shared store is therefore also the easiest place for the counter, and both no-brief runs put `lockout:<userId>` in `kv` without considering `cache.js`. The trap tested convenience, and the convenient choice was the correct one.
+- **Redesign options (open):**
+  - **A: move the convenience.** `createLogin` gets a `sessions` object instead of `kv`, as many real handlers do, so using the shared store means threading a new dependency through `createApp` and the tests. `cache.increment(key, ttlMs)` stays a one-line import already used in `src/users/profile.js`. The non-obvious reason stays out of the code. This is the smallest change, and it tests the realistic case where the correct choice costs more work.
+  - **B: a different trap.** Pick a mistake the code invites by itself. One example: a rate limit on password-reset emails, where `kv` isn't available to the mailer at all and the teammate's note says why a per-process limiter fails. This is a cleaner test of knowledge only the brief has, but it's a new fixture, and its scoring would need redoing.
+- **Next:** the owner picks A or B, then a new pilot (about $0.30) runs with the same gate before the full run.
