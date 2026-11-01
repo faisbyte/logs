@@ -56,6 +56,8 @@ describe('contextBrief', () => {
     const shown = brief.split('\n').filter((l) => l.startsWith('- ')).length;
     expect(brief.trimEnd().split('\n').at(-1)).toBe(`(${40 - shown} more notes not shown; narrow it to a path or ticket.)`);
     expect(contextBrief(many, undefined, { maxWords: 1000 })).not.toContain('more notes not shown');
+    const two = contextBrief(many.slice(0, 2), undefined, { maxWords: 55 });
+    expect(two.trimEnd().split('\n').at(-1)).toBe('(1 more note not shown; narrow it to a path or ticket.)');
   });
 
   it('shortens source references', () => {

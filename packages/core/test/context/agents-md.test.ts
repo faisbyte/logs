@@ -33,6 +33,7 @@ describe('agentsSection', () => {
     expect(Buffer.byteLength(section)).toBeLessThanOrEqual(16_384);
     const shown = section.split('\n').filter((l) => l.startsWith('- ')).length;
     expect(section).toContain(`(${300 - shown} more notes are in sprintdigest context.)\n${AGENTS_END}`);
+    expect(agentsSection(many.slice(0, shown + 1))).toContain(`(1 more note is in sprintdigest context.)\n${AGENTS_END}`);
   });
 });
 
