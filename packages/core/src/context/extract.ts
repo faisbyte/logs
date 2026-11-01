@@ -43,6 +43,8 @@ export interface Extraction {
   dropped: string[];
   /** Whether the checks sent the reply back once. */
   retried: boolean;
+  /** What sent it back: the first reply's problems, never its text (empty without a retry). */
+  retryReasons: string[];
   usage: Usage;
   promptVersion: string;
   model: string;
@@ -112,6 +114,10 @@ function totalUsage(model: string, usages: LlmUsage[]): Usage {
 }
 
 const ID = /^ctx-[0-9a-f]{8}$/;
+// A version pin is temporary by nature (it waits for a fix or an upgrade), so it is dropped in code, not only by the prompt.
+const PIN = /\b(pin(s|ned|ning)?|held at|kept at|locked (at|to)|frozen at|stays? on)\b/i;
+const VERSION = /\b\d+\.(\d+|x)\b|\bversion \d+|\bv\d+\b/i;
+const isVersionPin = (item: ExtractedItem) => PIN.test(item.text) && VERSION.test(item.text);
 const LABEL = /^S\d+$/;
 const covers = (path: string, file: string) => {
   const dir = path.replace(/\/+$/, '');
@@ -215,11 +221,20 @@ function plan(items: { item: ExtractedItem; index: number }[], input: ContextInp
 
 /** Proposes context items from an input's summaries; nothing is stored here. */
 export async function extractContext(input: ContextInput, llm: LlmClient, { now = () => new Date() }: { now?: () => Date } = {}): Promise<Extraction> {
-  const result = (changes: ContextChanges, dropped: string[], usages: LlmUsage[], retried: boolean): Extraction => ({ changes, dropped, retried, usage: totalUsage(llm.model, usages), promptVersion: CONTEXT_PROMPT_VERSION, model: llm.model });
-  if (!input.sources.length) return result({ added: [], merged: [], superseded: [] }, [], [], false);
+  const result = (changes: ContextChanges, dropped: string[], usages: LlmUsage[], retryReasons: string[]): Extraction => ({
+    changes,
+    dropped,
+    retried: retryReasons.length > 0,
+    retryReasons,
+    usage: totalUsage(llm.model, usages),
+    promptVersion: CONTEXT_PROMPT_VERSION,
+    model: llm.model,
+  });
+  if (!input.sources.length) return result({ added: [], merged: [], superseded: [] }, [], [], []);
 
   let messages: LlmMessage[] = [{ role: 'user', content: contextMessage(input) }];
   const usages: LlmUsage[] = [];
+  let retryReasons: string[] = [];
   for (let attempt = 1; ; attempt++) {
     const response = await llm.complete({ source: input, system: contextSystemPrompt(), messages, schema: ExtractionSchema, maxTokens: MAX_TOKENS });
     usages.push(response.usage);
@@ -229,6 +244,7 @@ export async function extractContext(input: ContextInput, llm: LlmClient, { now 
     const checked = 'items' in parsed ? parsed.items.map((item, index) => ({ item, index, problems: problemsOf(item, index, input) })) : [];
     const problems = 'errors' in parsed ? [parsed.errors] : checked.flatMap((c) => c.problems);
     if (problems.length && attempt === 1) {
+      retryReasons = problems;
       messages = [
         ...messages,
         { role: 'assistant', content: response.text || '(empty reply)' },
@@ -237,7 +253,9 @@ export async function extractContext(input: ContextInput, llm: LlmClient, { now 
       continue;
     }
     if ('errors' in parsed) throw fail(`Context extraction failed its checks twice: ${parsed.errors}`);
-    const { changes, notes } = plan(checked.filter((c) => !c.problems.length), input, now().toISOString());
-    return result(changes, [...problems, ...notes], usages, attempt === 2);
+    const safe = checked.filter((c) => !c.problems.length);
+    const pins = safe.filter((c) => isVersionPin(c.item)).map((c) => `items.${c.index}: is about pinning a version; left out`);
+    const { changes, notes } = plan(safe.filter((c) => !isVersionPin(c.item)), input, now().toISOString());
+    return result(changes, [...problems, ...pins, ...notes], usages, retryReasons);
   }
 }
