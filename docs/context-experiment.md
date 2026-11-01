@@ -47,10 +47,10 @@ Everything else is the same: the model, the fixture, the tools, the limits.
   - Auth is `ANTHROPIC_API_KEY` from the repo's `.env`, so the runs are billed to that API key.
   - The flags are `--strict-mcp-config` and `--setting-sources project`, and the fixture has no project settings.
 - **The command:** `claude -p "<prompt>" --model claude-sonnet-5-5 --output-format stream-json --verbose --max-turns 30 --max-budget-usd 1 --permission-mode dontAsk`, with only `Read, Edit, Write, Glob, Grep` and `Bash` for `npm test` and `node --test` allowed. There is no web access.
-- **The binary:** the Claude Code that ships with the VS Code extension (2.1.304). Its version is recorded.
+- **The binary:** the Claude Code that ships with the VS Code extension. The version it reports (2.1.314 at the isolation check) is recorded with the results.
 - **Model:** pinned to `claude-sonnet-5-5`. The model each run actually used comes from its result event and is recorded.
 - **Isolation check, before the pilot:** one short run with the same setup has to prove all of this:
-  - its init event lists no MCP servers, plugins or user skills;
+  - its init event lists no MCP servers, no plugins but Claude Code's built-in ones, and none of the owner's own skills;
   - it used `ANTHROPIC_API_KEY` and the pinned model;
   - the owner's `~/.claude/projects` and `~/.claude.json` are unchanged;
   - its session landed in the run's own config directory;

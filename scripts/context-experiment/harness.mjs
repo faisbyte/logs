@@ -267,6 +267,11 @@ function runClaude(dir, prompt, maxTurns) {
   return { status: r.status, init: events.find((e) => e.type === 'system' && e.subtype === 'init'), result: events.find((e) => e.type === 'result'), home };
 }
 
+/** The owner's personal skills, by name: none may show up in an isolated run. */
+const ownSkills = () => {
+  const dir = join(homedir(), '.claude/skills');
+  return existsSync(dir) ? readdirSync(dir) : [];
+};
 /** Directory names and modification times under a path, for a before-and-after comparison. */
 const snapshot = (path) => (existsSync(path) ? readdirSync(path).map((n) => `${n}@${statSync(join(path, n)).mtimeMs}`).sort().join('\n') : '(missing)');
 const mtime = (path) => (existsSync(path) ? statSync(path).mtimeMs : null);
@@ -294,8 +299,9 @@ function check() {
     'used ANTHROPIC_API_KEY': init.apiKeySource === 'ANTHROPIC_API_KEY',
     [`model is ${MODEL}`]: init.model === MODEL && Object.keys(run.result?.modelUsage ?? {}).every((m) => m.startsWith(MODEL)),
     'no MCP servers': (listed('mcp_servers') ?? []).length === 0,
-    'no plugins': (listed('plugins') ?? []).length === 0,
-    'no user skills': (listed('skills') ?? []).every((s) => !String(typeof s === 'string' ? s : s?.path ?? '').includes(homedir())),
+    // Claude Code's own built-in plugins and bundled skills load everywhere; none may come from the owner's config.
+    'no plugins but the built-in ones': (listed('plugins') ?? []).every((p) => p.path === 'builtin'),
+    "none of the owner's own skills": !(listed('skills') ?? []).some((s) => ownSkills().includes(typeof s === 'string' ? s : s?.name)),
     'owner ~/.claude/projects unchanged': before.projects === after.projects,
     'owner ~/.claude.json unchanged': before.claudeJson === after.claudeJson,
     "session written to the run's own config": existsSync(own) && readdirSync(own).length > 0,
