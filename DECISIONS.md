@@ -1163,3 +1163,18 @@ Option A first: no repo-write credentials on the server, and a person starts eve
     - the default branch is unchanged;
     - nothing is left behind after a no;
     - the branch name moves on when one is taken.
+
+## D84. Context experiment: isolation, a realistic brief, the brief pasted before the task, and a pilot gate
+
+- **Date:** 2026-11-01
+- **Decision:** these are the owner's changes to D80, written into `docs/context-experiment.md`.
+  - **Isolation:**
+    - Each `claude -p` run gets its own empty `HOME` and `CLAUDE_CONFIG_DIR`. There's no global `CLAUDE.md`, no user skills, plugins, MCP servers, settings or memory, and no sessions in the owner's `~/.claude/projects`.
+    - Auth comes from `ANTHROPIC_API_KEY`. The flags are `--strict-mcp-config` and `--setting-sources project`.
+    - One short check run must prove this before the pilot: its init event, unchanged owner files, a session in the run's own config directory, and no instruction files above the run directory.
+  - **A realistic brief:** the "with" arm gets the real output of `sprintdigest context src/auth`. It comes from a four-developer summary set, where bob's rejected approach sits among 6 to 8 unrelated items, two of them other pitfalls, after real extraction.
+  - **Delivery: pasted before the task.** The "Done when" is about the context command's output. `AGENTS.md` would test a different, unfiltered artifact, and only if the agent reads instruction files, so it's left for its own run.
+  - **The model is pinned** to `claude-sonnet-5-5`, and the model each run actually used is recorded from its result event.
+  - **Hidden tests:** they exist only in the harness code until the agent has exited.
+  - **Pilot gate:** 2 runs per arm. The no-brief arm must fall into the trap at least once, or the experiment stops for a redesign.
+  - **Fixture:** plain JavaScript with `node --test`, so a run needs no package install.
