@@ -973,7 +973,7 @@ Option B. It matches how `send-due` already runs, batches calls, and has no fail
 ## D75. How AGENTS.md / CLAUDE.md edits become a pull request (open)
 
 - **Date:** 2026-10-31
-- **Status:** open, waiting for the owner. Nothing in the PR flow is built yet.
+- **Status:** Accepted 2026-11-01: Option A, local `sprintdigest context propose` through `gh` (built as D83).
 
 ### Which file each agent reads (checked against the current docs, 2026-10-31)
 
@@ -1133,3 +1133,33 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - **Run record:** each call stores a run (migration 11 `context_runs`) with its summaries, the counts it added, merged and superseded, what it dropped, its `retryReasons` (D81) and its cost. The run is stored in the same transaction as the item changes, so an item change and the record of having read its summaries can't come apart.
   - **Output:** one line per repo, for example "distilled 3 summaries in 1 call: 5 added, 1 merged, 1 superseded, 0 dropped, $0.0123; retried once: items.0: text: contains a URL". It reports "nothing new" on a repeat run.
   - **Cron:** "not run" (no key, or the cap) and "failed" exit 1 so cron can alert. A failed call's spend is recorded, and its summaries stay unread for the next run.
+
+## D83. `sprintdigest context propose`: a marked AGENTS.md section, diff first, a PR through gh
+
+- **Date:** 2026-11-01
+- **Decision:** this is the build of D75 option A.
+  - **Before anything is created:**
+    - it checks `gh auth status`;
+    - it finds the default branch from `origin/HEAD` and fetches it;
+    - it reads `AGENTS.md` and `CLAUDE.md` from `origin/<default>` and works out both new texts.
+    - Broken markers, a missing `gh` login, or no change ("AGENTS.md already has these notes") stop it before any branch or worktree exists.
+  - **What it writes:**
+    - Only the text between `<!-- sprintdigest:context:start -->` and `<!-- sprintdigest:context:end -->`. Everything outside is kept byte for byte, trailing whitespace included.
+    - Without markers, the section goes at the end, after a blank line.
+    - Missing, repeated or out-of-order markers are refused, to be fixed by hand.
+    - The section frames the notes as unverified notes, not instructions, and lists active items pitfalls first, each with its id and paths. It is capped at 16 KiB, half of Codex's 32 KiB default for all instruction files.
+  - **CLAUDE.md:** if one exists and doesn't already import `AGENTS.md` (an import inside a code span doesn't count), `@AGENTS.md` is added at its end. With no `CLAUDE.md`, nothing is created, because current Claude Code reads `AGENTS.md` itself (D75).
+  - **Where:**
+    - A new branch `sprintdigest/context-<date>` (with `-2`, `-3` and so on if the name is taken), in a temporary worktree under `.digest/worktrees/`.
+    - The developer's checkout and current branch are never touched, and the worktree is always removed. A declined or failed proposal deletes its branch too.
+  - **Order:**
+    1. The staged diff is always printed first.
+    2. Then it asks "Commit this on … and open a pull request against main? [y/N]". `--yes` skips the question but not the diff.
+    3. It commits, with hooks running as usual.
+    4. It pushes with an explicit refspec to the proposal branch only, after checking the branch isn't the default branch and has the proposal prefix.
+    5. It runs `gh pr create --base <default> --head <branch>`.
+  - **Testing:** commands run through `CliIo.run`, without a shell. Tests use real git against a local bare origin and a fake `gh`. They check:
+    - the text outside the markers is unchanged;
+    - the default branch is unchanged;
+    - nothing is left behind after a no;
+    - the branch name moves on when one is taken.
