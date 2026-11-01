@@ -35,7 +35,7 @@ const line = (i: ContextItem) => `- ${LABEL[i.type]}, ${i.date} (${shortSource(i
 export function contextBrief(items: readonly ContextItem[], target: string | undefined, { maxWords = BRIEF_MAX_WORDS }: { maxWords?: number } = {}): string {
   const selected = selectItems(items, target);
   if (!selected.length) return `${BRIEF_HEADER}\n\n${target === undefined ? 'No active notes yet.' : `No active notes match ${target}.`}\n`;
-  const footer = (n: number) => `(${n} more notes not shown; narrow it to a path or ticket.)`;
+  const footer = (n: number) => `(${n} more ${n === 1 ? 'note' : 'notes'} not shown; narrow it to a path or ticket.)`;
   const lines: string[] = [];
   let used = words(BRIEF_HEADER);
   for (const [n, item] of selected.entries()) {

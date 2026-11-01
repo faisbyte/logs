@@ -24,7 +24,7 @@ const bytes = (lines: string[]) => Buffer.byteLength(lines.join('\n'));
 /** The whole section, markers included: active items, pitfalls first, cut to fit AGENTS_MAX_BYTES. */
 export function agentsSection(items: readonly ContextItem[]): string {
   const selected = selectItems(items, undefined);
-  const footer = (n: number) => `(${n} more notes are in sprintdigest context.)`;
+  const footer = (n: number) => `(${n} more ${n === 1 ? 'note is' : 'notes are'} in sprintdigest context.)`;
   const lines = [...HEAD];
   for (const [n, item] of selected.entries()) {
     const left = selected.length - n - 1;
