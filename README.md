@@ -57,6 +57,7 @@ node packages/server/dist/main.js sprint --data ./server-data --repo github.com/
 node packages/server/dist/main.js token --data ./server-data --repo github.com/org/repo --reader pat --name "Pat (PO)"   # read-only: digests and reports
 node packages/server/dist/main.js repo --data ./server-data --repo github.com/org/repo --schedule sprint-end --email po@example.com --slack-env SLACK_WEBHOOK_URL
 node packages/server/dist/main.js digest send-due --data ./server-data   # run from cron; sends what is due, once
+node packages/server/dist/main.js context distill --data ./server-data   # run from cron; turns new approved summaries into context items, under the cost cap
 node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE_URL for Postgres; PORT defaults to 8787
 ```
 

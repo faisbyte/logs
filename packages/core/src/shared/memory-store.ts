@@ -21,7 +21,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import type { ContextChanges } from '../context/extract.js';
 import type { ContextItem, ContextItemStatus } from '../context/item.js';
-import { allSourcesRetracted, byNewest, checkContextChanges, type RetireResult } from '../context/store.js';
+import { allSourcesRetracted, byNewest, checkContextChanges, runSummaries, type ContextRun, type RetireResult } from '../context/store.js';
 import { checkNewDigest, defaultRepoSettings, sameReport, type DigestPatch, type DigestStore, type DigestKind, type DigestStatus, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './digests.js';
 
 /** A shared store kept in memory: for tests, and the reference implementation of the contracts. */
@@ -39,6 +39,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   readonly #settings = new Map<string, RepoSettings>();
   readonly #titles = new Map<string, Map<string, TicketTitle>>();
   readonly #context: ContextItem[] = [];
+  readonly #runs: ContextRun[] = [];
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -155,8 +156,9 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
     return structuredClone(this.#context.filter((i) => i.repoId === repoId && (!statuses || statuses.includes(i.status))).sort(byNewest));
   }
 
-  async applyContextChanges(repoId: string, changes: ContextChanges): Promise<void> {
+  async applyContextChanges(repoId: string, changes: ContextChanges, run?: ContextRun): Promise<void> {
     checkContextChanges(repoId, changes);
+    if (run) this.#runs.push(structuredClone(run));
     const find = (id: string) => this.#context.find((i) => i.repoId === repoId && i.id === id);
     for (const item of changes.added) if (!find(item.id)) this.#context.push(structuredClone(item));
     for (const { id, ...fields } of changes.merged) {
@@ -167,6 +169,18 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
       const item = find(id);
       if (item?.status === 'active') Object.assign(item, { status: 'superseded', supersededBy: by });
     }
+  }
+
+  async contextRuns(repoId: string): Promise<ContextRun[]> {
+    return structuredClone(this.#runs.filter((r) => r.repoId === repoId).sort((a, b) => b.at.localeCompare(a.at)));
+  }
+
+  async distilledSummaries(repoId: string): Promise<{ key: string; payloadHash: string }[]> {
+    return runSummaries(this.#runs.filter((r) => r.repoId === repoId));
+  }
+
+  async contextRepos(): Promise<string[]> {
+    return [...new Set([...this.#summaries.values()].filter((s) => s.retractedAt === null).map((s) => s.repoId))].sort();
   }
 
   async retireContextItem(identity: PushIdentity, id: string): Promise<RetireResult> {

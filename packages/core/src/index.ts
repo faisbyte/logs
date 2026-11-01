@@ -95,11 +95,11 @@ export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type 
 export { assertDeliverable, checkDigest, DEFAULT_JARGON, jargonIn, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';
 export { checkNewDigest, defaultRepoSettings, sameReport, warningText, type DigestKind, type DigestPatch, type DigestStatus, type DigestStore, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './shared/digests.js';
-export { capRefusal, monthStart, onDemandReport, periodKey, storedFields, writeDigest, type DigestDeps, type ReportResult } from './shared/reports.js';
+export { capRefusal, costCapRefusal, monthStart, onDemandReport, periodKey, storedFields, writeDigest, type DigestDeps, type ReportResult } from './shared/reports.js';
 export { judgeDigest, judgeSystemPrompt, JudgeSchema, type JudgeVerdict } from './digest/judge.js';
 export { periodId, shortSessionId, splitByPeriod } from './periods.js';
 export { itemProblems, MAX_SENTENCE, type ContextItem, type ContextItemStatus, type ContextItemType } from './context/item.js';
 export { contextInput, isContextInput, type ContextInput, type ContextSource } from './context/input.js';
 export { CONTEXT_PROMPT_VERSION, ContextError, contextMessage, contextSystemPrompt, estimateContextCost, extractContext, ExtractedItemSchema, type ContextChanges, type ExtractedItem, type Extraction } from './context/extract.js';
-export { allSourcesRetracted, byNewest, checkContextChanges, ContextBlockedError, type ContextStore, type RetireResult } from './context/store.js';
+export { allSourcesRetracted, byNewest, checkContextChanges, ContextBlockedError, runSummaries, type ContextRun, type ContextStore, type RetireResult } from './context/store.js';
 export { BRIEF_HEADER, BRIEF_MAX_WORDS, contextBrief, selectItems, shortSource } from './context/brief.js';

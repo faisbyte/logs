@@ -3,6 +3,7 @@ import {
   byFrom,
   byNewest,
   checkContextChanges,
+  runSummaries,
   checkNewDigest,
   decideLink,
   defaultRepoSettings,
@@ -17,6 +18,7 @@ import {
   teamReportFrom,
   UploadPayloadSchema,
   type ContextChanges,
+  type ContextRun,
   type ContextItem,
   type ContextItemStatus,
   type RetireResult,
@@ -209,6 +211,24 @@ const MIGRATIONS: string[][] = [
       created_at timestamptz not null,
       primary key (repo_id, id)
     )`,
+  ],
+  [
+    // Distillation runs (DECISIONS.md D82): what each read, changed, retried on and cost.
+    `create table context_runs (
+      seq bigserial primary key,
+      repo_id text not null,
+      at timestamptz not null,
+      model text not null,
+      prompt_version text not null,
+      summaries jsonb not null,
+      added integer not null,
+      merged integer not null,
+      superseded integer not null,
+      dropped jsonb not null,
+      retry_reasons jsonb not null,
+      cost_usd numeric
+    )`,
+    'create index context_runs_repo on context_runs (repo_id, at)',
   ],
 ];
 
@@ -550,11 +570,18 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     return rows.map(toContextItem).sort(byNewest);
   }
 
-  async applyContextChanges(repoId: string, changes: ContextChanges): Promise<void> {
+  async applyContextChanges(repoId: string, changes: ContextChanges, run?: ContextRun): Promise<void> {
     checkContextChanges(repoId, changes);
-    // One extraction's changes land together or not at all.
+    // One extraction's changes, and its run record, land together or not at all.
     await this.#sql.query('begin');
     try {
+      if (run) {
+        await this.#sql.query(
+          `insert into context_runs (repo_id, at, model, prompt_version, summaries, added, merged, superseded, dropped, retry_reasons, cost_usd)
+           values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10::jsonb, $11)`,
+          [repoId, run.at, run.model, run.promptVersion, JSON.stringify(run.summaries), run.added, run.merged, run.superseded, JSON.stringify(run.dropped), JSON.stringify(run.retryReasons), run.costUsd],
+        );
+      }
       for (const i of changes.added) {
         await this.#sql.query(
           `insert into context_items (repo_id, id, type, text, reason, paths, tickets, sources, date, status, superseded_by, retired_by, retired_at, created_at)
@@ -580,6 +607,35 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
       await this.#sql.query('rollback');
       throw err;
     }
+  }
+
+  async contextRuns(repoId: string): Promise<ContextRun[]> {
+    const { rows } = await this.#sql.query<{
+      repo_id: string; at: Date | string; model: string; prompt_version: string; summaries: ContextRun['summaries'] | string; added: number; merged: number; superseded: number;
+      dropped: string[] | string; retry_reasons: string[] | string; cost_usd: number | string | null;
+    }>('select * from context_runs where repo_id = $1 order by at desc, seq desc', [repoId]);
+    return rows.map((r) => ({
+      repoId: r.repo_id,
+      at: iso(r.at),
+      model: r.model,
+      promptVersion: r.prompt_version,
+      summaries: json(r.summaries),
+      added: r.added,
+      merged: r.merged,
+      superseded: r.superseded,
+      dropped: json(r.dropped),
+      retryReasons: json(r.retry_reasons),
+      costUsd: r.cost_usd === null ? null : Number(r.cost_usd),
+    }));
+  }
+
+  async distilledSummaries(repoId: string): Promise<{ key: string; payloadHash: string }[]> {
+    return runSummaries(await this.contextRuns(repoId));
+  }
+
+  async contextRepos(): Promise<string[]> {
+    const { rows } = await this.#sql.query<{ repo_id: string }>('select distinct repo_id from summaries where retracted_at is null order by repo_id');
+    return rows.map((r) => r.repo_id);
   }
 
   async retireContextItem(identity: PushIdentity, id: string): Promise<RetireResult> {
