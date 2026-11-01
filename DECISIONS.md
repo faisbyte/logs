@@ -1114,3 +1114,11 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - The trap's reason can't be found in the code, so only the brief can carry it, which is exactly the "Done when".
   - Hidden behavioural tests make "fell in" a fact, not an opinion.
   - The pilot shows whether the trap is subtle enough before most of the money is spent.
+
+## D81. Version pins are dropped in code; an extraction records what triggered its retry
+
+- **Date:** 2026-11-01
+- **Found in the dogfood run (D80):** two version pins came through as decisions ("pnpm 10.x instead of pnpm 12", "PGlite pinned at 0.5.10") despite the prompt's "skip version pins" rule. The run also retried once, and nothing recorded why.
+- **Decision:**
+  - An item is about a version pin when its text has a pin word (pin, pinned, held at, kept at, locked at or to, frozen at, stays on) and a version number (`4.6`, `10.x`, `version 4`, `v2`). Such items are dropped after the checks and noted as "is about pinning a version; left out". They aren't retried, because a rewrite wouldn't make a pin durable. A version number without a pin word (for example "with the 3.2 release") is kept.
+  - `Extraction.retryReasons` holds the first reply's problems whenever the checks sent it back. Like the other problem lists, it names fields, never values. `retried` is now derived from it. A distillation run stores it (D82).

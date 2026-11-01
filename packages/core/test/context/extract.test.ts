@@ -130,6 +130,23 @@ describe('extractContext', () => {
     });
   });
 
+  it('leaves out items about pinning a version, whatever the prompt said, and records what triggered a retry', async () => {
+    const pins = [
+      extracted({ type: 'decision', text: 'The monorepo pins pnpm 10.x via corepack instead of pnpm 12.', reason: 'Corepack in Node 22 cannot run pnpm 12.', paths: ['src/auth/login.ts'] }),
+      extracted({ type: 'decision', text: 'PGlite is pinned at 0.5.10 rather than the newest release.', reason: 'The newest release was one day old.', paths: ['src/auth/login.ts'] }),
+      extracted({ type: 'convention', text: 'The Redis client is held at version 4.6 until its TLS bug is fixed.', reason: 'Version 4.7 drops connections.', paths: ['src/auth/login.ts'] }),
+      extracted(),
+    ];
+    const clean = await extractContext(contextInput(summaries), llmWith(pins), { now });
+    expect(clean.changes.added.map((i) => i.text)).toEqual(['Counting failed logins in memory was tried and dropped.']);
+    expect(clean.dropped).toEqual(['items.0: is about pinning a version; left out', 'items.1: is about pinning a version; left out', 'items.2: is about pinning a version; left out']);
+    expect(clean).toMatchObject({ retried: false, retryReasons: [] });
+    await expect(extractContext(contextInput(summaries), llmWith([extracted({ text: 'Lockout counts are kept per account, with the 3.2 release.', reason: 'Offices share addresses.' })]), { now })).resolves.toMatchObject({ dropped: [] });
+
+    const retried = await extractContext(contextInput(summaries), llmWith([extracted({ sources: ['S9'] })], [extracted()]), { now });
+    expect(retried).toMatchObject({ retried: true, retryReasons: ['items.0: sources: S9 is not one of the summaries'] });
+  });
+
   describe('deduplicating and superseding', () => {
     it('adds a near-duplicate of an active item to that item, instead of a new one', async () => {
       const existing = existingItem({ type: 'pitfall', text: 'Counting failed logins in memory was tried and then dropped.', sources: ['claude-code/a1'], date: '2026-03-03', paths: ['src/auth/login.ts'] });
