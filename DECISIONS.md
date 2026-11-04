@@ -1272,3 +1272,17 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - "Inside the queried folder" misses it. So does "same folder as the queried file", for a folder query.
   - The price is wider briefs: a folder query now also brings its sibling folders' notes. Closeness ranking and the 300-word cap keep the nearest notes first, while pitfalls still lead, because a rejected approach is what a new session most needs to see.
 - **Check:** a live stability test extracts the round-2 summaries 3 times through the real distillation, and requires the trap item in its target's brief every time (D89).
+
+## D89. Brief stability through the real pipeline: the trap note reached its brief 3 times out of 3
+
+- **Date:** 2026-11-04
+- **Test:** `harness.mjs stability`. Three times, from scratch: the six teammates' approved summaries, with bob's restored to its original `filesTouched` (`src/invoices/store.js`, `src/lib/csv.js`), went through the server's `distill` run (2 calls, Sonnet 5.5) and then the real `sprintdigest context src/invoices` and `context src/payments`. Results are in `.digest/experiment/round2/stability.json`.
+
+  | Round | Distilled | Ledgerly pitfall's paths | In the `src/invoices` brief | AcmePay pitfall in the `src/payments` brief |
+  |---|---|---|---|---|
+  | 1 | 14 items, $0.025 | `src/lib/csv.js` only | yes (8 notes) | yes (9 notes) |
+  | 2 | 14 items, $0.026 | `src/invoices/store.js`, `src/lib/csv.js` | yes (6 notes) | yes (7 notes) |
+  | 3 | 14 items, $0.025 | `src/lib/csv.js`, `src/invoices/store.js` | yes (7 notes) | yes (8 notes) |
+
+- **Reading:** round 1 reproduced the failure that needed the pilot edit, with the pitfall filed only under the helper in `src/lib/`. The nearest-parent rule (D88) still brought it into the `src/invoices` brief. Extraction's path choice still varies, but retrieval no longer depends on it. The total was $0.075.
+- **Next:** the owner approved the stability test only. The 40-run experiment (about $2.64 typical, $4.24 high, a $40 ceiling) waits for a go, and so does the Phase 8 "Done when" verdict.
