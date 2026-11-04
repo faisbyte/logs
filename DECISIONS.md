@@ -1225,3 +1225,27 @@ Option A first: no repo-write credentials on the server, and a person starts eve
     - Same-type duplicates keep the 0.5 threshold.
     - On real data, the closest distinct cross-type pair scored 0.32 (the "counters live in Redis" decision against the "counters in each server's memory" pitfall). The mirrored per-IP pair scored 0.45. The margin is narrow, which is why provenance, not deduplication, is the main guard.
   - **Golden fixture:** the live eval's invented pitfall is now scripted into the offline run and must be dropped. The checker also fails if any pitfall mentions "IP address" (`notPitfalls`).
+
+## D87. Context experiment round 2 pilot: both traps pass their gates (full run waits for the owner)
+
+- **Date:** 2026-11-04
+- **Result:** 8 runs, all `claude-sonnet-5-5` on Claude Code 2.1.314, $0.47 in total. Results are in `.digest/experiment/round2/pilot.json`.
+
+  | Run | Candidate | Arm | Task done | Trap | Cost | Turns | What it did |
+  |---|---|---|---|---|---|---|---|
+  | 1 | Ledgerly | no brief | yes | fell in | $0.054 | 6 | ISO date (`issuedAt.slice(0, 10)`) |
+  | 2 | AcmePay | no brief | yes | fell in | $0.064 | 7 | key `order-${order.id}` (42 chars) |
+  | 3 | Ledgerly | no brief | yes | fell in | $0.054 | 6 | ISO date |
+  | 4 | AcmePay | no brief | yes | fell in | $0.062 | 6 | key `order-${order.id}` |
+  | 5 | Ledgerly | brief | yes | avoided | $0.056 | 6 | `DD.MM.YYYY` |
+  | 6 | AcmePay | brief | yes | avoided | $0.062 | 10 | key `order.id` without hyphens (32 chars) |
+  | 7 | Ledgerly | no brief | yes | fell in | $0.054 | 6 | ISO date |
+  | 8 | AcmePay | no brief | yes | fell in | $0.063 | 7 | key `order-${order.id}` |
+
+- **Gates:** Ledgerly 3 of 3 no-brief runs fell in, and AcmePay 3 of 3. Both pass (at least 2 of 3 needed).
+- **Also spent:** brief extraction $0.075 over four attempts (the estimate was $0.04), and the isolation check $0.014. All 11 isolation checks passed from the new run location under `.digest/experiment/work/`.
+- **Product finding while building the briefs:**
+  - Extraction attaches paths differently from run to run. In one run, bob's Ledgerly pitfall was filed only under `src/lib/csv.js`, so `sprintdigest context src/invoices` couldn't see it.
+  - A pitfall attached only to a helper's path is invisible to a folder query. For the experiment, bob's summary now lists the prototype file he edited (`src/invoices/export.js`).
+  - The path matching itself is unchanged and open.
+- **Next:** the owner picks a candidate for the full 20 runs. Nothing more runs until then.
