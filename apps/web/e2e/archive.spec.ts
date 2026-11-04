@@ -58,8 +58,10 @@ test.describe('a reader', () => {
     await page.getByLabel('Sprint').selectOption('Sprint 7');
     await page.getByRole('button', { name: 'Check the cost' }).click();
     await expect(page.getByText(/spent since \d{4}-\d{2}-01/)).toBeVisible();
-    // The e2e server has no API key and no summaries: an empty period it can write without a model.
-    await expect(page.getByText('No shared summaries in this period')).toBeVisible();
+    // The e2e server has no API key, so it says it can't write this report, and offers no button to try.
+    await expect(page.getByText('2 summaries from 2 developers')).toBeVisible();
+    await expect(page.getByText('The server has no API key, so it can only show reports it has already written.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Write the report' })).toHaveCount(0);
   });
 
   test('signing out ends the session on the server, so the old cookie stops working', async ({ page, request }) => {
@@ -203,5 +205,54 @@ test.describe('theme default by role', () => {
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   });
+});
+
+test.describe('developer views', () => {
+  test('a developer gets Tickets and Context in the nav', async ({ page }) => {
+    await signIn(page, seed().developer);
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Tickets', 'Context', 'Digests', 'Reports']);
+  });
+
+  test('the ticket timeline shows approved summaries oldest first, with decisions and dropped approaches marked', async ({ page }) => {
+    await signIn(page, seed().developer);
+    await page.goto('/tickets');
+    await page.getByRole('link', { name: 'PROJ-201' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Account lockout' })).toBeVisible();
+    const entries = page.getByRole('list', { name: 'Summaries, oldest first' }).getByRole('listitem', { name: /,/ });
+    await expect(entries).toHaveCount(2);
+    await expect(entries.first()).toHaveAttribute('aria-label', '2026-04-07, Alice');
+    await expect(page.locator('[data-marker="decision"]').first()).toBeVisible();
+    await expect(page.locator('[data-marker="attention"]').first()).toBeVisible();
+  });
+
+  test('the context view shows the brief for a path in a terminal, and items by status', async ({ page }) => {
+    await signIn(page, seed().developer);
+    await page.goto('/context');
+    await page.getByLabel('Path or ticket').fill('src/auth');
+    await page.getByRole('button', { name: 'Show the brief' }).click();
+    const panel = page.getByRole('region', { name: 'sprintdigest context src/auth' });
+    await expect(panel).toContainText('Counting failed logins in process memory was tried and dropped.');
+    await expect(page.getByRole('link', { name: /Active/ })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('table').getByRole('row')).toHaveCount(4);
+    await page.getByRole('link', { name: /Superseded/ }).click();
+    await expect(page.getByText('Superseded by ctx-e2e00002')).toBeVisible();
+    await page.getByRole('link', { name: /Retired/ }).click();
+    await expect(page.getByText('Retired by alice')).toBeVisible();
+  });
+
+  for (const theme of ['dark', 'light'] as const) {
+    test(`pass axe (WCAG 2.1 AA) in the ${theme} theme and don't scroll sideways at 360px`, async ({ page }) => {
+      await page.addInitScript((t) => localStorage.setItem('logs-theme', t), theme);
+      await signIn(page, seed().developer);
+      for (const path of ['/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth', '/context?status=superseded']) {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.goto(path);
+        const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+        expect(result.violations.map((v) => `${path}: ${v.id} (${v.nodes.length})`)).toEqual([]);
+        await page.setViewportSize({ width: 360, height: 780 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+      }
+    });
+  }
 });
 

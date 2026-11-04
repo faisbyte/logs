@@ -20,6 +20,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@digest/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       lucide-react:
         specifier: 1.67.0
         version: 1.67.0(@types/react@19.3.0)(react@19.3.1)
@@ -39,9 +42,6 @@ importers:
       '@axe-core/playwright':
         specifier: 4.14.0
         version: 4.14.0(playwright-core@1.64.1)
-      '@digest/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@digest/server':
         specifier: workspace:*
         version: link:../../packages/server
