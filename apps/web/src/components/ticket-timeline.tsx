@@ -24,7 +24,9 @@ function Entry({ s: stored }: { s: StoredSummary }) {
       <div className="text-fg-subtle flex flex-wrap items-center gap-x-3 gap-y-1.5 font-mono text-xs">
         <span>{when}</span>
         <span className="text-fg-muted font-sans text-sm">{stored.developerName}</span>
-        <StatusPill tone="safe">Approved</StatusPill>
+        {/* Every entry is approved; only how it was approved can differ. Nobody read an auto-approved one before it was shared. */}
+        {s.editedByDeveloper ? <StatusPill tone="neutral">Edited by developer</StatusPill> : null}
+        {s.approvedBy === 'auto' ? <StatusPill tone="attention">Auto-approved</StatusPill> : null}
         <StatusPill tone="neutral">{OUTCOME[s.outcome]}</StatusPill>
         <span>AI involvement: {s.aiInvolvement}</span>
       </div>
@@ -80,7 +82,7 @@ function Entry({ s: stored }: { s: StoredSummary }) {
   );
 }
 
-/** Every approved summary for a ticket, oldest first, on a hairline rail. */
+/** Every approved summary for a ticket, oldest first, on a hairline rail, marked only where its approval differs. */
 export function TicketTimeline({ summaries }: { summaries: StoredSummary[] }) {
   const sorted = [...summaries].sort((a, b) => a.summary.startedAt.localeCompare(b.summary.startedAt));
   return (
