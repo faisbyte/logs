@@ -9,9 +9,19 @@ describe('TicketTimeline', () => {
     render(<TicketTimeline summaries={[later, summary()]} />);
     const entries = within(screen.getByRole('list', { name: 'Summaries, oldest first' })).getAllByRole('listitem', { name: /./ });
     expect(entries.map((e) => e.getAttribute('aria-label'))).toEqual(['2026-04-07, Alice', '2026-04-12, Bob']);
-    expect(within(entries[0]!).getByText('Approved')).toHaveAttribute('data-tone', 'safe');
+    // Every entry is approved, so that goes without saying.
+    expect(within(entries[0]!).queryByText(/approved/i)).toBeNull();
     expect(within(entries[0]!).getByText('AI involvement: heavy')).toBeInTheDocument();
     expect(within(entries[0]!).getByRole('heading', { level: 3, name: 'Lock accounts after repeated failed logins.' })).toBeInTheDocument();
+  });
+
+  it('shows only the approval states that differ: edited by the developer (neutral), and auto-approved (needs a look)', () => {
+    render(<TicketTimeline summaries={[summary({ editedByDeveloper: true }), summary({ sessionId: 's3', approvedBy: 'auto', startedAt: '2026-04-09T09:00:00.000Z' })]} />);
+    const [edited, auto] = within(screen.getByRole('list', { name: 'Summaries, oldest first' })).getAllByRole('listitem', { name: /./ });
+    expect(within(edited!).getByText('Edited by developer')).toHaveAttribute('data-tone', 'neutral');
+    expect(within(edited!).queryByText('Auto-approved')).toBeNull();
+    expect(within(auto!).getByText('Auto-approved')).toHaveAttribute('data-tone', 'attention');
+    expect(within(auto!).queryByText('Edited by developer')).toBeNull();
   });
 
   it('marks decisions in blue and rejected approaches in amber, with follow-ups unmarked', () => {
