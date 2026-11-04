@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { DigestDocument } from '~/components/digest-document';
+import { JargonCallout, PreviewBanner } from '~/components/digest-preview';
 import { PrintButton } from '~/components/print-button';
 import { StatusPill, toneForDigest } from '~/components/status-pill';
 import { api, ApiError, viewer } from '~/lib/api';
@@ -32,6 +33,13 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
         <p role="note" className="callout-attention no-print mt-4 rounded-md border px-4 py-3 text-sm">
           A developer {TERMS.withdrawnSummary} this digest included, so it was withdrawn. Readers no longer see it.
         </p>
+      ) : null}
+      {/* For developers only: readers never get a preview, and the jargon check is the writers' concern. */}
+      {me.role === 'developer' ? (
+        <div className="mt-4 space-y-3 empty:hidden">
+          {digest.status === 'preview' ? <PreviewBanner previewUntil={digest.previewUntil} /> : null}
+          <JargonCallout warnings={digest.warnings ?? []} />
+        </div>
       ) : null}
       <div className="mt-4">
         <DigestDocument

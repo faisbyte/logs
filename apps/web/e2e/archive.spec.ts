@@ -28,7 +28,7 @@ test.describe('a reader', () => {
     await expect(page.getByRole('cell', { name: /Week of 2026-04-20/ })).toHaveCount(0);
     await expect(page.getByText('Withdrawn', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Corrected', { exact: true })).toHaveCount(1);
-    for (const path of ['/overview', '/tickets', '/context', '/previews']) {
+    for (const path of ['/overview', '/tickets', '/context', `/digests/${seed().ids.preview}`]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1, name: 'Nothing here' })).toBeVisible();
     }
@@ -238,6 +238,19 @@ test.describe('developer views', () => {
     await expect(page).toHaveURL(/\/tickets\/PROJ-201$/);
   });
 
+  test('a digest in preview says readers do not see it yet, and lists the terms the jargon check flagged', async ({ page }) => {
+    await signIn(page, seed().developer);
+    const notice = page.getByRole('region', { name: 'In preview' });
+    await expect(notice.getByText('2 flagged terms')).toBeVisible();
+    await notice.getByRole('link', { name: 'Week of 2026-04-20' }).click();
+    await expect(page.getByText('In preview: readers don’t see this yet. It sends after 2026-04-28 06:00 UTC.')).toBeVisible();
+    const callout = page.getByRole('note', { name: '2 terms a stakeholder may not know' });
+    await expect(callout.getByRole('listitem')).toHaveText(['API', 'webhook']);
+    // Not on a digest without flagged terms.
+    await page.goto(`/digests/${seed().ids.corrected}`);
+    await expect(page.getByRole('note', { name: /may not know/ })).toHaveCount(0);
+  });
+
   test('the ticket timeline shows approved summaries oldest first, with decisions and dropped approaches marked', async ({ page }) => {
     await signIn(page, seed().developer);
     await page.goto('/tickets');
@@ -284,7 +297,7 @@ test.describe('developer views', () => {
     test(`pass axe (WCAG 2.1 AA) in the ${theme} theme and don't scroll sideways at 360px`, async ({ page }) => {
       await page.addInitScript((t) => localStorage.setItem('logs-theme', t), theme);
       await signIn(page, seed().developer);
-      for (const path of ['/overview', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth', '/context?status=superseded']) {
+      for (const path of ['/overview', `/digests/${seed().ids.preview}`, '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth', '/context?status=superseded']) {
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.goto(path);
         const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
@@ -323,7 +336,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.goto('/sign-in');
     await check('/sign-in');
     await signIn(page, seed().developer);
-    for (const path of ['/overview', '/digests', `/digests/${seed().ids.corrected}`, '/reports?sprint=Sprint+7', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth']) {
+    for (const path of ['/overview', '/digests', `/digests/${seed().ids.corrected}`, `/digests/${seed().ids.preview}`, '/reports?sprint=Sprint+7', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth']) {
       await page.goto(path);
       await check(path);
     }
