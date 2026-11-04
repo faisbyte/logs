@@ -19,7 +19,7 @@ describe('TicketTimeline', () => {
     expect(screen.getByText('Decisions').closest('[data-marker]')).toHaveAttribute('data-marker', 'decision');
     expect(screen.getByText('Tried and dropped').closest('[data-marker]')).toHaveAttribute('data-marker', 'attention');
     expect(screen.getByText('Follow-ups').closest('[data-marker]')).toBeNull();
-    expect(screen.getByText('Count failures per account.')).toBeInTheDocument();
+    expect(screen.getByText('Count failures per account.').closest('li')).toHaveTextContent('Count failures per account. Why: Offices share one address.');
     expect(screen.getByText('Counting in process memory.')).toBeInTheDocument();
     expect(screen.getByText('Tell support about the lockout.')).toBeInTheDocument();
   });

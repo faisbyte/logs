@@ -3,6 +3,22 @@ import { StatusPill, toneForItem } from '~/components/status-pill';
 
 const TYPE = { pitfall: 'Pitfall', decision: 'Decision', convention: 'Convention' } as const;
 
+/** A path that may wrap after each slash, never inside a file or folder name. */
+const Path = ({ path }: { path: string }) => (
+  <span className="block">
+    {path.split('/').map((part, i, all) => (
+      <span key={i}>
+        {part}
+        {i < all.length - 1 ? (
+          <>
+            /<wbr />
+          </>
+        ) : null}
+      </span>
+    ))}
+  </span>
+);
+
 function status(i: ContextItem) {
   if (i.status === 'superseded') return `Superseded by ${i.supersededBy}`;
   if (i.status === 'retired') return `Retired by ${i.retiredBy === 'retraction' ? 'a retraction' : i.retiredBy}`;
@@ -38,11 +54,9 @@ export function ContextTable({ items, empty = 'No items yet.' }: { items: Contex
               <p className="text-fg-muted mt-0.5 text-pretty">{i.reason}</p>
               <p className="text-fg-subtle mt-1 font-mono text-[11px]">{i.id}</p>
             </td>
-            <td data-label="Paths" className="text-fg-muted font-mono text-xs break-all">
+            <td data-label="Paths" className="text-fg-muted font-mono text-xs">
               {i.paths.slice(0, 3).map((p) => (
-                <span key={p} className="block">
-                  {p}
-                </span>
+                <Path key={p} path={p} />
               ))}
               {i.paths.length > 3 ? <span className="text-fg-subtle block">+{i.paths.length - 3} more</span> : null}
             </td>
@@ -54,7 +68,7 @@ export function ContextTable({ items, empty = 'No items yet.' }: { items: Contex
               ))}
             </td>
             <td data-label="Date" className="text-fg-muted font-mono text-xs">
-              {i.date}
+              <span className="whitespace-nowrap">{i.date}</span>
             </td>
             <td data-label="Status" className="text-fg-muted text-xs">
               {status(i)}

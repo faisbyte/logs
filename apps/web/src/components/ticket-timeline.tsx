@@ -36,7 +36,7 @@ function Entry({ s: stored }: { s: StoredSummary }) {
           <ul className="marker:text-fg-subtle mt-1 list-disc space-y-1 pl-5 text-sm">
             {s.decisions.map((d, i) => (
               <li key={i}>
-                {d.decision} <span className="text-fg-muted">{d.reason}</span>
+                {d.decision} <span className="text-fg-subtle font-mono text-xs">Why:</span> <span className="text-fg-muted">{d.reason}</span>
               </li>
             ))}
           </ul>
@@ -48,7 +48,7 @@ function Entry({ s: stored }: { s: StoredSummary }) {
           <ul className="marker:text-fg-subtle mt-1 list-disc space-y-1 pl-5 text-sm">
             {s.rejectedApproaches.map((r, i) => (
               <li key={i}>
-                {r.approach} <span className="text-fg-muted">{r.reason}</span>
+                {r.approach} <span className="text-fg-subtle font-mono text-xs">Why:</span> <span className="text-fg-muted">{r.reason}</span>
               </li>
             ))}
           </ul>
