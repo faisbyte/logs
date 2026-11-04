@@ -3,6 +3,7 @@ import { summaryStoreContract } from '../../core/test/shared/store-contract.js';
 import { digestStoreContract } from '../../core/test/shared/digest-contract.js';
 import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
 import { contextStoreContract } from '../../core/test/shared/context-contract.js';
+import { sessionContract } from '../../core/test/shared/session-contract.js';
 import { openPGlite } from '../src/pglite.js';
 import { migrate, PostgresSummaryStore } from '../src/postgres-store.js';
 
@@ -13,19 +14,20 @@ afterAll(() => db.close());
 
 const fresh = async () => {
   await ready;
-  await db.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items, context_runs');
+  await db.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items, context_runs, sessions');
   return new PostgresSummaryStore(db);
 };
 summaryStoreContract('PostgresSummaryStore (PGlite)', fresh);
 ticketStoreContract('PostgresSummaryStore (PGlite)', fresh);
 digestStoreContract('PostgresSummaryStore (PGlite)', fresh);
 contextStoreContract('PostgresSummaryStore (PGlite)', fresh);
+sessionContract('PostgresSummaryStore (PGlite)', async (now) => (await fresh(), new PostgresSummaryStore(db, { now })));
 
 describe('migrations', () => {
   it('can run again without changing anything', async () => {
     await ready;
     await migrate(db);
     const { rows } = await db.query<{ version: number }>('select version from schema_migrations order by version');
-    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   });
 });

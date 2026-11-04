@@ -14,7 +14,9 @@ import {
   decideTitle,
   decideUnlink,
   hashToken,
+  newSession,
   newToken,
+  SESSION_HOURS,
   teamReportFrom,
   UploadPayloadSchema,
   type ContextChanges,
@@ -233,6 +235,15 @@ const MIGRATIONS: string[][] = [
   [
     // Items dropped because nothing in their sources backs them (DECISIONS.md D86).
     'alter table context_runs add column untraced integer not null default 0',
+  ],
+  [
+    // Dashboard sessions (DECISIONS.md D91): hashed ids tied to the token they came from, so re-issuing it ends them.
+    `create table sessions (
+      session_hash text primary key,
+      token_hash text not null,
+      expires_at timestamptz not null,
+      created_at timestamptz not null
+    )`,
   ],
 ];
 
@@ -489,6 +500,33 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     );
     const r = rows[0];
     return r ? { repoId: r.repo_id, developerId: r.developer_id, developerName: r.developer_name, role: r.role } : null;
+  }
+
+  async startSession(token: string): Promise<{ session: string; expiresAt: string; identity: Identity } | null> {
+    const identity = await this.authenticate(token);
+    if (!identity) return null;
+    const session = newSession();
+    const now = this.#now();
+    const expiresAt = new Date(now.getTime() + SESSION_HOURS * 3_600_000).toISOString();
+    await this.#sql.query('insert into sessions (session_hash, token_hash, expires_at, created_at) values ($1, $2, $3, $4)', [hashToken(session), hashToken(token), expiresAt, now.toISOString()]);
+    return { session, expiresAt, identity };
+  }
+
+  async authenticateSession(session: string): Promise<Identity | null> {
+    if (!session) return null;
+    // Joined to the token by its hash: a re-issued token has a new hash, so its old sessions find nothing.
+    const { rows } = await this.#sql.query<{ repo_id: string; developer_id: string; developer_name: string; role: Role }>(
+      'select t.repo_id, t.developer_id, t.developer_name, t.role from sessions s join tokens t on t.token_hash = s.token_hash where s.session_hash = $1 and s.expires_at > $2',
+      [hashToken(session), this.#now().toISOString()],
+    );
+    const r = rows[0];
+    return r ? { repoId: r.repo_id, developerId: r.developer_id, developerName: r.developer_name, role: r.role } : null;
+  }
+
+  async endSession(session: string): Promise<boolean> {
+    if (!session) return false;
+    const { rows } = await this.#sql.query('delete from sessions where session_hash = $1 returning session_hash', [hashToken(session)]);
+    return rows.length > 0;
   }
 
   async #linked(repoId: string, ref: SummaryRef, ticketKey: string): Promise<boolean> {

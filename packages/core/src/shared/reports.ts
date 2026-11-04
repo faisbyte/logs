@@ -86,6 +86,45 @@ export function storedFields(repoId: string, digest: Digest, summaryKeys: string
   };
 }
 
+/** What a report would cost before it is written, and where the cap stands (D92). */
+export interface ReportEstimate {
+  cached: boolean;
+  summaryCount: number;
+  developerCount: number;
+  /** 0 when cached or empty; null when the model has no known price. */
+  estimateUsd: number | null;
+  spentUsd: number;
+  capUsd: number;
+  /** The first day of the month the cap counts from (UTC). */
+  since: string;
+  fits: boolean;
+  /** Whether asking for it now would give a report: cached, or under the cap with a key (or nothing to send). */
+  canWrite: boolean;
+}
+
+export async function reportEstimate(deps: DigestDeps, repoId: string, filter: TicketReportFilter): Promise<ReportEstimate> {
+  const input = digestInput(await ticketReport(deps.store, repoId, filter));
+  const cached = await deps.store.findReport(repoId, { periodKey: periodKey(filter), inputHash: input.hash, promptVersion: DIGEST_PROMPT_VERSION, model: deps.model });
+  const now = (deps.now ?? (() => new Date()))();
+  const since = monthStart(now);
+  const settings = await deps.store.repoSettings(repoId);
+  const capUsd = settings.monthlyCapUsd ?? deps.defaultCapUsd;
+  const spentUsd = await deps.store.spendSince(repoId, since);
+  const estimateUsd = cached ? 0 : estimateDigestCost(input, deps.model).costUsd;
+  const fits = estimateUsd !== null && spentUsd + estimateUsd <= capUsd;
+  return {
+    cached: Boolean(cached),
+    summaryCount: input.coverage.summaryCount,
+    developerCount: input.coverage.developerCount,
+    estimateUsd,
+    spentUsd,
+    capUsd,
+    since: since.slice(0, 10),
+    fits,
+    canWrite: Boolean(cached) || (fits && (deps.llm !== null || isEmpty(input))),
+  };
+}
+
 /** A report for any sprint or date range, for readers and developers alike. */
 export async function onDemandReport(deps: DigestDeps, repoId: string, filter: TicketReportFilter): Promise<ReportResult> {
   const report = await ticketReport(deps.store, repoId, filter);
