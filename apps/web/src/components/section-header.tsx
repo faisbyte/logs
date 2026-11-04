@@ -16,7 +16,7 @@ export function SectionHeader({ index, label, title, line, level = 1, id }: Prop
   return (
     <header className="max-w-3xl">
       <p className="text-fg-subtle font-mono text-xs tracking-wide uppercase">
-        <span className="text-accent">{index}</span>
+        <span className="text-fg-muted">{index}</span>
         <span aria-hidden="true"> / </span>
         <span className="sr-only">: </span>
         {label}

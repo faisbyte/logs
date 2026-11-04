@@ -22,7 +22,8 @@ export function AppHeader({ viewer }: { viewer: Viewer | null }) {
           <Wordmark />
         </Link>
         {viewer ? (
-          <nav aria-label="Main" className="order-last -mx-2 w-full pb-2 sm:order-none sm:mx-0 sm:w-auto sm:min-w-0 sm:flex-1 sm:pb-0">
+          <div className="order-last -mx-2 flex w-full items-center justify-between gap-3 pb-2 sm:order-none sm:mx-0 sm:w-auto sm:min-w-0 sm:flex-1 sm:pb-0">
+          <nav aria-label="Main">
             <ul className="flex flex-wrap gap-1 text-sm">
               {navFor(viewer.role).map((item) => (
                 <li key={item.href}>
@@ -33,16 +34,20 @@ export function AppHeader({ viewer }: { viewer: Viewer | null }) {
               ))}
             </ul>
           </nav>
+          <span className="text-fg-subtle max-w-[45%] truncate px-2 font-mono text-xs sm:hidden" title={`${viewer.developerName} · ${viewer.role}`}>
+            {viewer.developerName} · {viewer.role}
+          </span>
+          </div>
         ) : (
           <span className="hidden sm:block sm:flex-1" />
         )}
         <div className="ml-auto flex shrink-0 items-center gap-3 sm:ml-0">
           {viewer ? (
-            <span className="text-fg-subtle hidden font-mono text-xs md:inline">
+            <span className="text-fg-subtle hidden max-w-[14rem] truncate font-mono text-xs sm:inline" title={`${viewer.developerName} · ${viewer.role}`}>
               {viewer.developerName} · {viewer.role}
             </span>
           ) : null}
-          <ThemeToggle />
+          <ThemeToggle defaultTheme={viewer?.role === 'reader' ? 'system' : 'dark'} />
           {viewer ? (
             <form action={signOut}>
               <button type="submit" className="text-fg-muted hover:text-fg rounded-md px-2 py-1.5 text-sm">

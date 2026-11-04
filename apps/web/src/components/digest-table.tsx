@@ -43,7 +43,7 @@ export function DigestTable({ digests }: { digests: DigestRow[] }) {
         {digests.map((d) => (
           <tr key={d.id}>
             <td data-label="Period">
-              <Link href={`/digests/${d.id}`} className="text-fg font-medium underline-offset-4 hover:underline">
+              <Link href={`/digests/${d.id}`} className="row-link text-fg font-medium underline-offset-4 hover:underline">
                 {d.periodLabel}
               </Link>
             </td>
