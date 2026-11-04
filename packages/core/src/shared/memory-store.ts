@@ -1,4 +1,4 @@
-import { bySessionStart, decidePush, decideRetract, digestSummaryKey, hashToken, matchesQuery, newToken, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
+import { bySessionStart, decidePush, decideRetract, digestSummaryKey, hashToken, matchesQuery, newSession, newToken, SESSION_HOURS, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
 import {
   byFrom,
   byLinkTime,
@@ -40,6 +40,8 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   readonly #titles = new Map<string, Map<string, TicketTitle>>();
   readonly #context: ContextItem[] = [];
   readonly #runs: ContextRun[] = [];
+  /** session hash → the token hash it came from, and when it expires */
+  readonly #sessions = new Map<string, { tokenHash: string; expiresAt: string }>();
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -98,6 +100,26 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   async authenticate(token: string): Promise<Identity | null> {
     const identity = token ? this.#tokens.get(hashToken(token)) : undefined;
     return identity ? { ...identity } : null;
+  }
+
+  async startSession(token: string): Promise<{ session: string; expiresAt: string; identity: Identity } | null> {
+    const identity = await this.authenticate(token);
+    if (!identity) return null;
+    const session = newSession();
+    const expiresAt = new Date(this.#now().getTime() + SESSION_HOURS * 3_600_000).toISOString();
+    this.#sessions.set(hashToken(session), { tokenHash: hashToken(token), expiresAt });
+    return { session, expiresAt, identity };
+  }
+
+  async authenticateSession(session: string): Promise<Identity | null> {
+    const held = session ? this.#sessions.get(hashToken(session)) : undefined;
+    if (!held || held.expiresAt <= this.#now().toISOString()) return null;
+    const identity = this.#tokens.get(held.tokenHash);
+    return identity ? { ...identity } : null;
+  }
+
+  async endSession(session: string): Promise<boolean> {
+    return Boolean(session) && this.#sessions.delete(hashToken(session));
   }
 
   #linksOf(repoId: string, ref: SummaryRef) {

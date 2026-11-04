@@ -1300,7 +1300,7 @@ Option A first: no repo-write credentials on the server, and a person starts eve
 ## D91. How a browser session gets a token for the dashboard (open)
 
 - **Date:** 2026-11-04
-- **Status:** open, waiting for the owner. The scaffold, design tokens and shared components come first, because they don't depend on it.
+- **Status:** Accepted 2026-11-04: Option B, a short-lived server-side session (built as D92).
 - **Common to both options:**
   - **The browser never calls the digest server directly.** The Next.js app's own server code calls it, with the credential added there, so no credential is ever readable from JavaScript.
   - **A new `GET /v1/whoami`** returns the caller's role, repo and display name, so the UI renders only what the role can see. The server still enforces every role (D51): a reader is refused on developer endpoints whatever the UI does.
@@ -1323,3 +1323,21 @@ Option A first: no repo-write credentials on the server, and a person starts eve
 ### Recommendation
 
 Option B. Logout that really revokes and a 12-hour blast radius are worth one small table. A reader's dashboard session shouldn't carry a credential that never expires.
+
+## D92. Dashboard sessions, `whoami`, and a report estimate on the server
+
+- **Date:** 2026-11-04
+- **Decision:** this is the build of D91 option B, and the server side of the dashboard.
+  - **Sessions:**
+    - `POST /v1/sessions {token}` exchanges a valid token for `{session, expiresAt, identity}`, or answers 401.
+    - The session id (`dgs_…`) is returned once and stored only as a sha256, with the hash of the token it came from (migration 13 `sessions`).
+    - It lasts `SESSION_HOURS` (12).
+    - Re-issuing the token ends its sessions: in Postgres the join to `tokens` finds nothing once the token hash changes.
+    - `DELETE /v1/sessions` ends a session at once and answers `{ended}`.
+  - **Auth scheme:** `Authorization: Session <id>` works wherever a bearer token does, with the same role. A reader's session gets the same 403 on every developer endpoint, which is tested endpoint by endpoint. Pushes still need the developer's own token, so a session can't push (401).
+  - **`GET /v1/whoami`:** returns the caller's repo, id, name and role, by token or session, so the dashboard renders only what the role can see.
+  - **`GET /v1/reports/estimate?repoId&sprint|from&to`:**
+    - It returns a report's estimate before anything is written: whether it's cached, how many summaries and developers it covers, the estimate in dollars, this month's spend, the cap, the month it counts from, whether it fits, and `canWrite`.
+    - `canWrite` means asking now would give a report: one is cached, or the estimate fits under the cap and there's a key (or nothing to send).
+    - Readers may call it, like `POST /v1/reports` (D53).
+- **Not yet:** rate limiting on `POST /v1/sessions` (Phase 10). A session is listed nowhere, so ending all of a user's sessions means re-issuing their token.

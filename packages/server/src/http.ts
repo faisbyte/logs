@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AgentSchema, onDemandReport, READER_REFUSAL, receivePush, ticketReport, type DigestDeps, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
+import { AgentSchema, onDemandReport, READER_REFUSAL, reportEstimate, receivePush, ticketReport, type DigestDeps, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
 
 // The digest server's HTTP API (DECISIONS.md D43). Every request is authenticated by a per-developer, per-repo
 // token and may only touch that token's repo. Logs carry method, path and status, never tokens or content.
@@ -31,6 +31,8 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 const bearer = (req: IncomingMessage) => /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1] ?? '';
+/** A dashboard session id from `Authorization: Session <id>` (D91). */
+const sessionId = (req: IncomingMessage) => /^Session (\S+)$/.exec(req.headers.authorization ?? '')?.[1] ?? '';
 
 function dateParam(params: URLSearchParams, name: string, required: boolean): string | undefined {
   const value = params.get(name) ?? undefined;
@@ -84,8 +86,10 @@ export interface HandlerOptions {
 
 export function createHandler(store: SharedStore, { log = (line: string) => console.log(line), digests = { llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 } }: HandlerOptions = {}) {
   /** The token's identity, required to match the repo being read. */
+  /** Whoever the request is: a token, or a dashboard session made from one. */
+  const identify = (req: IncomingMessage) => (sessionId(req) ? store.authenticateSession(sessionId(req)) : store.authenticate(bearer(req)));
   const reader = async (req: IncomingMessage, repoId: string) => {
-    const identity = await store.authenticate(bearer(req));
+    const identity = await identify(req);
     if (!identity) throw new HttpError(401, 'unknown or revoked token');
     if (identity.repoId !== repoId) throw new HttpError(403, 'this token is for a different repo');
     return identity;
@@ -110,6 +114,9 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/ticket-titles': ['PUT'],
       '/v1/tickets': ['GET'],
       '/v1/reports': ['POST'],
+      '/v1/reports/estimate': ['GET'],
+      '/v1/sessions': ['POST', 'DELETE'],
+      '/v1/whoami': ['GET'],
       '/v1/digests': ['GET'],
     };
     const digestId = /^\/v1\/digests\/([^/]+)$/.exec(url.pathname)?.[1];
@@ -117,6 +124,27 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
     if (!allowed) throw new HttpError(404, 'not found');
     if (!allowed.includes(req.method ?? '')) throw new HttpError(405, `use ${allowed.join(' or ')}`);
     if (url.pathname === '/healthz') return [200, { ok: true }];
+
+    // Dashboard sessions (D91): a token is exchanged once for a short-lived session, which logout ends.
+    if (url.pathname === '/v1/sessions') {
+      if (req.method === 'DELETE') return [200, { ended: await store.endSession(sessionId(req)) }];
+      const body = (await readJson(req)) as Record<string, unknown> | null;
+      if (typeof body?.token !== 'string' || !body.token) throw new HttpError(400, 'token is required');
+      const started = await store.startSession(body.token);
+      if (!started) throw new HttpError(401, 'unknown or revoked token');
+      return [201, started];
+    }
+    if (url.pathname === '/v1/whoami') {
+      const identity = await identify(req);
+      if (!identity) throw new HttpError(401, 'unknown or revoked token');
+      return [200, identity];
+    }
+    if (url.pathname === '/v1/reports/estimate') {
+      const repoId = url.searchParams.get('repoId');
+      if (!repoId) throw new HttpError(400, 'repoId is required');
+      await reader(req, repoId);
+      return [200, await reportEstimate({ ...digests, store }, repoId, periodFrom((name) => url.searchParams.get(name) ?? undefined))];
+    }
 
     // Digests and reports carry no developer identity: readers may use these (DECISIONS.md D51, D53).
     if (url.pathname === '/v1/reports') {

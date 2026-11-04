@@ -20,10 +20,10 @@ async function start(digests: Parameters<typeof createHandler>[1]['digests'] = u
   await new Promise<void>((listening) => server!.listen(0, '127.0.0.1', listening));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const token = (await store.issueToken(alice)).token;
-  const call = (path: string, init: { method?: string; token?: string; body?: unknown; raw?: string } = {}) =>
+  const call = (path: string, init: { method?: string; token?: string; session?: string; body?: unknown; raw?: string } = {}) =>
     fetch(`${base}${path}`, {
       method: init.method ?? 'GET',
-      headers: { ...(init.token ? { authorization: `Bearer ${init.token}` } : {}), 'content-type': 'application/json' },
+      headers: { ...(init.token ? { authorization: `Bearer ${init.token}` } : {}), ...(init.session ? { authorization: `Session ${init.session}` } : {}), 'content-type': 'application/json' },
       ...(init.raw !== undefined ? { body: init.raw } : init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });
   const push = (payload: unknown, as = token, repoId = REPO) => call('/v1/summaries', { method: 'POST', token: as, body: { repoId, payload } });
@@ -199,6 +199,49 @@ describe('digest server HTTP API', () => {
     expect((await call('/v1/context-retirements', { method: 'POST', token: reader, body: { repoId: REPO, id: 'ctx-0000000a' } })).status).toBe(403);
   });
 
+  describe('dashboard sessions (DECISIONS.md D91)', () => {
+    it('exchanges a token for a session, answers whoami with either, and ends the session on logout', async () => {
+      const { call, token, logs } = await start();
+      const made = await call('/v1/sessions', { method: 'POST', body: { token } });
+      expect(made.status).toBe(201);
+      const { session, expiresAt, identity } = await made.json();
+      expect(session).toMatch(/^dgs_/);
+      expect(Date.parse(expiresAt)).toBeGreaterThan(Date.now());
+      expect(identity).toEqual({ ...alice, role: 'developer' });
+      expect(await (await call('/v1/whoami', { session })).json()).toEqual({ ...alice, role: 'developer' });
+      expect(await (await call('/v1/whoami', { token })).json()).toEqual({ ...alice, role: 'developer' });
+      expect((await call('/v1/sessions', { method: 'DELETE', session })).status).toBe(200);
+      expect((await call('/v1/whoami', { session })).status).toBe(401);
+      expect((await call('/v1/sessions', { method: 'POST', body: { token: `${token}x` } })).status).toBe(401);
+      expect((await call('/v1/sessions', { method: 'POST', body: {} })).status).toBe(400);
+      expect(logs.join('\n')).not.toContain(session);
+      expect(logs.join('\n')).not.toContain(token);
+    });
+
+    it("gives a reader's session the same 403 as its token on every developer endpoint", async () => {
+      const { store, call, push } = await start();
+      await push(payloadFor());
+      const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+      const session = (await (await call('/v1/sessions', { method: 'POST', body: { token: reader } })).json()).session;
+      const repo = encodeURIComponent(REPO);
+      const answers = await Promise.all([
+        call(`/v1/summaries?repoId=${repo}`, { session }),
+        call(`/v1/team-report?repoId=${repo}&from=2026-01-01&to=2027-01-01`, { session }),
+        call(`/v1/tickets?repoId=${repo}&from=2026-01-01&to=2027-01-01`, { session }),
+        call(`/v1/context-items?repoId=${repo}`, { session }),
+        call('/v1/context-retirements', { method: 'POST', session, body: { repoId: REPO, id: 'ctx-00000001' } }),
+        call('/v1/retractions', { method: 'POST', session, body: { repoId: REPO, agent: 'claude-code', sessionId: payloadFor().sessionId } }),
+        call('/v1/ticket-links', { method: 'POST', session, body: { repoId: REPO, agent: 'claude-code', sessionId: payloadFor().sessionId, ticket: 'OPS-1' } }),
+        call('/v1/ticket-titles', { method: 'PUT', session, body: { repoId: REPO, ticket: 'PROJ-1', title: 'x' } }),
+      ]);
+      expect(answers.map((r) => r.status)).toEqual([403, 403, 403, 403, 403, 403, 403, 403]);
+      expect((await call(`/v1/digests?repoId=${repo}`, { session })).status).toBe(200);
+      expect((await call(`/v1/sprints?repoId=${repo}`, { session })).status).toBe(200);
+      // A session can't push: pushes need the developer's own token.
+      expect((await call('/v1/summaries', { method: 'POST', session, body: { repoId: REPO, payload: payloadFor({ sessionId: 'other' }) } })).status).toBe(401);
+    });
+  });
+
   describe('reports and digests (DECISIONS.md D51, D53)', () => {
     const output = { overview: 'Login is safer.', tickets: [{ key: 'PROJ-142', achieved: 'Repeated attempts are limited.', aiInvolvement: 'AI wrote most of it.', keyDecisions: [] }], otherWork: null, risksAndOpenQuestions: [] };
     const llm = () => new FakeLlmClient(() => JSON.stringify(output), 'claude-sonnet-5-5');
@@ -219,6 +262,25 @@ describe('digest server HTTP API', () => {
       expect(list.digests.map((d: { id: string; markdown?: string }) => [d.id, d.markdown])).toEqual([[report.digest.id, undefined]]);
       const one = await call(`/v1/digests/${report.digest.id}?repoId=${encodeURIComponent(REPO)}`, { token: reader });
       expect((await one.json()).digest.markdown).toBe(report.digest.markdown);
+    });
+
+    it('tells a reader what a report would cost and where the cap stands, before writing it (DECISIONS.md D92)', async () => {
+      const { store, push, call } = await start({ llm: llm(), model: 'claude-sonnet-5-5', defaultCapUsd: 10 });
+      await push(payloadFor());
+      await store.recordSpend(REPO, 1.25, new Date().toISOString());
+      const reader = await readerOf(store);
+      const query = `/v1/reports/estimate?repoId=${encodeURIComponent(REPO)}&from=2026-03-01&to=2026-04-01`;
+      const first = await (await call(query, { token: reader })).json();
+      expect(first).toEqual({ cached: false, summaryCount: 1, developerCount: 1, estimateUsd: expect.any(Number), spentUsd: 1.25, capUsd: 10, since: expect.stringMatching(/^\d{4}-\d{2}-01$/), fits: true, canWrite: true });
+      expect(first.estimateUsd).toBeGreaterThan(0);
+      await call('/v1/reports', { method: 'POST', token: reader, body });
+      expect(await (await call(query, { token: reader })).json()).toMatchObject({ cached: true, estimateUsd: 0 });
+      expect((await call(`/v1/reports/estimate?repoId=${encodeURIComponent(REPO)}`, { token: reader })).status).toBe(400);
+      const keyless = await start();
+      await keyless.push(payloadFor());
+      // Without an API key the server can only serve what it has written, or an empty period.
+      expect(await (await keyless.call(`/v1/reports/estimate?repoId=${encodeURIComponent(REPO)}&from=2026-03-01&to=2026-04-01`, { token: keyless.token })).json()).toMatchObject({ summaryCount: 1, canWrite: false });
+      expect(await (await keyless.call(`/v1/reports/estimate?repoId=${encodeURIComponent(REPO)}&sprint=S1`, { token: keyless.token })).json()).toMatchObject({ summaryCount: 0, estimateUsd: 0, canWrite: true });
     });
 
     it('keeps previews from readers but shows them to developers', async () => {

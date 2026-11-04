@@ -84,7 +84,19 @@ export interface TokenStore {
   /** Issues the token for one person, role and repo, replacing any earlier one. The token is returned once and stored only as a hash. */
   issueToken(identity: PushIdentity, role?: Role): Promise<{ token: string }>;
   authenticate(token: string): Promise<Identity | null>;
+  /**
+   * Exchanges a valid token for a dashboard session (D91): a random id, returned once and stored only as a hash, that
+   * expires after SESSION_HOURS and dies with its token when the token is re-issued.
+   */
+  startSession(token: string): Promise<{ session: string; expiresAt: string; identity: Identity } | null>;
+  /** The session's identity, or null when it is unknown, expired, ended or its token was re-issued. */
+  authenticateSession(session: string): Promise<Identity | null>;
+  /** Ends a session at once (logout); false when there was none. */
+  endSession(session: string): Promise<boolean>;
 }
+
+export const SESSION_HOURS = 12;
+export const newSession = () => `dgs_${randomBytes(32).toString('base64url')}`;
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 export const newToken = () => `dgt_${randomBytes(32).toString('base64url')}`;
