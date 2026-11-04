@@ -27,7 +27,13 @@ beforeEach(async () => {
     sessionId: 'a1', startedAt: '2026-03-03T09:00:00.000Z', endedAt: '2026-03-03T11:00:00.000Z', ticketRefs: ['PROJ-1'],
     filesTouched: ['src/auth/login.ts'],
     decisions: [{ decision: 'Lock accounts after 3 failed logins.', reason: 'Security asked for it.' }],
-    rejectedApproaches: [],
+    rejectedApproaches: [{ approach: 'Counting failures in memory.', reason: 'Counts reset on every deploy.' }],
+  }));
+  await store.push(bob, payloadFor({
+    sessionId: 'c3', startedAt: '2026-03-15T09:00:00.000Z', endedAt: '2026-03-15T10:00:00.000Z', ticketRefs: ['PROJ-2'],
+    filesTouched: ['src/auth/login.ts'],
+    decisions: [],
+    rejectedApproaches: [{ approach: 'Counting failed logins per IP address.', reason: 'Whole offices share one address.' }],
   }));
   summaries = await store.list({ repoId: REPO });
 });
@@ -141,10 +147,39 @@ describe('extractContext', () => {
     expect(clean.changes.added.map((i) => i.text)).toEqual(['Counting failed logins in memory was tried and dropped.']);
     expect(clean.dropped).toEqual(['items.0: is about pinning a version; left out', 'items.1: is about pinning a version; left out', 'items.2: is about pinning a version; left out']);
     expect(clean).toMatchObject({ retried: false, retryReasons: [] });
-    await expect(extractContext(contextInput(summaries), llmWith([extracted({ text: 'Lockout counts are kept per account, with the 3.2 release.', reason: 'Offices share addresses.' })]), { now })).resolves.toMatchObject({ dropped: [] });
+    await expect(extractContext(contextInput(summaries), llmWith([extracted({ type: 'decision', text: 'Accounts lock after 5 failed logins, with the 3.2 release.', reason: 'Fewer annoyed the support team.', paths: ['src/auth/login.ts'] })]), { now })).resolves.toMatchObject({ dropped: [] });
 
     const retried = await extractContext(contextInput(summaries), llmWith([extracted({ sources: ['S9'] })], [extracted()]), { now });
     expect(retried).toMatchObject({ retried: true, retryReasons: ['items.0: sources: S9 is not one of the summaries'] });
+  });
+
+  describe('provenance (DECISIONS.md D86)', () => {
+    it('drops a pitfall no rejected approach in its sources backs, and a decision no decision backs, and counts them', async () => {
+      const invented = [
+        extracted({ text: 'Counting failed logins per IP address was rejected.', reason: 'Offices share one address.', sources: ['S1'], paths: ['src/auth/login.ts'] }),
+        extracted({ type: 'decision', text: 'Passwords are hashed with bcrypt at cost 12.', reason: 'It is the industry default.', sources: ['S2'], paths: ['src/auth/login.ts'] }),
+        extracted({ type: 'convention', text: 'Lockout messages say when to try again.', reason: 'Fewer support tickets.', sources: ['S2'], paths: ['src/auth/login.ts'] }),
+        extracted(),
+      ];
+      const result = await extractContext(contextInput(summaries), llmWith(invented), { now });
+      expect(result.changes.added.map((i) => i.text)).toEqual(['Lockout messages say when to try again.', 'Counting failed logins in memory was tried and dropped.']);
+      expect(result.dropped).toEqual([
+        "items.0: a pitfall that no rejected approach in its source summaries backs; left out",
+        "items.1: a decision that no decision in its source summaries backs; left out",
+      ]);
+      expect(result.untraced).toBe(2);
+    });
+
+    it('treats a pitfall that mirrors an active decision as a duplicate of it, across types', async () => {
+      const decision = existingItem({ id: 'ctx-0000000c', text: 'Failed logins are counted per account rather than per IP address.', reason: 'Whole offices share one address.', sources: ['claude-code/a1'] });
+      const mirror = extracted({ text: 'Counting failed logins per IP address was rejected.', reason: 'Whole offices share one address.', sources: ['S3'], paths: ['src/auth/login.ts'] });
+      const result = await extractContext(contextInput(summaries, [decision]), llmWith([mirror]), { now });
+      expect(result.changes.added).toEqual([]);
+      expect(result.changes.merged).toEqual([expect.objectContaining({ id: 'ctx-0000000c', sources: ['claude-code/a1', 'claude-code/c3'] })]);
+      // Within one reply too: the mirror is folded into the decision it repeats.
+      const both = await extractContext(contextInput(summaries), llmWith([extracted({ type: 'decision', text: 'Accounts lock after 5 failed logins.', reason: 'Fewer annoyed the support team.', paths: ['src/auth/login.ts'] }), extracted({ text: 'Locking accounts after 5 failed logins was tried and dropped.', reason: 'Counts reset on every deploy.' })]), { now });
+      expect(both.changes.added.map((i) => i.type)).toEqual(['decision']);
+    });
   });
 
   describe('deduplicating and superseding', () => {

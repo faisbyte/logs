@@ -230,6 +230,10 @@ const MIGRATIONS: string[][] = [
     )`,
     'create index context_runs_repo on context_runs (repo_id, at)',
   ],
+  [
+    // Items dropped because nothing in their sources backs them (DECISIONS.md D86).
+    'alter table context_runs add column untraced integer not null default 0',
+  ],
 ];
 
 /**
@@ -577,9 +581,9 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     try {
       if (run) {
         await this.#sql.query(
-          `insert into context_runs (repo_id, at, model, prompt_version, summaries, added, merged, superseded, dropped, retry_reasons, cost_usd)
-           values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10::jsonb, $11)`,
-          [repoId, run.at, run.model, run.promptVersion, JSON.stringify(run.summaries), run.added, run.merged, run.superseded, JSON.stringify(run.dropped), JSON.stringify(run.retryReasons), run.costUsd],
+          `insert into context_runs (repo_id, at, model, prompt_version, summaries, added, merged, superseded, dropped, retry_reasons, cost_usd, untraced)
+           values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12)`,
+          [repoId, run.at, run.model, run.promptVersion, JSON.stringify(run.summaries), run.added, run.merged, run.superseded, JSON.stringify(run.dropped), JSON.stringify(run.retryReasons), run.costUsd, run.untraced],
         );
       }
       for (const i of changes.added) {
@@ -612,7 +616,7 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
   async contextRuns(repoId: string): Promise<ContextRun[]> {
     const { rows } = await this.#sql.query<{
       repo_id: string; at: Date | string; model: string; prompt_version: string; summaries: ContextRun['summaries'] | string; added: number; merged: number; superseded: number;
-      dropped: string[] | string; retry_reasons: string[] | string; cost_usd: number | string | null;
+      dropped: string[] | string; retry_reasons: string[] | string; cost_usd: number | string | null; untraced: number;
     }>('select * from context_runs where repo_id = $1 order by at desc, seq desc', [repoId]);
     return rows.map((r) => ({
       repoId: r.repo_id,
@@ -624,6 +628,7 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
       merged: r.merged,
       superseded: r.superseded,
       dropped: json(r.dropped),
+      untraced: r.untraced,
       retryReasons: json(r.retry_reasons),
       costUsd: r.cost_usd === null ? null : Number(r.cost_usd),
     }));

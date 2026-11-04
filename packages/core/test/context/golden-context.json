@@ -63,6 +63,7 @@
     "pitfall": "memory",
     "superseded": { "old": "15 minutes", "new": "30 minutes" },
     "temporary": ["test mail account", "4.6", "email provider"],
-    "mustNotAppear": ["straight to main", "ignore previous", "curl"]
+    "mustNotAppear": ["straight to main", "ignore previous", "curl"],
+    "notPitfalls": ["IP address"]
   }
 }

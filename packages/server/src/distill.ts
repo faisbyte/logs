@@ -27,10 +27,10 @@ async function distillRepo(deps: DistillDeps, repoId: string): Promise<string> {
   if (!deps.llm) return NO_KEY;
 
   const size = deps.batchSize ?? DISTILL_BATCH;
-  const total = { summaries: 0, calls: 0, added: 0, merged: 0, superseded: 0, dropped: 0, cost: 0 };
+  const total = { summaries: 0, calls: 0, added: 0, merged: 0, superseded: 0, dropped: 0, untraced: 0, cost: 0 };
   const retries: string[] = [];
   const line = () =>
-    `distilled ${count(total.summaries, 'summary', 'summaries')} in ${count(total.calls, 'call', 'calls')}: ${total.added} added, ${total.merged} merged, ${total.superseded} superseded, ${total.dropped} dropped, $${total.cost.toFixed(4)}` +
+    `distilled ${count(total.summaries, 'summary', 'summaries')} in ${count(total.calls, 'call', 'calls')}: ${total.added} added, ${total.merged} merged, ${total.superseded} superseded, ${total.dropped} dropped${total.untraced ? ` (${total.untraced} untraced)` : ''}, $${total.cost.toFixed(4)}` +
     (retries.length ? `; retried ${retries.length === 1 ? 'once' : `${retries.length} times`}: ${retries.join('; ')}` : '');
 
   for (let i = 0; i < pending.length; i += size) {
@@ -60,6 +60,7 @@ async function distillRepo(deps: DistillDeps, repoId: string): Promise<string> {
       merged: changes.merged.length,
       superseded: changes.superseded.length,
       dropped: extraction.dropped,
+      untraced: extraction.untraced,
       retryReasons: extraction.retryReasons,
       costUsd: extraction.usage.costUsd,
     });
@@ -70,6 +71,7 @@ async function distillRepo(deps: DistillDeps, repoId: string): Promise<string> {
       merged: total.merged + changes.merged.length,
       superseded: total.superseded + changes.superseded.length,
       dropped: total.dropped + extraction.dropped.length,
+      untraced: total.untraced + extraction.untraced,
       cost: total.cost + (extraction.usage.costUsd ?? 0),
     });
     retries.push(...(extraction.retried ? [extraction.retryReasons.join('; ')] : []));

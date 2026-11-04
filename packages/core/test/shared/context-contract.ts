@@ -77,7 +77,7 @@ export function contextStoreContract(name: string, make: () => Promise<SharedSto
     });
 
     it('records a distillation run with its changes, at once, and remembers which summaries it read (DECISIONS.md D82)', async () => {
-      const run = { repoId: REPO, at: '2026-03-20T12:00:00.000Z', model: 'claude-sonnet-5-5', promptVersion: 'context-v1', summaries: [{ key: 'claude-code/b2', payloadHash: 'h2' }], added: 1, merged: 0, superseded: 0, dropped: ['items.1: is about pinning a version; left out'], retryReasons: ['items.0: text: contains a URL'], costUsd: 0.0123 };
+      const run = { repoId: REPO, at: '2026-03-20T12:00:00.000Z', model: 'claude-sonnet-5-5', promptVersion: 'context-v1', summaries: [{ key: 'claude-code/b2', payloadHash: 'h2' }], added: 1, merged: 0, superseded: 0, dropped: ['items.1: is about pinning a version; left out'], untraced: 2, retryReasons: ['items.0: text: contains a URL'], costUsd: 0.0123 };
       await store.applyContextChanges(REPO, { ...none, added: [contextItem()] }, run);
       expect(await store.contextRuns(REPO)).toEqual([run]);
       expect(await store.distilledSummaries(REPO)).toEqual([{ key: 'claude-code/b2', payloadHash: 'h2' }]);

@@ -45,6 +45,8 @@ export interface Extraction {
   retried: boolean;
   /** What sent it back: the first reply's problems, never its text (empty without a retry). */
   retryReasons: string[];
+  /** Pitfalls and decisions dropped because nothing in their sources backs them (D86). */
+  untraced: number;
   usage: Usage;
   promptVersion: string;
   model: string;
@@ -118,6 +120,23 @@ const ID = /^ctx-[0-9a-f]{8}$/;
 const PIN = /\b(pin(s|ned|ning)?|held at|kept at|locked (at|to)|frozen at|stays? on)\b/i;
 const VERSION = /\b\d+\.(\d+|x)\b|\bversion \d+|\bv\d+\b/i;
 const isVersionPin = (item: ExtractedItem) => PIN.test(item.text) && VERSION.test(item.text);
+
+// Provenance (D86): a pitfall must come from a rejected approach in its sources, and a decision from a decision. Text and
+// reason are compared with the entry and its reason; real items scored 0.64 and up, an invented one 0.
+export const TRACE = 0.4;
+// Items of different types that say the same thing, such as a pitfall mirroring a decision in reverse (0.45 on the
+// live eval), count as duplicates; distinct real pairs scored at most 0.32. Same-type duplicates keep NEAR_DUPLICATE.
+export const CROSS_TYPE = 0.4;
+const backing = (item: ExtractedItem, sources: readonly ContextSource[]) =>
+  item.type === 'pitfall' ? sources.flatMap((s) => s.rejectedApproaches.map((r) => `${r.approach} ${r.reason}`)) : sources.flatMap((s) => s.decisions.map((d) => `${d.decision} ${d.reason}`));
+/** Conventions aren't a field of a summary, so only pitfalls and decisions are traced. */
+function traces(item: ExtractedItem, input: ContextInput): boolean {
+  if (item.type === 'convention') return true;
+  const sources = input.sources.filter((s) => item.sources.includes(s.label));
+  return backing(item, sources).some((entry) => similarity(`${item.text} ${item.reason}`, entry) >= TRACE);
+}
+const UNTRACED = { pitfall: 'a pitfall that no rejected approach in its source summaries backs', decision: 'a decision that no decision in its source summaries backs' } as const;
+const duplicates = (a: { type: string; text: string }, b: { type: string; text: string }) => similarity(a.text, b.text) > (a.type === b.type ? NEAR_DUPLICATE : CROSS_TYPE);
 const LABEL = /^S\d+$/;
 const covers = (path: string, file: string) => {
   const dir = path.replace(/\/+$/, '');
@@ -182,9 +201,8 @@ function plan(items: { item: ExtractedItem; index: number }[], input: ContextInp
     }
 
     const match = input.existing
-      .filter((e) => e.type === item.type && !item.supersedes.includes(e.id))
+      .filter((e) => !item.supersedes.includes(e.id) && duplicates(e, item))
       .map((e) => ({ e, score: similarity(e.text, item.text) }))
-      .filter((m) => m.score > NEAR_DUPLICATE)
       .sort((a, b) => b.score - a.score)[0]?.e;
     if (match?.status === 'retired') {
       notes.push(at(`matches retired item ${match.id}`));
@@ -201,9 +219,10 @@ function plan(items: { item: ExtractedItem; index: number }[], input: ContextInp
       continue;
     }
 
-    const twin = added.find((a) => a.type === item.type && similarity(a.text, item.text) > NEAR_DUPLICATE);
+    const twin = added.find((a) => duplicates(a, item));
     if (twin) {
-      if (item.text.length > twin.text.length) Object.assign(twin, { text: item.text, reason: item.reason });
+      // The first item keeps its type; a same-type twin may give it longer wording.
+      if (twin.type === item.type && item.text.length > twin.text.length) Object.assign(twin, { text: item.text, reason: item.reason });
       Object.assign(twin, { sources: sorted(union(twin.sources, keys)), paths: union(twin.paths, paths), tickets: sorted(union(twin.tickets, tickets)), date: latest(twin.date, date), supersedes: union(twin.supersedes, item.supersedes) });
       continue;
     }
@@ -221,9 +240,10 @@ function plan(items: { item: ExtractedItem; index: number }[], input: ContextInp
 
 /** Proposes context items from an input's summaries; nothing is stored here. */
 export async function extractContext(input: ContextInput, llm: LlmClient, { now = () => new Date() }: { now?: () => Date } = {}): Promise<Extraction> {
-  const result = (changes: ContextChanges, dropped: string[], usages: LlmUsage[], retryReasons: string[]): Extraction => ({
+  const result = (changes: ContextChanges, dropped: string[], usages: LlmUsage[], retryReasons: string[], untraced = 0): Extraction => ({
     changes,
     dropped,
+    untraced,
     retried: retryReasons.length > 0,
     retryReasons,
     usage: totalUsage(llm.model, usages),
@@ -255,7 +275,9 @@ export async function extractContext(input: ContextInput, llm: LlmClient, { now 
     if ('errors' in parsed) throw fail(`Context extraction failed its checks twice: ${parsed.errors}`);
     const safe = checked.filter((c) => !c.problems.length);
     const pins = safe.filter((c) => isVersionPin(c.item)).map((c) => `items.${c.index}: is about pinning a version; left out`);
-    const { changes, notes } = plan(safe.filter((c) => !isVersionPin(c.item)), input, now().toISOString());
-    return result(changes, [...problems, ...pins, ...notes], usages, retryReasons);
+    const kept = safe.filter((c) => !isVersionPin(c.item));
+    const untraced = kept.filter((c) => !traces(c.item, input)).map((c) => `items.${c.index}: ${UNTRACED[c.item.type as keyof typeof UNTRACED]}; left out`);
+    const { changes, notes } = plan(kept.filter((c) => traces(c.item, input)), input, now().toISOString());
+    return result(changes, [...problems, ...pins, ...untraced, ...notes], usages, retryReasons, untraced.length);
   }
 }

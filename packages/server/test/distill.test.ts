@@ -15,7 +15,7 @@ const now = () => new Date('2026-03-20T12:00:00.000Z');
 /** One item per call, from the call's first summary, worded per call so nothing merges. */
 const replies = (request: LlmRequest, call: number) => {
   const text = (request.messages[0]!.content as string).match(/^S1 .*\nGoal: (.*)$/m)?.[1] ?? 'unknown';
-  return JSON.stringify({ items: [{ type: 'decision', text: `Decision ${call + 1} records that ${text.replace(/\.$/, '').toLowerCase()} works.`, reason: 'The summary says so.', paths: ['src/routes'], sources: ['S1'], supersedes: [] }] });
+  return JSON.stringify({ items: [{ type: 'convention', text: `Convention ${call + 1} records that ${text.replace(/\.$/, '').toLowerCase()} works.`, reason: 'The summary says so.', paths: ['src/routes'], sources: ['S1'], supersedes: [] }] });
 };
 
 async function setup() {
@@ -67,6 +67,14 @@ describe('distill', () => {
     expect(results[0]!.result).toMatch(/; retried once: items\.0: text: contains a URL$/);
     expect((await store.contextRuns(API))[0]!.retryReasons).toEqual(['items.0: text: contains a URL']);
     expect(distillNeedsAttention(results[0]!.result)).toBe(false);
+  });
+
+  it('counts the items nothing in their sources backs, in the result and the run (DECISIONS.md D86)', async () => {
+    const { store, deps } = await setup();
+    const invented = JSON.stringify({ items: [{ type: 'pitfall', text: 'Counting logins per IP address was rejected.', reason: 'Offices share one address.', paths: [], sources: ['S1'], supersedes: [] }] });
+    const results = await distill({ ...deps, llm: new FakeLlmClient(() => invented, 'claude-sonnet-5-5'), batchSize: 10 });
+    expect(results[0]!.result).toMatch(/: 0 added, 0 merged, 0 superseded, 1 dropped \(1 untraced\), \$/);
+    expect((await store.contextRuns(API))[0]!.untraced).toBe(1);
   });
 
   it('stops at the cost cap and without a key, calling no model, and flags both for cron', async () => {

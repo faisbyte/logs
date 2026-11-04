@@ -15,7 +15,10 @@ async function twoRuns(second: (fifteenMinuteId: string) => ExtractedItem[]) {
   const one = await extractContext(contextInput(first), reply([
     item({ type: 'decision', text: 'Failed logins are counted per account rather than per IP address.', reason: 'Many users share one office network address.' }),
     item({ type: 'decision', text: 'An account locks for 15 minutes after 5 failed logins.', reason: 'Product wanted a short lockout support never has to undo.', paths: ['src/auth/lockout.ts'] }),
+    // The live eval's invented pitfall: S1 rejected nothing, so provenance drops it (D86).
+    item({ type: 'pitfall', text: 'Counting failed logins per IP address for lockout was rejected.', reason: 'Many users share one office network address.' }),
   ]), { now });
+  expect(one.untraced).toBe(1);
   await store.applyContextChanges(GOLDEN_REPO, one.changes);
   const fifteen = one.changes.added.find((i) => i.text.includes('15 minutes'))!.id;
   const two = await extractContext(contextInput(rest, await store.contextItems(GOLDEN_REPO)), reply(second(fifteen)), { now });

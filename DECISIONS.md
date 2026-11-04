@@ -1197,3 +1197,21 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - **A: move the convenience.** `createLogin` gets a `sessions` object instead of `kv`, as many real handlers do, so using the shared store means threading a new dependency through `createApp` and the tests. `cache.increment(key, ttlMs)` stays a one-line import already used in `src/users/profile.js`. The non-obvious reason stays out of the code. This is the smallest change, and it tests the realistic case where the correct choice costs more work.
   - **B: a different trap.** Pick a mistake the code invites by itself. One example: a rate limit on password-reset emails, where `kv` isn't available to the mailer at all and the teammate's note says why a per-process limiter fails. This is a cleaner test of knowledge only the brief has, but it's a new fixture, and its scoring would need redoing.
 - **Next:** the owner picks A or B, then a new pilot (about $0.30) runs with the same gate before the full run.
+
+## D86. Provenance for context items, and duplicates across types
+
+- **Date:** 2026-11-04
+- **Found in the live eval (D79):** the model invented the pitfall "counting failed logins per IP address was rejected". No source summary rejected that; it is the per-account decision restated in reverse. Same-type deduplication couldn't see it.
+- **Decision:**
+  - **Provenance:**
+    - A pitfall must trace to a rejected approach in its source summaries, and a decision to a decision there. The item's text and reason are compared with the entry and its reason, using the D38 similarity, at a threshold of 0.4 or more.
+    - Conventions aren't a field of a summary, so they aren't traced.
+    - Untraceable items are dropped ("a pitfall that no rejected approach in its source summaries backs; left out"), counted as `untraced` in the extraction and in each distillation run (migration 12), and shown in the `context distill` line as "(N untraced)".
+  - **Calibration on the 25 real dogfood items:**
+    - 24 scored 0.64–1.00 against their own source entries. The invented per-IP pitfall scored 0, because its source summary rejected nothing.
+    - The 25th, "the default chunk size is about 15K tokens rather than 60K", scored 0.18. The summaries recorded that change in "what was done" and as the reverse of a rejected approach, never as a decision, so the rule now drops it. That is the rule's cost: a true decision the summary didn't list as one.
+  - **Duplicates across types:**
+    - A pitfall and a decision (or any two types) whose texts score above 0.4 count as one item: merged into the existing active item, or folded into the first item in the same reply, which keeps its type.
+    - Same-type duplicates keep the 0.5 threshold.
+    - On real data, the closest distinct cross-type pair scored 0.32 (the "counters live in Redis" decision against the "counters in each server's memory" pitfall). The mirrored per-IP pair scored 0.45. The margin is narrow, which is why provenance, not deduplication, is the main guard.
+  - **Golden fixture:** the live eval's invented pitfall is now scripted into the offline run and must be dropped. The checker also fails if any pitfall mentions "IP address" (`notPitfalls`).
