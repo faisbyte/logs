@@ -41,7 +41,10 @@ describe('ContextTable', () => {
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
     expect(rows.map((r) => within(r).getByText(/^(Pitfall|Decision|Convention)$/).getAttribute('data-tone'))).toEqual(['attention', 'decision', 'convention']);
     expect(within(rows[0]!).getByText('Counts reset on every deploy.')).toBeInTheDocument();
-    expect(within(rows[0]!).getByText('src/auth/lockout.ts')).toBeInTheDocument();
+    // Paths may wrap only after a slash, never inside a name; dates never wrap.
+    const path = within(rows[0]!).getByText((_, el) => el?.textContent === 'src/auth/lockout.ts' && el.tagName === 'SPAN');
+    expect(path.querySelectorAll('wbr')).toHaveLength(2);
+    expect(within(rows[0]!).getByText('2026-04-07')).toHaveClass('whitespace-nowrap');
     expect(within(rows[0]!).getByText('b2b2b2b2')).toBeInTheDocument();
     expect(within(rows[0]!).getByText('Active')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('Superseded by ctx-00000003')).toBeInTheDocument();

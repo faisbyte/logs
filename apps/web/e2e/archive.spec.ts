@@ -155,10 +155,15 @@ test.describe('the archive list', () => {
 });
 
 test.describe('layout', () => {
-  test('shows who is signed in, and their role, at 360px too', async ({ page }) => {
+  test('shows who is signed in, and their role in full, at 360px too, for both roles', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 780 });
-    await signIn(page, seed().reader);
-    await expect(page.getByText('Pat (PO) · reader', { exact: true }).filter({ visible: true })).toBeInViewport();
+    for (const [token, name, role] of [[seed().reader, 'Pat (PO)', 'reader'], [seed().developer, 'Alice', 'developer']] as const) {
+      await signIn(page, token);
+      const line = page.getByRole('banner').locator('p').filter({ visible: true });
+      await expect(line).toHaveText(`${name} · ${role}`);
+      await expect(line.getByText(`· ${role}`)).toBeInViewport({ ratio: 1 });
+      await page.getByRole('button', { name: 'Sign out' }).click();
+    }
   });
 
   test('puts each ticket of a combined heading on its own line at 360px, and on one line on desktop', async ({ page }) => {
