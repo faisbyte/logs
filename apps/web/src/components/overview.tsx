@@ -1,5 +1,6 @@
 import type { StoredSummary, TicketReport } from '@digest/core';
 import Link from 'next/link';
+import { flaggedTerms, sendTime } from '~/components/digest-preview';
 import { StatusPill } from '~/components/status-pill';
 import { ticketRows } from '~/components/ticket-table';
 
@@ -98,8 +99,7 @@ export function RecentSessions({ sessions }: { sessions: SessionRow[] }) {
   );
 }
 
-const flagged = (p: PreviewRow) => (p.warnings ?? []).filter((w) => w.startsWith('jargon: ')).length;
-const sendTime = (iso: string) => `${iso.slice(0, 16).replace('T', ' ')} UTC`;
+const flagged = (p: PreviewRow) => flaggedTerms(p.warnings).length;
 
 /** Digests developers can still read before stakeholders get them (D54), with the terms the jargon check flagged. */
 export function PreviewNotice({ previews }: { previews: PreviewRow[] }) {

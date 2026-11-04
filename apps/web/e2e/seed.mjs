@@ -82,7 +82,19 @@ const corrected = await store.saveDigest({
 });
 await store.updateDigest(REPO, corrected.id, { sentAt: '2026-04-21T06:01:00.000Z' });
 const report = await store.saveDigest({ ...base, kind: 'report', periodKey: 'range:2026-04-01/2026-04-15', periodLabel: '2026-04-01 to 2026-04-14', markdown: body('AI work update: 2026-04-01 to 2026-04-14'), status: 'ready', createdAt: '2026-04-15T09:00:00.000Z' });
-const preview = await store.saveDigest({ ...base, kind: 'scheduled', periodKey: 'week:2026-04-20', periodLabel: 'Week of 2026-04-20', markdown: body('AI work update: Week of 2026-04-20'), status: 'preview', previewUntil: '2026-04-28T06:00:00.000Z', createdAt: '2026-04-27T06:00:00.000Z' });
+// Kept with two terms the jargon check flagged after its one retry (D68, D71).
+const preview = await store.saveDigest({
+  ...base,
+  kind: 'scheduled',
+  periodKey: 'week:2026-04-20',
+  periodLabel: 'Week of 2026-04-20',
+  markdown: body('AI work update: Week of 2026-04-20', 'The sign-in API now sends a webhook to the support team when an account locks.'),
+  status: 'preview',
+  previewUntil: '2026-04-28T06:00:00.000Z',
+  createdAt: '2026-04-27T06:00:00.000Z',
+  warnings: ['jargon: API', 'jargon: webhook'],
+  jargonRetried: true,
+});
 await close();
 
 writeFileSync(join(DATA, 'seed.json'), JSON.stringify({ repoId: REPO, developer, reader, ids: { withdrawn: withdrawn.id, corrected: corrected.id, report: report.id, preview: preview.id } }, null, 2));

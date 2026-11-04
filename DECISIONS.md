@@ -1394,4 +1394,34 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **Context:**
     - The brief for a path or ticket comes from the same deterministic `contextBrief` the CLI uses, imported from `@digest/core` in server code. It's shown in a terminal panel titled with the real command, with note types in the terminal's amber, blue and violet.
     - Below it, items by status (Active, Superseded, Retired, with counts), showing type pill, text and reason, paths, short sources, date and status ("Superseded by ctx-…", "Retired by alice" or "by a retraction").
-- **Still to build:** the repo overview and the developer digest preview with jargon warnings.
+- **Still to build:** the repo overview and the developer digest preview with jargon warnings (built in D95).
+
+## D95. Dashboard: one term per concept, context actions, focus contrast, the overview and the digest preview
+
+- **Date:** 2026-11-04
+- **Ticket timeline:** no Approved pill, because every entry is approved. Only the approval states that differ are shown:
+  - "Edited by developer" is neutral.
+  - "Auto-approved" is amber, because nobody read it before it was shared (D37).
+- **Terminology:** one user-facing term per concept. The labels live in `apps/web/src/lib/terms.ts`, and `terminology.test.ts` scans every view for labels written elsewhere and for banned synonyms. The mapping is in docs/dashboard-design.md.
+  - A summary's rejected approach is "Tried and dropped", in the timeline and the digest.
+  - The context item distilled from one is "Pitfall", in the context view and the agent brief only.
+  - A retracted summary is "withdrew a summary" / "its summary was withdrawn", the words readers already see in a corrected digest.
+  - Field names and CLI wording are unchanged.
+- **Context view:**
+  - **Filtering:** type chips (toggle buttons with `aria-pressed`, several at once, each with its count) and a text search over text, reason, paths, tickets and id. Both run in the browser over the tab's items, because a tab already holds every item in its state.
+  - **Retire:** on active items, with an inline confirmation. Focus goes to Cancel; Cancel or Escape returns focus to the Retire button. It calls `POST /v1/context-retirements`, the CLI's own endpoint (D80), through a server action. The server decides who may: the end-to-end suite checks a reader's dashboard session gets 403 there.
+  - **Empty tabs:** each says what its state means and how an item gets there.
+  - **Core change:** `@digest/core/brief` is a new subpath export of core's pure brief module, so the table can render in the browser without pulling Node modules into the bundle.
+- **Focus rings:** axe doesn't check focus indicators, so an end-to-end check tabs through every view in both themes and measures each ring (at least 2px and 3:1) against the background layers it is drawn on.
+  - It found that a date input's calendar button, inside the input's shadow tree, had no ring. `input:focus-within` now keeps the ring on the input.
+  - Weakest ring: the theme toggle's, 5.52:1 dark and 5.83:1 light.
+- **Repo overview:** developers only, and their home after sign-in. Readers still land on the archive.
+  - It shows a coverage line, then a notice for digests in preview with their send time and flagged-term count (amber), the 5 most recent sessions, the 5 most recently active tickets and the 3 latest digests.
+  - Recent sessions are built from the all-time ticket report, each summary once with every ticket it's linked to. A row with a ticket is one link to that ticket's timeline.
+  - No new endpoint.
+- **Digest preview:** a digest's page shows developers two things that readers don't get:
+  - a neutral banner on a digest in preview, saying readers don't see it yet and when it sends (D54);
+  - an amber callout listing the terms the jargon check flagged and kept after its one retry (D68, D71), on any digest with them.
+
+  Readers can't open a preview at all; the server refuses it.
+- **Fixed on the way:** the ticket table's sprint sections had no accessible name when the sprint name has a space, because `aria-labelledby` splits on spaces. Heading ids are now slugs.
