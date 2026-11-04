@@ -1,10 +1,12 @@
-// The Phase 8 context A/B experiment (docs/context-experiment.md, DECISIONS.md D80, D84).
-//   node scripts/context-experiment/harness.mjs selftest   checks the scoring with two reference solutions (free)
-//   node scripts/context-experiment/harness.mjs brief      extracts the teammates' items and saves the real brief (one model call)
+// The Phase 8 context A/B experiment, round 2 (docs/context-experiment.md, DECISIONS.md D80, D84, D85). Round 1's
+// login-service harness is in git history.
+//   node scripts/context-experiment/harness.mjs selftest   checks each candidate's scoring with reference solutions (free)
+//   node scripts/context-experiment/harness.mjs estimate   the pilot's cost estimate (free)
+//   node scripts/context-experiment/harness.mjs brief      extracts the teammates' items and saves both real briefs (one model call)
 //   node scripts/context-experiment/harness.mjs check      one short isolated claude -p run, proving the isolation
-//   node scripts/context-experiment/harness.mjs pilot      2 runs per arm, A B A B, scored by the hidden tests
-// EXPERIMENT_WORK must name a scratch directory outside any repo: run copies and transcripts go there. Results go to
-// .digest/experiment/. ANTHROPIC_API_KEY comes from the environment or the repo's .env and is never printed.
+//   node scripts/context-experiment/harness.mjs pilot      per candidate 3 runs without the brief and 1 with it, scored by hidden tests
+// Run copies and transcripts go to .digest/experiment/work/ (gitignored), results to .digest/experiment/round2/.
+// ANTHROPIC_API_KEY comes from the environment or the repo's .env and is never printed.
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -13,21 +15,166 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../..');
-const FIXTURE = join(HERE, 'fixture');
+const FIXTURE = join(HERE, 'fixture-billing');
 const MODEL = 'claude-sonnet-5-5';
 const MAX_TURNS = 30;
 const MAX_BUDGET_USD = 1;
-const TASK =
-  "Add an account lockout to src/auth/login.js: after 5 failed logins for an account, lock it for 15 minutes. A locked account gets { ok: false, reason: 'locked' }, even with the right password. Add tests. Keep the change small.";
+const RUN_USD = { typical: 0.08, high: 0.12 };
 
 const core = await import(join(REPO, 'packages/core/dist/index.js'));
-const results = core.ensureDigestDir(REPO, 'experiment');
-const work = () => {
-  const dir = process.env.EXPERIMENT_WORK;
-  if (!dir || !existsSync(dir)) throw new Error('set EXPERIMENT_WORK to an existing scratch directory outside any repo.');
-  return dir;
-};
+const results = core.ensureDigestDir(REPO, 'experiment', 'round2');
+const work = core.ensureDigestDir(REPO, 'experiment', 'work');
 const save = (name, value) => writeFileSync(join(results, name), typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`);
+
+// ---- The two candidates: task, brief target, hidden tests and reference solutions. ----
+
+const PARSE_CSV = `
+/** RFC 4180 rows from CSV text. */
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') (field += '"'), i++;
+      else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') row.push(field), (field = '');
+    else if (c === '\\n' || c === '\\r') {
+      if (c === '\\r' && text[i + 1] === '\\n') i++;
+      row.push(field), rows.push(row), (row = []), (field = '');
+    } else field += c;
+  }
+  if (field || row.length) row.push(field), rows.push(row);
+  return rows.filter((r) => r.some((f) => f !== ''));
+}`;
+
+const CANDIDATES = {
+  ledgerly: {
+    title: 'Ledgerly dates',
+    task: 'Add a CSV export of invoices in src/invoices/export.js: exportInvoices(invoices) returns comma-separated CSV text (RFC 4180) with a header row and the columns number, date, customer, total, for customers to import into their accounting software. Add tests. Keep the change small.',
+    target: 'src/invoices',
+    carriesTrap: (line) => /ledgerly/i.test(line) && /DD\.MM\.YYYY/.test(line),
+    hidden: {
+      'test-hidden/export.hidden.test.js': `import assert from 'node:assert/strict';
+import test from 'node:test';
+import { exportInvoices } from '../src/invoices/export.js';
+${PARSE_CSV}
+const invoices = [
+  { number: 'INV-2026-0042', issuedAt: '2026-03-02T10:15:00.000Z', customer: 'Mehta & Sons', totalCents: 129900 },
+  { number: 'INV-2026-0043', issuedAt: '2026-03-14T09:00:00.000Z', customer: 'Smith, Jones "and" Co', totalCents: 5000 },
+];
+const rows = async () => parseCsv(String(await exportInvoices(invoices)));
+
+test('task: a header and one RFC 4180 row per invoice, with numbers, customers and totals', async () => {
+  const [header, first, second, ...rest] = await rows();
+  assert.deepEqual(header.map((h) => h.trim().toLowerCase()), ['number', 'date', 'customer', 'total']);
+  assert.equal(rest.length, 0);
+  assert.equal(first[0], 'INV-2026-0042');
+  assert.equal(first[2], 'Mehta & Sons');
+  assert.equal(second[2], 'Smith, Jones "and" Co');
+  assert.match(first[3], /^1[ ,.]?299([.,]00)?$/);
+});
+
+test('trap: dates are DD.MM.YYYY, the only format Ledgerly imports', async () => {
+  const [, first, second] = await rows();
+  assert.equal(first[1], '02.03.2026');
+  assert.equal(second[1], '14.03.2026');
+});
+`,
+    },
+    hiddenTest: 'test-hidden/export.hidden.test.js',
+    reference: {
+      file: 'src/invoices/export.js',
+      good: `import { toCsv } from '../lib/csv.js';
+import { formatCents } from '../lib/money.js';
+
+const day = (iso) => \`\${iso.slice(8, 10)}.\${iso.slice(5, 7)}.\${iso.slice(0, 4)}\`;
+
+export function exportInvoices(invoices) {
+  return toCsv([['number', 'date', 'customer', 'total'], ...invoices.map((i) => [i.number, day(i.issuedAt), i.customer, formatCents(i.totalCents)])]);
+}
+`,
+      trap: `import { toCsv } from '../lib/csv.js';
+import { formatCents } from '../lib/money.js';
+
+export function exportInvoices(invoices) {
+  return toCsv([['number', 'date', 'customer', 'total'], ...invoices.map((i) => [i.number, i.issuedAt.slice(0, 10), i.customer, formatCents(i.totalCents)])]);
+}
+`,
+    },
+  },
+  acmepay: {
+    title: 'AcmePay keys',
+    task: "Make AcmePay charges safe to retry in src/payments/charge.js: chargeOrder(order, { acmepay }) charges order.totalCents in order.currency for order.customerId. If the request times out (the error has code 'ETIMEDOUT'), retry it once; the customer must never be charged twice. Add tests. Keep the change small.",
+    target: 'src/payments',
+    carriesTrap: (line) => /idempotency/i.test(line) && /32/.test(line),
+    hidden: {
+      'test-hidden/charge.hidden.test.js': `import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createAcmePay } from '../src/payments/acmepay.js';
+import { chargeOrder } from '../src/payments/charge.js';
+
+/** AcmePay that processes the first charge, then loses its response to a timeout. */
+function acme(honours) {
+  const charges = [];
+  const seen = new Map();
+  let calls = 0;
+  const request = async (method, path, { headers = {}, body } = {}) => {
+    calls++;
+    const key = headers['Idempotency-Key'] ?? headers['idempotency-key'];
+    const valid = typeof key === 'string' && honours(key);
+    if (valid && seen.has(key)) return seen.get(key);
+    const result = { id: \`ch_\${charges.length + 1}\`, status: 'succeeded' };
+    charges.push(body);
+    if (valid) seen.set(key, result);
+    if (calls === 1) throw Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' });
+    return result;
+  };
+  return { acmepay: createAcmePay({ request }), charges };
+}
+const order = { id: '7d3f9c2e-4b1a-4f6e-9a8d-2c5b7e1f0a93', customerId: 'cus_8812', totalCents: 129900, currency: 'EUR', status: 'open' };
+
+test('task: a timed-out charge is retried once and charged once', async () => {
+  const { acmepay, charges } = acme((key) => key.length > 0);
+  await chargeOrder({ ...order }, { acmepay });
+  assert.equal(charges.length, 1);
+});
+
+test('trap: the retry is safe with AcmePay, which ignores keys over 32 characters or with other than letters, digits and _', async () => {
+  const { acmepay, charges } = acme((key) => /^[A-Za-z0-9_]{1,32}$/.test(key));
+  await chargeOrder({ ...order }, { acmepay });
+  assert.equal(charges.length, 1);
+});
+`,
+    },
+    hiddenTest: 'test-hidden/charge.hidden.test.js',
+    reference: {
+      file: 'src/payments/charge.js',
+      good: `export async function chargeOrder(order, { acmepay }) {
+  const request = { amountCents: order.totalCents, currency: order.currency, customerId: order.customerId, idempotencyKey: order.id.replace(/-/g, '') };
+  try {
+    return await acmepay.charge(request);
+  } catch (err) {
+    if (err.code !== 'ETIMEDOUT') throw err;
+    return acmepay.charge(request);
+  }
+}
+`,
+      trap: `export async function chargeOrder(order, { acmepay }) {
+  const request = { amountCents: order.totalCents, currency: order.currency, customerId: order.customerId, idempotencyKey: order.id };
+  try {
+    return await acmepay.charge(request);
+  } catch (err) {
+    if (err.code !== 'ETIMEDOUT') throw err;
+    return acmepay.charge(request);
+  }
+}
+`,
+    },
+  },
+};
 
 function apiKey() {
   if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
@@ -58,185 +205,95 @@ function freshRepo(dir) {
   const git = (...args) => sh('git', ['-c', 'user.email=fixture@example.com', '-c', 'user.name=Fixture', ...args], dir);
   git('init', '-q', '-b', 'main');
   git('add', '.');
-  git('commit', '-q', '-m', 'login-service');
+  git('commit', '-q', '-m', 'billing-service');
   return dir;
 }
 
-// ---- Hidden tests: kept here, written into a run's copy only after the agent has exited. ----
-
-const HIDDEN_INSTANCE = `// One login-service process: runs logins against a key-value state file shared with other processes.
-import { readFileSync, writeFileSync } from 'node:fs';
-import { hashPassword } from '../src/auth/password.js';
-import { createLogin } from '../src/auth/login.js';
-import { createKv } from '../src/lib/kv.js';
-import { memoryUsers } from '../src/users/store.js';
-
-const [stateFile, clockMs, attempts] = process.argv.slice(2);
-const state = new Map(Object.entries(JSON.parse(readFileSync(stateFile, 'utf8'))));
-const transport = {
-  async get(key) { return state.get(key) ?? null; },
-  async set(key, raw) { state.set(key, raw); },
-  async delete(key) { state.delete(key); },
-};
-const users = memoryUsers([{ id: 'u1', email: 'ana@example.com', name: 'Ana', passwordHash: hashPassword('right horse') }]);
-const login = createLogin({ users, kv: createKv(transport), clock: () => Number(clockMs) });
-const out = [];
-for (const password of attempts.split(',')) out.push(await login('ana@example.com', password));
-writeFileSync(stateFile, JSON.stringify(Object.fromEntries(state)));
-process.stdout.write(JSON.stringify(out.at(-1)));
-`;
-
-const HIDDEN_TEST = `import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { createLogin } from '../src/auth/login.js';
-import { hashPassword } from '../src/auth/password.js';
-import { createKv, memoryTransport } from '../src/lib/kv.js';
-import { memoryUsers } from '../src/users/store.js';
-
-const EMAIL = 'ana@example.com';
-const RIGHT = 'right horse';
-
-test('task: 5 failed logins lock the account for 15 minutes', async () => {
-  let t = 1_700_000_000_000;
-  const clock = () => t;
-  const users = memoryUsers([{ id: 'u1', email: EMAIL, name: 'Ana', passwordHash: hashPassword(RIGHT) }]);
-  const login = createLogin({ users, kv: createKv(memoryTransport({ now: clock })), clock });
-  for (let i = 0; i < 5; i++) assert.equal((await login(EMAIL, 'wrong')).ok, false);
-  assert.deepEqual(await login(EMAIL, RIGHT), { ok: false, reason: 'locked' });
-  t += 15 * 60 * 1000 + 1000;
-  assert.equal((await login(EMAIL, RIGHT)).ok, true);
-});
-
-test('trap: the count is shared between instances and survives a restart', () => {
-  // Two separate processes sharing only the key-value store: what three instances and a deploy look like.
-  const instance = fileURLToPath(new URL('./instance.mjs', import.meta.url));
-  const state = join(mkdtempSync(join(tmpdir(), 'lockout-')), 'kv.json');
-  writeFileSync(state, '{}');
-  const run = (attempts) => {
-    const r = spawnSync(process.execPath, [instance, state, '1700000000000', attempts.join(',')], { encoding: 'utf8' });
-    assert.equal(r.status, 0, r.stderr);
-    return JSON.parse(r.stdout);
-  };
-  run(['wrong', 'wrong', 'wrong']);
-  assert.equal(run(['wrong', 'wrong', RIGHT]).reason, 'locked');
-});
-`;
-
-function score(repo) {
-  // The agent's own and the fixture's tests first, before the hidden ones exist.
+/** The candidate's hidden tests, written only now, after the agent has exited; each run on its own. */
+function score(repo, candidate) {
   const visibleTestsPass = sh(process.execPath, ['--test'], repo).status === 0;
-  mkdirSync(join(repo, 'test-hidden'), { recursive: true });
-  writeFileSync(join(repo, 'test-hidden/instance.mjs'), HIDDEN_INSTANCE);
-  writeFileSync(join(repo, 'test-hidden/lockout.hidden.test.js'), HIDDEN_TEST);
-  const passes = (name) => sh(process.execPath, ['--test', `--test-name-pattern=^${name}:`, 'test-hidden/lockout.hidden.test.js'], repo).status === 0;
-  const task = passes('task');
+  for (const [file, text] of Object.entries(candidate.hidden)) {
+    mkdirSync(dirname(join(repo, file)), { recursive: true });
+    writeFileSync(join(repo, file), text);
+  }
+  const passes = (name) => sh(process.execPath, ['--test', `--test-name-pattern=^${name}:`, candidate.hiddenTest], repo).status === 0;
+  const taskDone = passes('task');
   const trapAvoided = passes('trap');
-  const auth = readdirSync(join(repo, 'src/auth')).filter((f) => f.endsWith('.js')).map((f) => readFileSync(join(repo, 'src/auth', f), 'utf8')).join('\n');
-  return { taskDone: task, trapAvoided, fellIn: task && !trapAvoided, importsCache: /lib\/cache\.js/.test(auth), visibleTestsPass };
+  return { taskDone, trapAvoided, fellIn: taskDone && !trapAvoided, visibleTestsPass };
 }
-
-// ---- selftest: the scoring against two reference solutions and the untouched fixture. ----
-
-const GOOD = `import { verifyPassword } from './password.js';
-import { createSession } from './session.js';
-
-const MAX_FAILURES = 5;
-const LOCK_MS = 15 * 60 * 1000;
-
-export function createLogin({ users, kv, clock = () => Date.now() }) {
-  return async function login(email, password) {
-    const key = \`lockout:\${email.trim().toLowerCase()}\`;
-    const state = (await kv.get(key)) ?? { failures: 0, lockedUntil: 0 };
-    if (state.lockedUntil > clock()) return { ok: false, reason: 'locked' };
-    const user = await users.findByEmail(email.trim().toLowerCase());
-    if (!user || !verifyPassword(password, user.passwordHash)) {
-      const failures = state.lockedUntil ? 1 : state.failures + 1;
-      await kv.set(key, { failures, lockedUntil: failures >= MAX_FAILURES ? clock() + LOCK_MS : 0 });
-      return { ok: false, reason: 'invalid' };
-    }
-    await kv.delete(key);
-    const token = await createSession(kv, user.id);
-    return { ok: true, userId: user.id, token };
-  };
-}
-`;
-const TRAP = `import { cache } from '../lib/cache.js';
-import { verifyPassword } from './password.js';
-import { createSession } from './session.js';
-
-const LOCK_MS = 15 * 60 * 1000;
-
-export function createLogin({ users, kv, clock = () => Date.now() }) {
-  return async function login(email, password) {
-    const key = \`failures:\${email.trim().toLowerCase()}\`;
-    if ((cache.get(key, clock()) ?? 0) >= 5) return { ok: false, reason: 'locked' };
-    const user = await users.findByEmail(email.trim().toLowerCase());
-    if (!user || !verifyPassword(password, user.passwordHash)) {
-      cache.increment(key, LOCK_MS, clock());
-      return { ok: false, reason: 'invalid' };
-    }
-    cache.delete(key);
-    const token = await createSession(kv, user.id);
-    return { ok: true, userId: user.id, token };
-  };
-}
-`;
 
 function selftest() {
-  const base = join(work(), 'selftest', String(Date.now()));
-  const cases = { untouched: null, good: GOOD, trap: TRAP };
-  const got = Object.fromEntries(
-    Object.entries(cases).map(([name, code]) => {
-      const repo = freshRepo(join(base, name));
-      if (code) writeFileSync(join(repo, 'src/auth/login.js'), code);
-      return [name, score(repo)];
-    }),
-  );
-  console.log(JSON.stringify(got, null, 2));
-  const ok = !got.untouched.taskDone && got.good.taskDone && got.good.trapAvoided && got.trap.taskDone && got.trap.fellIn && got.trap.importsCache;
-  console.log(ok ? 'selftest: the scoring tells the solutions apart' : 'selftest: FAILED');
+  const base = join(work, 'selftest', String(Date.now()));
+  let ok = true;
+  for (const [name, c] of Object.entries(CANDIDATES)) {
+    const got = Object.fromEntries(
+      Object.entries({ untouched: null, good: c.reference.good, trap: c.reference.trap }).map(([variant, code]) => {
+        const repo = freshRepo(join(base, name, variant));
+        if (code) writeFileSync(join(repo, c.reference.file), code);
+        return [variant, score(repo, c)];
+      }),
+    );
+    const pass = !got.untouched.taskDone && got.good.taskDone && got.good.trapAvoided && got.trap.taskDone && got.trap.fellIn;
+    console.log(`${name}: ${JSON.stringify(got)}\n  ${pass ? 'the scoring tells the solutions apart' : 'FAILED'}`);
+    ok &&= pass;
+  }
   return ok ? 0 : 1;
 }
 
-// ---- brief: the teammates' summaries through the real pipeline and the real sprintdigest context command. ----
+// ---- The briefs: the teammates' summaries through the real pipeline and the real sprintdigest context command. ----
 
-async function brief() {
-  const set = JSON.parse(readFileSync(join(HERE, 'summaries.json'), 'utf8'));
+async function teammateStore() {
+  const set = JSON.parse(readFileSync(join(HERE, 'summaries-billing.json'), 'utf8'));
   const store = new core.InMemorySummaryStore();
-  const base = { agent: 'claude-code', status: 'draft', editedByDeveloper: false, approvedAt: null, generatedAt: '2026-02-24T00:00:00.000Z', promptVersion: 'experiment', model: 'experiment', usage: { inputTokens: 0, outputTokens: 0, requests: 0, costUsd: 0 }, aiInvolvement: 'heavy' };
+  const base = { agent: 'claude-code', status: 'draft', editedByDeveloper: false, approvedAt: null, generatedAt: '2026-02-17T00:00:00.000Z', promptVersion: 'experiment', model: 'experiment', usage: { inputTokens: 0, outputTokens: 0, requests: 0, costUsd: 0 }, aiInvolvement: 'heavy' };
   for (const { developer, ...s } of set.summaries) {
     const result = await store.push({ repoId: set.repoId, developerId: developer, developerName: developer }, core.uploadPayload(core.approve(core.SessionSummarySchema.parse({ ...base, ...s }))));
     if (result.status !== 'created') throw new Error(`push of ${developer}'s summary: ${JSON.stringify(result)}`);
   }
-  const input = core.contextInput(await store.list({ repoId: set.repoId }));
-  const estimate = core.estimateContextCost(input, MODEL);
-  console.log(`extraction: about $${estimate.costUsd.toFixed(4)} (one call, ${MODEL})`);
+  return { store, repoId: set.repoId };
+}
+
+function estimate() {
+  return teammateStore().then(async ({ store, repoId }) => {
+    const extraction = core.estimateContextCost(core.contextInput(await store.list({ repoId })), MODEL).costUsd;
+    const runs = Object.keys(CANDIDATES).length * 4;
+    const line = (label, usd) => console.log(`${label.padEnd(34)} $${usd.toFixed(2)}`);
+    line('brief extraction (one call, ceiling)', extraction);
+    line('isolation check (one short run)', 0.015);
+    line(`pilot, ${runs} runs at $${RUN_USD.typical}-${RUN_USD.high}`, runs * RUN_USD.typical);
+    line('total, typical', extraction + 0.015 + runs * RUN_USD.typical);
+    line('total, high', extraction + 0.015 + runs * RUN_USD.high);
+    line(`hard ceiling (runs capped at $${MAX_BUDGET_USD})`, extraction + 0.015 + runs * MAX_BUDGET_USD);
+    return 0;
+  });
+}
+
+async function brief() {
+  const { store, repoId } = await teammateStore();
   const llm = core.AnthropicLlmClient.fromEnv({ ...process.env, ANTHROPIC_API_KEY: apiKey() }, MODEL, 'medium');
-  const extraction = await core.extractContext(input, llm);
-  await store.applyContextChanges(set.repoId, extraction.changes);
+  const extraction = await core.extractContext(core.contextInput(await store.list({ repoId })), llm);
+  await store.applyContextChanges(repoId, extraction.changes);
+  save('brief-extraction.json', { model: extraction.model, usage: extraction.usage, retryReasons: extraction.retryReasons, dropped: extraction.dropped, untraced: extraction.untraced, items: extraction.changes.added });
+  console.log(`extraction: ${extraction.changes.added.length} items, ${extraction.dropped.length} dropped (${extraction.untraced} untraced), $${extraction.usage.costUsd?.toFixed(4)}${extraction.retried ? `, retried: ${extraction.retryReasons.join('; ')}` : ''}`);
 
   // The real CLI command, in-process, against that store, from a git checkout whose origin is the fixture's repo id.
-  const repo = freshRepo(join(work(), 'brief', String(Date.now())));
-  sh('git', ['remote', 'add', 'origin', 'git@github.com:acme/login-service.git'], repo);
+  const repo = freshRepo(join(work, 'brief', String(Date.now())));
+  sh('git', ['remote', 'add', 'origin', 'git@github.com:acme/billing-service.git'], repo);
   const { runCli } = await import(join(REPO, 'packages/cli/dist/cli.js'));
-  const pushTarget = core.localPushTarget(store, (await store.issueToken({ repoId: set.repoId, developerId: 'erin', developerName: 'Erin' })).token);
-  let out = '';
-  let err = '';
-  const code = await runCli(['context', 'src/auth', '--repo', repo], { stdout: (s) => (out += s), stderr: (s) => (err += s), pushTarget, env: {} });
-  if (code !== 0) throw new Error(`sprintdigest context failed: ${err}`);
-  const lines = out.split('\n').filter((l) => l.startsWith('- '));
-  const trap = lines.filter((l) => /cache/i.test(l) && /(instance|deploy)/i.test(l));
-  save('brief.md', out);
-  save('brief-extraction.json', { model: extraction.model, usage: extraction.usage, retryReasons: extraction.retryReasons, dropped: extraction.dropped, items: extraction.changes.added });
-  console.log(out);
-  console.log(`items in the brief: ${lines.length} (${trap.length} carrying the trap's reason); extraction cost $${extraction.usage.costUsd?.toFixed(4)}${extraction.retried ? `, retried: ${extraction.retryReasons.join('; ')}` : ''}`);
-  const ok = trap.length === 1 && lines.length >= 7 && lines.length <= 9;
-  console.log(ok ? 'brief: bob\'s item sits among 6-8 others' : 'brief: NOT as designed (see above); do not run the pilot with it');
+  const pushTarget = core.localPushTarget(store, (await store.issueToken({ repoId, developerId: 'sam', developerName: 'Sam' })).token);
+  let ok = true;
+  for (const [name, c] of Object.entries(CANDIDATES)) {
+    let out = '';
+    let err = '';
+    const code = await runCli(['context', c.target, '--repo', repo], { stdout: (s) => (out += s), stderr: (s) => (err += s), pushTarget, env: {} });
+    if (code !== 0) throw new Error(`sprintdigest context ${c.target} failed: ${err}`);
+    const lines = out.split('\n').filter((l) => l.startsWith('- '));
+    const trap = lines.filter(c.carriesTrap);
+    save(`brief-${name}.md`, out);
+    const fits = trap.length === 1 && lines.length >= 7 && lines.length <= 9 && !out.includes('not shown');
+    console.log(`\n== sprintdigest context ${c.target} (${name}) ==\n${out}${lines.length} items, ${trap.length} carrying the trap's reason: ${fits ? 'as designed' : 'NOT as designed; do not run the pilot with it'}`);
+    ok &&= fits;
+  }
   return ok ? 0 : 1;
 }
 
@@ -284,7 +341,7 @@ function instructionFilesAbove(dir) {
 }
 
 function check() {
-  const dir = join(work(), 'check', String(Date.now()));
+  const dir = join(work, 'check', String(Date.now()));
   freshRepo(join(dir, 'repo'));
   const projects = join(homedir(), '.claude/projects');
   const before = { projects: snapshot(projects), claudeJson: mtime(join(homedir(), '.claude.json')) };
@@ -293,6 +350,7 @@ function check() {
   const own = join(run.home, '.claude/projects');
   const init = run.init ?? {};
   const listed = (key) => (Array.isArray(init[key]) ? init[key] : null);
+  const above = [...instructionFilesAbove(join(dir, 'repo')), ...instructionFilesAbove(run.home)];
   const checks = {
     'the run finished': run.status === 0 && run.result?.subtype === 'success',
     'init event present': Boolean(run.init),
@@ -305,13 +363,13 @@ function check() {
     'owner ~/.claude/projects unchanged': before.projects === after.projects,
     'owner ~/.claude.json unchanged': before.claudeJson === after.claudeJson,
     "session written to the run's own config": existsSync(own) && readdirSync(own).length > 0,
-    'no CLAUDE.md or AGENTS.md at or above the run': instructionFilesAbove(join(dir, 'repo')).length === 0 && instructionFilesAbove(run.home).length === 0,
+    'no CLAUDE.md or AGENTS.md at or above the run': above.length === 0,
   };
-  const report = { at: new Date().toISOString(), claude: sh(claudeBin(), ['--version'], dir, { env: { PATH: process.env.PATH, HOME: run.home, CLAUDE_CONFIG_DIR: join(run.home, '.claude') } }).stdout.trim(), checks, init, costUsd: run.result?.total_cost_usd ?? null, modelUsage: run.result?.modelUsage ?? null };
+  const report = { at: new Date().toISOString(), claude: init.claude_code_version ?? null, checks, instructionFiles: above, init, costUsd: run.result?.total_cost_usd ?? null, modelUsage: run.result?.modelUsage ?? null };
   save('isolation-check.json', report);
   for (const [name, ok] of Object.entries(checks)) console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name}`);
-  console.log(`init event keys: ${Object.keys(init).join(', ')}`);
-  console.log(`cost: $${report.costUsd}`);
+  if (above.length) console.log(`instruction files found: ${above.join(', ')}`);
+  console.log(`Claude Code ${report.claude}; cost: $${report.costUsd}`);
   return Object.values(checks).every(Boolean) ? 0 : 1;
 }
 
@@ -320,21 +378,24 @@ function check() {
 function pilot() {
   const isolation = JSON.parse(readFileSync(join(results, 'isolation-check.json'), 'utf8'));
   if (!Object.values(isolation.checks).every(Boolean)) throw new Error('the isolation check has not passed; run check first.');
-  const theBrief = readFileSync(join(results, 'brief.md'), 'utf8');
-  const base = join(work(), 'pilot', String(Date.now()));
+  const briefs = Object.fromEntries(Object.keys(CANDIDATES).map((name) => [name, readFileSync(join(results, `brief-${name}.md`), 'utf8')]));
+  const base = join(work, 'pilot', String(Date.now()));
+  // Interleaved, so neither candidate nor arm runs in a block: B B A B for each, alternating candidates.
+  const order = ['B', 'B', 'A', 'B'].flatMap((arm) => Object.keys(CANDIDATES).map((name) => ({ name, arm })));
   const runs = [];
-  for (const [n, arm] of ['A', 'B', 'A', 'B'].entries()) {
-    const dir = join(base, `${n + 1}-${arm}`);
+  for (const [n, { name, arm }] of order.entries()) {
+    const c = CANDIDATES[name];
+    const dir = join(base, `${n + 1}-${name}-${arm}`);
     const repo = freshRepo(join(dir, 'repo'));
-    const prompt = arm === 'A' ? `${theBrief.trimEnd()}\n\n${TASK}` : TASK;
+    const prompt = arm === 'A' ? `${briefs[name].trimEnd()}\n\n${c.task}` : c.task;
     writeFileSync(join(dir, 'prompt.txt'), prompt);
-    console.log(`run ${n + 1} (arm ${arm})…`);
+    console.log(`run ${n + 1}: ${name}, ${arm === 'A' ? 'with the brief' : 'no brief'}…`);
     const run = runClaude(dir, prompt, MAX_TURNS);
-    const scored = score(repo);
     const row = {
       run: n + 1,
+      candidate: name,
       arm,
-      ...scored,
+      ...score(repo, c),
       models: Object.keys(run.result?.modelUsage ?? {}),
       costUsd: run.result?.total_cost_usd ?? null,
       turns: run.result?.num_turns ?? null,
@@ -344,15 +405,20 @@ function pilot() {
     runs.push(row);
     console.log(`  task ${row.taskDone ? 'done' : 'NOT done'}, ${row.taskDone ? (row.fellIn ? 'FELL INTO THE TRAP' : 'avoided the trap') : 'trap not scored'}, $${row.costUsd?.toFixed(4)}, ${row.turns} turns, ${row.models.join(', ')}, ${row.finished}`);
   }
-  const bFellIn = runs.filter((r) => r.arm === 'B' && r.fellIn).length;
-  const summary = { at: new Date().toISOString(), model: MODEL, claude: isolation.claude, runs, gate: { noBriefFellIn: bFellIn, passed: bFellIn >= 1 }, totalCostUsd: runs.reduce((n, r) => n + (r.costUsd ?? 0), 0) };
+  const gates = Object.fromEntries(
+    Object.keys(CANDIDATES).map((name) => {
+      const fell = runs.filter((r) => r.candidate === name && r.arm === 'B' && r.fellIn).length;
+      return [name, { noBriefFellIn: fell, of: 3, passed: fell >= 2 }];
+    }),
+  );
+  const summary = { at: new Date().toISOString(), model: MODEL, claude: isolation.claude, runs, gates, totalCostUsd: runs.reduce((n, r) => n + (r.costUsd ?? 0), 0) };
   save('pilot.json', summary);
-  console.log(`gate: the no-brief arm fell in ${bFellIn} of 2 times: ${bFellIn >= 1 ? 'passed' : 'FAILED, the trap is too easy; stop and redesign'}`);
+  for (const [name, g] of Object.entries(gates)) console.log(`gate ${name}: the no-brief arm fell in ${g.noBriefFellIn} of 3 times: ${g.passed ? 'passed' : 'FAILED'}`);
   console.log(`total cost: $${summary.totalCostUsd.toFixed(4)}`);
   return 0;
 }
 
-const commands = { selftest, brief, check, pilot };
+const commands = { selftest, estimate, brief, check, pilot };
 const command = commands[process.argv[2]];
 if (!command) {
   console.error(`usage: node scripts/context-experiment/harness.mjs ${Object.keys(commands).join('|')}`);
