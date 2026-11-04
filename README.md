@@ -69,6 +69,10 @@ PGlite mode (`--data`) is single-process: stop the server before running `token`
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
 Summarising sends redacted, condensed session text to the Anthropic API using your own `ANTHROPIC_API_KEY`; pushing sends only approved summaries' shared fields to your digest server. Raw transcripts never leave the machine, and `.digest/` (local state) is gitignored.
 
+## License
+
+Apache License 2.0; see [LICENSE](LICENSE).
+
 ## More detail
 
 - [PROJECT_PLAN.md](PROJECT_PLAN.md): goals, architecture, phases
