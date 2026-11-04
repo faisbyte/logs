@@ -5,7 +5,7 @@ import { StatusPill } from '~/components/status-pill';
 // The server renders digests to a small, fixed Markdown shape (DECISIONS.md D50), so this parses that shape into
 // React elements. Text is never treated as HTML, whatever it contains.
 
-type Block = { kind: 'p'; text: string } | { kind: 'em'; text: string } | { kind: 'ul'; items: string[] };
+type Block = { kind: 'p'; text: string } | { kind: 'em'; text: string } | { kind: 'ul'; items: string[] } | { kind: 'label'; text: string };
 export type DigestSection = { heading: string | null; blocks: Block[] };
 export type ParsedDigest = { title: string; corrected: boolean; correction: string | null; coverage: string | null; sections: DigestSection[] };
 
@@ -34,6 +34,12 @@ export function parseDigest(markdown: string): ParsedDigest {
       continue;
     }
     const text = lines.join(' ');
+    // A bold line on its own, such as "**Key decisions:**", is a small label over the list that follows.
+    const label = /^\*\*([^*]+)\*\*$/.exec(text);
+    if (label) {
+      current.blocks.push({ kind: 'label', text: label[1]! });
+      continue;
+    }
     const em = italic(text);
     if (em && /^This corrects/.test(em)) correction = em;
     else if (em && /^Based on /.test(em)) coverage = em;
@@ -53,25 +59,44 @@ function inline(text: string): ReactNode[] {
   });
 }
 
-/** A ticket heading ("PROJ-201: Account lockout", or several joined by " · ") with each key in mono, as on the showcase site. */
+const TICKET = /^([A-Z][A-Z0-9]{1,9}-\d+)(: .*)$/;
+
+/** Markers: blue over decisions, amber on risks. Decorative, so hidden from assistive tech; the words carry the meaning. */
+const markerFor = (text: string) => (/^Key decisions\b/i.test(text) ? 'decision' : /^Risks and open questions\b/i.test(text) ? 'attention' : null);
+const Marker = ({ kind }: { kind: 'decision' | 'attention' | null }) => (kind ? <span className="marker" data-marker={kind} aria-hidden="true" /> : null);
+
+/**
+ * A ticket heading ("PROJ-201: Account lockout", or several joined by " · "). Each key is in neutral mono (green means
+ * approved, nothing else), and each ticket is its own block, so narrow screens put one per line.
+ */
 function heading(text: string): ReactNode {
-  return text.split(/([A-Z][A-Z0-9]{1,9}-\d+(?=:))/).map((part, i) =>
-    i % 2 ? (
-      <span key={i} className="text-accent font-mono text-[0.85em] font-medium">
-        {part}
+  const tickets = text.split(' · ');
+  if (!tickets.every((t) => TICKET.test(t))) return text;
+  return tickets.map((ticket, i) => {
+    const [, key, rest] = TICKET.exec(ticket)!;
+    return (
+      <span key={i}>
+        {i ? (
+          <span aria-hidden="true" className="hidden sm:inline">
+            {' · '}
+          </span>
+        ) : null}
+        <span data-ticket className="block sm:inline">
+          <span className="ticket-key text-fg font-mono text-[0.85em] font-medium">{key}</span>
+          {rest}
+        </span>
       </span>
-    ) : (
-      part
-    ),
-  );
+    );
+  });
 }
 
 export function DigestDocument({ markdown, caption }: { markdown: string; caption?: ReactNode }) {
   const digest = parseDigest(markdown);
   return (
-    <article className="digest border-line bg-bg-elev rounded-lg border">
-      {caption ? <div className="border-line text-fg-subtle flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b px-5 py-2 font-mono text-xs">{caption}</div> : null}
-      <div className="text-fg px-5 py-6 font-serif text-[16px] leading-[1.6] sm:px-8 sm:py-8 sm:text-[17px]">
+    // Under 640px the card falls away (no border or padding) so the text uses the full width.
+    <article className="digest sm:border-line sm:bg-bg-elev sm:rounded-lg sm:border">
+      {caption ? <div className="border-line text-fg-subtle flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 font-mono text-xs sm:px-5 sm:py-2">{caption}</div> : null}
+      <div className="text-fg py-5 font-serif text-[16px] leading-[1.6] sm:px-8 sm:py-8 sm:text-[17px]">
         {digest.corrected ? (
           <p className="mb-3 font-sans">
             <StatusPill tone="attention">Corrected</StatusPill>
@@ -85,9 +110,19 @@ export function DigestDocument({ markdown, caption }: { markdown: string; captio
         ) : null}
         {digest.sections.map((section, i) => (
           <section key={i} className={section.heading ? 'mt-7' : 'mt-4'}>
-            {section.heading ? <h3 className="text-lg font-semibold">{heading(section.heading)}</h3> : null}
+            {section.heading ? (
+              <h3 className="text-lg font-semibold">
+                <Marker kind={markerFor(section.heading)} />
+                {heading(section.heading)}
+              </h3>
+            ) : null}
             {section.blocks.map((block, j) =>
-              block.kind === 'ul' ? (
+              block.kind === 'label' ? (
+                <p key={j} data-marker={markerFor(block.text) ?? undefined} className="mt-4 font-semibold">
+                  <Marker kind={markerFor(block.text)} />
+                  {block.text}
+                </p>
+              ) : block.kind === 'ul' ? (
                 <ul key={j} className="text-fg-muted marker:text-fg-subtle mt-2 list-disc space-y-1.5 pl-5">
                   {block.items.map((item, k) => (
                     <li key={k}>{inline(item)}</li>

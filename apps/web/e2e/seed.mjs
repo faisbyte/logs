@@ -23,7 +23,7 @@ const body = (title, extra = '') =>
     extra,
     'Sprint 7 delivered the account lockout after repeated failed logins.',
     '**AI involvement: moderate for every ticket.** AI wrote parts of the changes.',
-    '## PROJ-201: Account lockout',
+    '## PROJ-201: Account lockout · PROJ-202: Lockout messages',
     'Accounts now lock after 5 failed logins and unlock automatically after 15 minutes.',
     '**Key decisions:**',
     '- Accounts unlock automatically after 15 minutes, because unlocking by hand would add work for the support team.',

@@ -29,12 +29,19 @@ const newsreader = Newsreader({ subsets: ['latin'], variable: '--font-newsreader
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const me = await viewer().catch(() => null);
   return (
-    <html lang="en" data-theme="dark" className={`${geist.variable} ${geistMono.variable} ${newsreader.variable}`} suppressHydrationWarning>
+    // Readers follow their system theme by default; developers start dark. A stored choice wins for anyone.
+    <html
+      lang="en"
+      data-theme="dark"
+      data-default-theme={me?.role === 'reader' ? 'system' : 'dark'}
+      className={`${geist.variable} ${geistMono.variable} ${newsreader.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-dvh">
-        <a href="#main" className="bg-accent text-on-accent no-print sr-only z-50 rounded-md px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
+        <a href="#main" className="bg-fg text-bg no-print sr-only z-50 rounded-md px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
           Skip to content
         </a>
         <AppHeader viewer={me} />

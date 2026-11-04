@@ -57,10 +57,18 @@ describe('DigestDocument', () => {
     expect(screen.getByRole('note')).toHaveTextContent('This corrects the update sent on 2026-04-20');
   });
 
-  it('sets every ticket key of a combined heading in mono', () => {
+  it('sets every ticket key in neutral mono, one ticket per block so narrow screens put each on its own line', () => {
     const { container } = render(<DigestDocument markdown={'# T\n\n## LOGS-1: Session parsing · LOGS-2: Secret redaction\n\nText.\n'} />);
-    expect([...container.querySelectorAll('h3 .font-mono')].map((k) => k.textContent)).toEqual(['LOGS-1', 'LOGS-2']);
+    expect([...container.querySelectorAll('h3 [data-ticket]')].map((t) => t.textContent)).toEqual(['LOGS-1: Session parsing', 'LOGS-2: Secret redaction']);
+    expect([...container.querySelectorAll('h3 .ticket-key')].map((k) => k.textContent)).toEqual(['LOGS-1', 'LOGS-2']);
     expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('LOGS-1: Session parsing · LOGS-2: Secret redaction');
+  });
+
+  it('marks "Key decisions" in blue and "Risks and open questions" in amber, subtly', () => {
+    const { container } = render(<DigestDocument markdown={digest} />);
+    expect(screen.getByText('Key decisions:').closest('[data-marker]')).toHaveAttribute('data-marker', 'decision');
+    expect(screen.getByRole('heading', { level: 3, name: 'Risks and open questions' }).querySelector('.marker')).toHaveAttribute('data-marker', 'attention');
+    expect(container.querySelectorAll('.marker')).toHaveLength(2);
   });
 
   it('shows markup in the text as text, never as HTML', () => {

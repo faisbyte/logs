@@ -97,13 +97,14 @@
     overflow-x: clip;
   }
 
+  /* Neutral: green means approved or safe only, so selection and focus don't borrow it. */
   ::selection {
-    background-color: var(--accent);
-    color: var(--on-accent);
+    background-color: var(--fg);
+    color: var(--bg);
   }
 
   :focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--fg);
     outline-offset: 3px;
     border-radius: 4px;
   }
@@ -144,6 +145,18 @@
   .pill[data-tone="convention"] { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
   .pill[data-tone="neutral"]::before { background-color: var(--fg-subtle); }
 
+  /* Small section markers in the digest: blue for decisions, amber for risks. A memo's margin note, not a badge. */
+  .marker {
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 2px;
+    margin-right: 0.55rem;
+    vertical-align: 0.12em;
+  }
+  .marker[data-marker="decision"] { background-color: var(--blue); }
+  .marker[data-marker="attention"] { background-color: var(--amber); }
+
   .callout-attention {
     border-color: color-mix(in srgb, var(--amber) 45%, transparent);
     color: var(--fg);
@@ -182,7 +195,11 @@
     border-bottom: 1px solid var(--line);
     vertical-align: middle;
   }
-  .data-table tbody tr:hover { background-color: var(--bg-subtle); }
+  .data-table tbody tr { position: relative; }
+  .data-table tbody tr:hover { background-color: var(--bg-subtle); cursor: pointer; }
+  .row-link::after { content: ""; position: absolute; inset: 0; }
+  .row-link:focus-visible { outline: none; }
+  .data-table tbody tr:has(.row-link:focus-visible) { outline: 2px solid var(--fg); outline-offset: -2px; background-color: var(--bg-subtle); }
   @media (max-width: 40rem) {
     .data-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .data-table,

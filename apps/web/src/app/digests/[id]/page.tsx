@@ -19,7 +19,7 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
     throw err;
   });
   return (
-    <>
+    <div className="mx-auto max-w-3xl">
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <Link href="/digests" className="text-fg-muted hover:text-fg font-mono text-xs">
           ← All digests
@@ -32,7 +32,7 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
           A developer withdrew a summary this digest included, so it was withdrawn. Readers no longer see it.
         </p>
       ) : null}
-      <div className="mt-4 max-w-3xl">
+      <div className="mt-4">
         <DigestDocument
           markdown={digest.markdown}
           caption={
@@ -44,6 +44,6 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
           }
         />
       </div>
-    </>
+    </div>
   );
 }

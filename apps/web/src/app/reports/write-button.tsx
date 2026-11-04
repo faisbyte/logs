@@ -10,7 +10,7 @@ export function WriteButton({ period }: { period: Record<string, string> }) {
       {Object.entries(period).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
-      <button type="submit" disabled={pending} className="bg-accent text-on-accent rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60">
+      <button type="submit" disabled={pending} className="bg-fg text-bg rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60">
         {pending ? 'Writing the report…' : 'Write the report'}
       </button>
       {state.error ? (

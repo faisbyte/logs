@@ -126,3 +126,82 @@ test('the skip link moves focus to the main content from the keyboard', async ({
   await page.keyboard.press('Enter');
   await expect(page.locator('#main')).toBeFocused();
 });
+
+test.describe('the archive list', () => {
+  test('makes each row one link: a click anywhere on it opens the digest', async ({ page }) => {
+    await signIn(page, seed().reader);
+    // A real pointer click on the coverage cell, not the link: the row's link covers the whole row.
+    const cell = (await page.getByRole('row').filter({ hasText: 'Report' }).getByRole('cell').nth(3).boundingBox())!;
+    await page.mouse.click(cell.x + cell.width / 2, cell.y + cell.height / 2);
+    await expect(page).toHaveURL(new RegExp(`/digests/${seed().ids.report}$`));
+  });
+
+  test('is navigable by keyboard alone: one tab stop per row, Enter opens it, with a visible focus ring', async ({ page }) => {
+    await signIn(page, seed().developer);
+    const links = page.getByRole('table').getByRole('link');
+    await expect(links).toHaveCount(4);
+    await links.first().focus();
+    for (let i = 1; i < 4; i++) {
+      await page.keyboard.press('Tab');
+      await expect(links.nth(i)).toBeFocused();
+    }
+    const outline = await page.getByRole('table').getByRole('row').nth(4).evaluate((row) => getComputedStyle(row).outlineStyle);
+    expect(outline).toBe('solid');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/digests\/[^/]+$/);
+  });
+});
+
+test.describe('layout', () => {
+  test('shows who is signed in, and their role, at 360px too', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await signIn(page, seed().reader);
+    await expect(page.getByText('Pat (PO) · reader', { exact: true }).filter({ visible: true })).toBeInViewport();
+  });
+
+  test('puts each ticket of a combined heading on its own line at 360px, and on one line on desktop', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await signIn(page, seed().reader);
+    await page.goto(`/digests/${seed().ids.corrected}`);
+    const [first, second] = await page.locator('h3 [data-ticket]').all();
+    expect((await second!.boundingBox())!.y).toBeGreaterThan((await first!.boundingBox())!.y + 10);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    expect(Math.abs((await second!.boundingBox())!.y - (await first!.boundingBox())!.y)).toBeLessThan(4);
+  });
+
+  test('centres the digest column on desktop, with the back link and print button aligned to it', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await signIn(page, seed().reader);
+    await page.goto(`/digests/${seed().ids.corrected}`);
+    const doc = (await page.locator('article.digest').boundingBox())!;
+    const back = (await page.getByRole('link', { name: '← All digests' }).boundingBox())!;
+    const print = (await page.getByRole('button', { name: 'Print or save as PDF' }).boundingBox())!;
+    expect(Math.abs(doc.x + doc.width / 2 - 640)).toBeLessThan(2);
+    expect(Math.abs(back.x - doc.x)).toBeLessThan(1);
+    expect(Math.abs(print.x + print.width - (doc.x + doc.width))).toBeLessThan(1);
+  });
+
+  test('drops the digest card at 360px so the text uses the full width', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await signIn(page, seed().reader);
+    await page.goto(`/digests/${seed().ids.corrected}`);
+    const style = await page.locator('article.digest').evaluate((el) => ({ border: getComputedStyle(el).borderTopWidth, padding: getComputedStyle(el.lastElementChild!).paddingLeft }));
+    expect(style).toEqual({ border: '0px', padding: '0px' });
+  });
+});
+
+test.describe('theme default by role', () => {
+  test.use({ colorScheme: 'light' });
+
+  test('a reader follows the system theme; a developer starts dark; a stored choice wins for both', async ({ page }) => {
+    await signIn(page, seed().reader);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await signIn(page, seed().developer);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.getByRole('button', { name: 'Light theme' }).click();
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+});
+

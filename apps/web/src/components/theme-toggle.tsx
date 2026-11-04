@@ -2,7 +2,7 @@
 
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { THEME_STORAGE_KEY, type ThemePreference } from '~/components/theme-script';
+import { defaultPreference, THEME_STORAGE_KEY, type ThemePreference } from '~/components/theme-script';
 
 const OPTIONS = [
   { value: 'system', label: 'System theme', Icon: Monitor },
@@ -10,14 +10,14 @@ const OPTIONS = [
   { value: 'dark', label: 'Dark theme', Icon: Moon },
 ] as const;
 
-function readPreference(): ThemePreference {
+function readPreference(fallback: ThemePreference): ThemePreference {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
   } catch {
     // Storage can be unavailable (private mode); fall through to the default.
   }
-  return 'dark';
+  return fallback;
 }
 
 function apply(pref: ThemePreference) {
@@ -25,12 +25,18 @@ function apply(pref: ThemePreference) {
   document.documentElement.dataset.theme = resolved;
 }
 
-/** Three-way theme switch: system, light, dark. Dark is the default; the choice is remembered. */
-export function ThemeToggle() {
+/** Three-way theme switch: system, light, dark. The default is the role's (readers system, developers dark); a choice is remembered. */
+export function ThemeToggle({ defaultTheme }: { defaultTheme?: ThemePreference }) {
   // Starts at the default so the server render and the first client render agree; the stored choice loads after.
   const [pref, setPref] = useState<ThemePreference>('dark');
 
-  useEffect(() => setPref(readPreference()), []);
+  // The head script sets the theme before first paint, but signing in changes the role without a full page load, so
+  // the role's default is applied here too whenever it changes (a stored choice still wins).
+  useEffect(() => {
+    const next = readPreference(defaultTheme ?? defaultPreference());
+    setPref(next);
+    apply(next);
+  }, [defaultTheme]);
 
   useEffect(() => {
     if (pref !== 'system') return;

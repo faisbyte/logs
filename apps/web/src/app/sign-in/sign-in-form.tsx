@@ -29,7 +29,7 @@ export function SignInForm() {
           {state.error}
         </p>
       ) : null}
-      <button type="submit" disabled={pending} className="bg-accent text-on-accent rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60">
+      <button type="submit" disabled={pending} className="bg-fg text-bg rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60">
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
     </form>
