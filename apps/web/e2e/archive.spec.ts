@@ -261,3 +261,16 @@ test.describe('developer views', () => {
   }
 });
 
+test('stacked table rows at 360px keep every part of a cell in the value column, and pills at their own width', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await signIn(page, seed().developer);
+  await page.goto('/context');
+  const note = page.getByRole('table').getByRole('row').nth(1).locator('td[data-label="Note"]');
+  const [text, reason, id] = await note.locator('p').all();
+  const x = (await text!.boundingBox())!.x;
+  expect((await reason!.boundingBox())!.x).toBe(x);
+  expect((await id!.boundingBox())!.x).toBe(x);
+  const pill = (await page.getByRole('table').getByRole('row').nth(1).locator('.pill').boundingBox())!;
+  expect(pill.width).toBeLessThan(120);
+});
+
