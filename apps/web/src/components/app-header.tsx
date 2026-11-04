@@ -16,13 +16,14 @@ export const navFor = (_role: Viewer['role']) => [
 export function AppHeader({ viewer }: { viewer: Viewer | null }) {
   return (
     <header className="border-line bg-bg/95 no-print sticky top-0 z-40 border-b backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4 sm:px-6">
-        <Link href="/digests" aria-label="logs, home" className="shrink-0 text-[15px]">
+      {/* Under 640px: the wordmark and controls on one row, the nav on its own full-width row below. */}
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 px-4 sm:h-14 sm:flex-nowrap sm:px-6">
+        <Link href="/digests" aria-label="logs, home" className="flex h-12 shrink-0 items-center text-[15px] sm:h-auto">
           <Wordmark />
         </Link>
         {viewer ? (
-          <nav aria-label="Main" className="min-w-0 flex-1">
-            <ul className="flex gap-1 overflow-x-auto text-sm">
+          <nav aria-label="Main" className="order-last -mx-2 w-full pb-2 sm:order-none sm:mx-0 sm:w-auto sm:min-w-0 sm:flex-1 sm:pb-0">
+            <ul className="flex flex-wrap gap-1 text-sm">
               {navFor(viewer.role).map((item) => (
                 <li key={item.href}>
                   <Link href={item.href} className="text-fg-muted hover:text-fg hover:bg-bg-subtle block rounded-md px-2.5 py-1.5">
@@ -33,9 +34,9 @@ export function AppHeader({ viewer }: { viewer: Viewer | null }) {
             </ul>
           </nav>
         ) : (
-          <span className="flex-1" />
+          <span className="hidden sm:block sm:flex-1" />
         )}
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-3 sm:ml-0">
           {viewer ? (
             <span className="text-fg-subtle hidden font-mono text-xs md:inline">
               {viewer.developerName} · {viewer.role}

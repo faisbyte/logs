@@ -115,6 +115,7 @@ test('no view scrolls sideways at 360px, where the table stacks', async ({ page 
   for (const path of ['/digests', `/digests/${seed().ids.corrected}`, '/reports?sprint=Sprint+7']) {
     await page.goto(path);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    for (const link of await page.getByRole('navigation', { name: 'Main' }).getByRole('link').all()) await expect(link).toBeInViewport({ ratio: 1 });
   }
 });
 

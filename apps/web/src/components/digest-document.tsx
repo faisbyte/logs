@@ -53,15 +53,16 @@ function inline(text: string): ReactNode[] {
   });
 }
 
-/** A ticket heading ("PROJ-201: Account lockout") with the key in mono, as on the showcase site. */
+/** A ticket heading ("PROJ-201: Account lockout", or several joined by " · ") with each key in mono, as on the showcase site. */
 function heading(text: string): ReactNode {
-  const match = /^([A-Z][A-Z0-9]{1,9}-\d+(?: · [A-Z][A-Z0-9]{1,9}-\d+)*)(: .*)$/.exec(text);
-  if (!match) return text;
-  return (
-    <>
-      <span className="text-accent font-mono text-[0.85em] font-medium">{match[1]}</span>
-      {match[2]}
-    </>
+  return text.split(/([A-Z][A-Z0-9]{1,9}-\d+(?=:))/).map((part, i) =>
+    i % 2 ? (
+      <span key={i} className="text-accent font-mono text-[0.85em] font-medium">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
   );
 }
 

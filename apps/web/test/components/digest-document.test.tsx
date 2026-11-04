@@ -57,6 +57,12 @@ describe('DigestDocument', () => {
     expect(screen.getByRole('note')).toHaveTextContent('This corrects the update sent on 2026-04-20');
   });
 
+  it('sets every ticket key of a combined heading in mono', () => {
+    const { container } = render(<DigestDocument markdown={'# T\n\n## LOGS-1: Session parsing · LOGS-2: Secret redaction\n\nText.\n'} />);
+    expect([...container.querySelectorAll('h3 .font-mono')].map((k) => k.textContent)).toEqual(['LOGS-1', 'LOGS-2']);
+    expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('LOGS-1: Session parsing · LOGS-2: Secret redaction');
+  });
+
   it('shows markup in the text as text, never as HTML', () => {
     const { container } = render(<DigestDocument markdown={'# Title\n\nA <script>alert(1)</script> and <b>bold</b> line.\n'} />);
     expect(container.querySelector('script, b')).toBeNull();
