@@ -11,15 +11,15 @@
       "ticketRefs": ["BILL-1"],
       "goal": "Tidy money handling and logging across the service.",
       "outcome": "completed",
-      "whatWasDone": "Moved every amount under src to integer cents, made handlers return { ok, reason } for expected failures, and removed customer names from log lines.",
+      "whatWasDone": "Moved every amount under src to integer cents, made the invoice and payment handlers return { ok, reason } for expected failures, and removed customer names from log lines.",
       "decisions": [
         { "decision": "Amounts are stored as integer cents everywhere under src.", "reason": "Floating-point sums lost cents on invoice totals." },
-        { "decision": "Expected failures are returned as { ok, reason } objects instead of being thrown.", "reason": "Callers branch on the reason code, and thrown errors were turning into 500 responses." },
+        { "decision": "Invoice and payment handlers return { ok, reason } objects for expected failures instead of throwing.", "reason": "Callers branch on the reason code, and thrown errors were turning into 500 responses." },
         { "decision": "Customer names are never written to log lines.", "reason": "The logs go to a third-party service that isn't covered by the privacy policy." }
       ],
       "rejectedApproaches": [],
       "risksOrFollowUps": [],
-      "filesTouched": ["src/lib/money.js", "src/app.js", "src/invoices/store.js", "src/payments/orders.js"]
+      "filesTouched": ["src/lib/money.js", "src/app.js", "src/invoices/store.js", "src/invoices/totals.js", "src/payments/orders.js", "src/payments/acmepay.js"]
     },
     {
       "developer": "chen",
@@ -49,13 +49,14 @@
       "ticketRefs": ["BILL-6"],
       "goal": "Fix VAT rounding.",
       "outcome": "completed",
-      "whatWasDone": "VAT is now rounded on each invoice line, half up, in cents, and the invoice total is the sum of the line totals.",
+      "whatWasDone": "VAT is now rounded on each invoice line, half up, in cents, and the invoice total is the sum of the line totals. Credit notes are issued as separate negative invoices.",
       "decisions": [
-        { "decision": "VAT is rounded on each invoice line, half up, in cents.", "reason": "That is the tax office's rule, and rounding only the total was a cent off on large invoices." }
+        { "decision": "VAT is rounded on each invoice line, half up, in cents.", "reason": "That is the tax office's rule, and rounding only the total was a cent off on large invoices." },
+        { "decision": "A credit note is a separate invoice with a negative total, never an edit of the original invoice.", "reason": "Issued invoices must stay unchanged for the auditors." }
       ],
       "rejectedApproaches": [],
       "risksOrFollowUps": [],
-      "filesTouched": ["src/invoices/totals.js"]
+      "filesTouched": ["src/invoices/totals.js", "src/invoices/store.js"]
     },
     {
       "developer": "alice",
@@ -69,7 +70,9 @@
       "whatWasDone": "Orders get a UUID and an upper-case currency code, charges go through the AcmePay client, and AcmePay webhooks are checked against their signature before anything is updated.",
       "decisions": [
         { "decision": "Currency codes are stored as upper-case ISO 4217 codes.", "reason": "The ledger compares currency codes case-sensitively." },
-        { "decision": "AcmePay webhook events are processed only after their signature is verified.", "reason": "Anyone could otherwise post fake payment events to the endpoint." }
+        { "decision": "AcmePay webhook events are processed only after their signature is verified.", "reason": "Anyone could otherwise post fake payment events to the endpoint." },
+        { "decision": "Every refund is linked to the id of the charge it reverses.", "reason": "Finance reconciles refunds against charges each month." },
+        { "decision": "Payment receipts are emailed by AcmePay, not by this service.", "reason": "AcmePay's receipts already meet the card networks' rules, so ours would be duplicates." }
       ],
       "rejectedApproaches": [
         { "approach": "Polling AcmePay for each charge's status every second.", "reason": "AcmePay allows 100 requests a minute per account, and polling used it up during the evening peak." }
@@ -92,7 +95,7 @@
         { "approach": "Writing invoice dates in the CSV export as ISO 8601 (YYYY-MM-DD).", "reason": "Most of our customers import the file into Ledgerly, whose importer accepts dates only as DD.MM.YYYY and rejects the whole file otherwise." }
       ],
       "risksOrFollowUps": ["Finish the CSV export after the payments release."],
-      "filesTouched": ["src/invoices/store.js", "src/lib/csv.js"]
+      "filesTouched": ["src/invoices/export.js"]
     },
     {
       "developer": "priya",
