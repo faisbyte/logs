@@ -1,6 +1,7 @@
 import type { StoredSummary } from '@digest/core';
 import type { ReactNode } from 'react';
 import { StatusPill } from '~/components/status-pill';
+import { TERMS } from '~/lib/terms';
 
 const OUTCOME = { completed: 'Completed', partial: 'Partial', abandoned: 'Abandoned' } as const;
 const day = (iso: string) => iso.slice(0, 10);
@@ -25,8 +26,8 @@ function Entry({ s: stored }: { s: StoredSummary }) {
         <span>{when}</span>
         <span className="text-fg-muted font-sans text-sm">{stored.developerName}</span>
         {/* Every entry is approved; only how it was approved can differ. Nobody read an auto-approved one before it was shared. */}
-        {s.editedByDeveloper ? <StatusPill tone="neutral">Edited by developer</StatusPill> : null}
-        {s.approvedBy === 'auto' ? <StatusPill tone="attention">Auto-approved</StatusPill> : null}
+        {s.editedByDeveloper ? <StatusPill tone="neutral">{TERMS.editedByDeveloper}</StatusPill> : null}
+        {s.approvedBy === 'auto' ? <StatusPill tone="attention">{TERMS.autoApproved}</StatusPill> : null}
         <StatusPill tone="neutral">{OUTCOME[s.outcome]}</StatusPill>
         <span>AI involvement: {s.aiInvolvement}</span>
       </div>
@@ -34,7 +35,7 @@ function Entry({ s: stored }: { s: StoredSummary }) {
       <p className="text-fg-muted mt-1 text-sm leading-relaxed text-pretty">{s.whatWasDone}</p>
       {s.decisions.length ? (
         <>
-          <Label marker="decision">Decisions</Label>
+          <Label marker="decision">{TERMS.decisions}</Label>
           <ul className="marker:text-fg-subtle mt-1 list-disc space-y-1 pl-5 text-sm">
             {s.decisions.map((d, i) => (
               <li key={i}>
@@ -46,7 +47,7 @@ function Entry({ s: stored }: { s: StoredSummary }) {
       ) : null}
       {s.rejectedApproaches.length ? (
         <>
-          <Label marker="attention">Tried and dropped</Label>
+          <Label marker="attention">{TERMS.rejectedApproaches}</Label>
           <ul className="marker:text-fg-subtle mt-1 list-disc space-y-1 pl-5 text-sm">
             {s.rejectedApproaches.map((r, i) => (
               <li key={i}>
@@ -58,7 +59,7 @@ function Entry({ s: stored }: { s: StoredSummary }) {
       ) : null}
       {s.risksOrFollowUps.length ? (
         <>
-          <Label>Follow-ups</Label>
+          <Label>{TERMS.risksOrFollowUps}</Label>
           <ul className="marker:text-fg-subtle text-fg-muted mt-1 list-disc space-y-1 pl-5 text-sm">
             {s.risksOrFollowUps.map((f, i) => (
               <li key={i}>{f}</li>
