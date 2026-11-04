@@ -1341,3 +1341,31 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
     - `canWrite` means asking now would give a report: one is cached, or the estimate fits under the cap and there's a key (or nothing to send).
     - Readers may call it, like `POST /v1/reports` (D53).
 - **Not yet:** rate limiting on `POST /v1/sessions` (Phase 10). A session is listed nowhere, so ending all of a user's sessions means re-issuing their token.
+
+## D93. The web dashboard: `apps/web` on Next.js, through the server API only
+
+- **Date:** 2026-11-04
+- **Decision:**
+  - **App:** `apps/web` uses Next.js 15 (App Router), React 19 and Tailwind 4, the same versions as the showcase site. It reuses the site's design tokens and patterns (docs/dashboard-design.md).
+  - **Data path:**
+    - Only server-side code (`src/lib/api.ts`, marked `server-only`) talks to the digest server, and only through its HTTP API, never its database.
+    - It sends `Authorization: Session <id>` from an `httpOnly`, `SameSite=Strict` cookie (D91, D92). The browser never holds a token or a session id, and never calls the digest server.
+    - Sign-in and sign-out are server actions, which Next.js protects with an Origin check. Sign-out also ends the session on the server.
+  - **Roles:**
+    - The UI asks `whoami` and renders a role's views only.
+    - The server enforces every role whatever the UI does. An end-to-end test calls developer endpoints with a reader's dashboard session and gets 403.
+    - Readers see the digest archive and reports only. Developers also see digests in preview and withdrawn ones.
+  - **Naming:** the product is "logs" in the UI. Every CLI command shown comes from one constant (`src/lib/brand.ts`: `CLI = 'sprintdigest'`), so a rename is one line.
+  - **Digest rendering:** the server writes digests in a small fixed Markdown shape (D50). The dashboard parses that shape into React elements (`digest-document.tsx`), so text is never treated as HTML. A test checks that `<script>` in a digest renders as text.
+  - **Archive (built first):**
+    - the digest list by period, with status and corrected marks;
+    - each digest rendered in Newsreader, with its coverage line and its correction note;
+    - on-demand reports, showing the estimate, the month's spend and the cap (`GET /v1/reports/estimate`) before anything is written;
+    - print to PDF through a print stylesheet.
+  - **Tests:**
+    - component tests (vitest, Testing Library, jsdom) run in `pnpm test`, and so in the pre-commit hook and CI;
+    - end-to-end tests (Playwright, `pnpm --filter @digest/web e2e`) run a real digest server on a seeded throwaway PGlite database and the built dashboard;
+    - the end-to-end tests check reader isolation (pages and API), logout revocation, axe WCAG 2.1 AA on every view in both themes, no sideways scroll at 360px, and the skip link.
+- **Not yet:**
+  - the developer views (overview, tickets, context, previews), which wait for the owner's design check;
+  - running the end-to-end tests in CI, which needs Chromium on the runner.

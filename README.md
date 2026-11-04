@@ -69,6 +69,16 @@ PGlite mode (`--data`) is single-process: stop the server before running `token`
 Sessions are read from `~/.claude/projects` and `~/.codex/sessions`, or from `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` if set.
 Summarising sends redacted, condensed session text to the Anthropic API using your own `ANTHROPIC_API_KEY`; pushing sends only approved summaries' shared fields to your digest server. Raw transcripts never leave the machine, and `.digest/` (local state) is gitignored.
 
+## Dashboard (apps/web)
+
+The web dashboard reads only the digest server's API. With the server running on `:8787`:
+
+```sh
+pnpm --filter @digest/web build && DIGEST_API_URL=http://127.0.0.1:8787 pnpm --filter @digest/web start   # http://localhost:3000
+```
+
+Sign in by pasting a developer or reader token (`sprintdigest-server token …`). It is exchanged for a 12-hour session. `pnpm --filter @digest/web e2e` runs the end-to-end tests against a seeded throwaway server. Design: [docs/dashboard-design.md](docs/dashboard-design.md).
+
 ## License
 
 Apache License 2.0; see [LICENSE](LICENSE).
