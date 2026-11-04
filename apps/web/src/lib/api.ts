@@ -1,6 +1,8 @@
 import 'server-only';
 
+import type { ContextItem, StoredSummary as SessionRecord, TicketReport } from '@digest/core';
 import { cookies } from 'next/headers';
+import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
 import type { DigestRow } from '~/components/digest-table';
 import type { Estimate } from '~/components/report-estimate';
@@ -58,7 +60,21 @@ export const viewer = cache(async (): Promise<Viewer | null> => {
   }
 });
 
+/** The signed-in developer, for developer-only views: readers get the plain 404 page, and no developer data is asked for. */
+export async function developerOnly(): Promise<Viewer> {
+  const me = await viewer();
+  if (!me) redirect('/sign-in');
+  if (me.role !== 'developer') notFound();
+  return me;
+}
+
+// Every ticket, any time: the server's ticket report needs a range, so this one covers all of it.
+const ALL_TIME = { from: '2000-01-01', to: '2100-01-01' };
+
 export const api = {
+  tickets: (repoId: string) => call<TicketReport>(`/v1/tickets?${query({ repoId, ...ALL_TIME })}`),
+  ticketSummaries: async (repoId: string, ticket: string) => (await call<{ summaries: SessionRecord[] }>(`/v1/summaries?${query({ repoId, ticket })}`)).summaries,
+  contextItems: async (repoId: string) => (await call<{ items: ContextItem[] }>(`/v1/context-items?${query({ repoId })}`)).items,
   startSession: (token: string) => call<{ session: string; expiresAt: string; identity: Viewer }>('/v1/sessions', { method: 'POST', body: { token }, session: null }),
   endSession: (session: string) => call<{ ended: boolean }>('/v1/sessions', { method: 'DELETE', session }),
   digests: async (repoId: string) => (await call<{ digests: DigestRow[] }>(`/v1/digests?${query({ repoId })}`)).digests,

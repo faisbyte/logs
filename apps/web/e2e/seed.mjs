@@ -8,6 +8,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DATA = join(HERE, '.data');
 const REPO = 'github.com/acme/webapp';
 const { openStore } = await import(join(HERE, '../../../packages/server/dist/cli.js'));
+const core = await import(join(HERE, '../../../packages/core/dist/index.js'));
 
 rmSync(DATA, { recursive: true, force: true });
 mkdirSync(DATA, { recursive: true });
@@ -16,6 +17,37 @@ const { store, close } = await openStore({ dataDir: join(DATA, 'db') });
 const developer = (await store.issueToken({ repoId: REPO, developerId: 'alice', developerName: 'Alice' })).token;
 const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
 await store.saveSprint(REPO, { name: 'Sprint 7', from: '2026-04-06T00:00:00.000Z', to: '2026-04-20T00:00:00.000Z' });
+
+// Approved summaries from two developers on two tickets, pushed the way the CLI pushes them.
+const summaryBase = { agent: 'claude-code', status: 'draft', editedByDeveloper: false, approvedAt: null, generatedAt: '2026-04-15T00:00:00.000Z', promptVersion: 'e2e', model: 'e2e', usage: { inputTokens: 0, outputTokens: 0, requests: 0, costUsd: 0 }, aiInvolvement: 'heavy' };
+const pushSummary = (who, s) => store.push({ repoId: REPO, developerId: who.toLowerCase(), developerName: who }, core.uploadPayload(core.approve(core.SessionSummarySchema.parse({ ...summaryBase, ...s }))));
+await pushSummary('Alice', {
+  sessionId: 'e2e00001-0000-4000-8000-000000000001', startedAt: '2026-04-07T09:00:00.000Z', endedAt: '2026-04-07T11:00:00.000Z', branch: 'feature/PROJ-201-lockout', ticketRefs: ['PROJ-201'],
+  goal: 'Lock accounts after repeated failed logins.', outcome: 'completed', whatWasDone: 'Added a lockout after 5 failed logins, counted per account.',
+  decisions: [{ decision: 'Failed logins are counted per account.', reason: 'Offices share one network address.' }],
+  rejectedApproaches: [{ approach: 'Counting failures in process memory.', reason: 'Counts reset on every deploy.' }],
+  risksOrFollowUps: ['Tell support about the lockout.'], filesTouched: ['src/auth/lockout.ts', 'src/auth/login.ts'],
+});
+await pushSummary('Bob', {
+  sessionId: 'e2e00002-0000-4000-8000-000000000002', startedAt: '2026-04-12T09:00:00.000Z', endedAt: '2026-04-12T10:00:00.000Z', branch: 'feature/PROJ-201-message', ticketRefs: ['PROJ-201', 'PROJ-202'],
+  goal: 'Tell a locked user when they can try again.', outcome: 'completed', whatWasDone: 'The lockout message now shows the minutes left.',
+  decisions: [], rejectedApproaches: [], risksOrFollowUps: [], filesTouched: ['src/auth/messages.ts'],
+});
+await store.saveTrackerTickets(REPO, [{ key: 'PROJ-201', title: 'Account lockout', sprint: 'Sprint 7' }]);
+
+// Context items in every state.
+const ctx = (over) => ({ repoId: REPO, paths: ['src/auth/lockout.ts'], tickets: ['PROJ-201'], sources: ['claude-code/e2e00001-0000-4000-8000-000000000001'], date: '2026-04-07', status: 'active', supersededBy: null, retiredBy: null, retiredAt: null, createdAt: '2026-04-15T00:00:00.000Z', ...over });
+await store.applyContextChanges(REPO, {
+  added: [
+    ctx({ id: 'ctx-e2e00001', type: 'pitfall', text: 'Counting failed logins in process memory was tried and dropped.', reason: 'Counts reset on every deploy.' }),
+    ctx({ id: 'ctx-e2e00002', type: 'decision', text: 'Failed logins are counted per account.', reason: 'Offices share one network address.', paths: ['src/auth/login.ts'] }),
+    ctx({ id: 'ctx-e2e00003', type: 'convention', text: 'Lockout messages say when to try again.', reason: 'Fewer support tickets.', paths: ['src/auth/messages.ts'], date: '2026-04-12', sources: ['claude-code/e2e00002-0000-4000-8000-000000000002'] }),
+    ctx({ id: 'ctx-e2e00004', type: 'decision', text: 'Accounts lock after 3 failed logins.', reason: 'A first guess.', status: 'superseded', supersededBy: 'ctx-e2e00002' }),
+    ctx({ id: 'ctx-e2e00005', type: 'convention', text: 'Lockout state is kept in the session.', reason: 'It was simplest.', status: 'retired', retiredBy: 'alice', retiredAt: '2026-04-13T00:00:00.000Z' }),
+  ],
+  merged: [],
+  superseded: [],
+});
 
 const body = (title, extra = '') =>
   [

@@ -1369,3 +1369,29 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 - **Not yet:**
   - the developer views (overview, tickets, context, previews), which wait for the owner's design check;
   - running the end-to-end tests in CI, which needs Chromium on the runner.
+
+## D94. Dashboard: one meaning per accent, enforced; ticket timeline and context view
+
+- **Date:** 2026-11-04
+- **Archive fixes (after the owner's design check):**
+  - **Green means approved or safe only.**
+    - Ticket keys, section numbers, the wordmark's prompt, primary buttons, links, focus rings and text selection are now neutral.
+    - `accent-usage.test.ts` scans the source. A component may not set an accent colour directly, except amber on an alert. In CSS, green may appear only on the safe pill, and amber, blue and violet only on their own pills, markers and callout.
+  - **Reading the digest:**
+    - One centred column, with the back link and print button aligned to it.
+    - Under 640px the card falls away, and combined ticket headings put one ticket per line.
+    - Small markers sit on "Key decisions" (blue) and "Risks and open questions" (amber).
+  - **Header:** who is signed in, and their role, shows at every width. Under 640px it sits on the nav row.
+  - **Theme:** readers follow the system theme by default and developers start dark. The server puts the role's default on `<html>`, and the toggle applies it again after sign-in, because client-side navigation doesn't rerun the head script. A stored choice always wins.
+  - **List rows:** each archive row is one link, stretched over the row, with hover and keyboard focus shown on the whole row. End-to-end tests check a pointer click on another cell, one tab stop per row, Enter opening the row, and the focus ring.
+- **Developer views (readers get the plain 404 page, and no developer data is requested for them):**
+  - **Tickets:** every ticket with approved AI work, grouped by sprint, one link per row. It uses the ticket report (`GET /v1/tickets` over all time), with tracker titles where known and "No title" otherwise. Summaries linked to no ticket are counted.
+  - **Ticket timeline:**
+    - every approved summary for the ticket (`GET /v1/summaries?ticket=`), oldest first, on a hairline rail;
+    - each entry shows who, when, an Approved pill, the outcome and the AI involvement;
+    - decisions are marked blue, "tried and dropped" amber, and follow-ups unmarked;
+    - files touched are listed in a collapsed details element.
+  - **Context:**
+    - The brief for a path or ticket comes from the same deterministic `contextBrief` the CLI uses, imported from `@digest/core` in server code. It's shown in a terminal panel titled with the real command, with note types in the terminal's amber, blue and violet.
+    - Below it, items by status (Active, Superseded, Retired, with counts), showing type pill, text and reason, paths, short sources, date and status ("Superseded by ctx-…", "Retired by alice" or "by a retraction").
+- **Still to build:** the repo overview and the developer digest preview with jargon warnings.

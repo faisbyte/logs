@@ -6,9 +6,15 @@ import { signOut } from '~/lib/auth-actions';
 
 /**
  * The views a role can open. Readers get the digest archive and reports only (DECISIONS.md D51); the server enforces it
- * too. The developer views (overview, tickets, context, previews) join this list as they are built.
+ * too. The overview and digest previews join the developer list as they are built.
  */
-export const navFor = (_role: Viewer['role']) => [
+export const navFor = (role: Viewer['role']) => [
+  ...(role === 'developer'
+    ? [
+        { href: '/tickets', label: 'Tickets' },
+        { href: '/context', label: 'Context' },
+      ]
+    : []),
   { href: '/digests', label: 'Digests' },
   { href: '/reports', label: 'Reports' },
 ];

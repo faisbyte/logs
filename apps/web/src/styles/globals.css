@@ -175,6 +175,11 @@
   .terminal-title { color: var(--term-muted); text-align: center; }
   .terminal-dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background-color: #3a403c; }
 
+  /* Note types in the terminal: the terminal's own amber, blue and violet, same meanings as the accents. */
+  .term-kind[data-kind="pitfall"] { color: var(--term-amber); }
+  .term-kind[data-kind="decision"] { color: var(--term-blue); }
+  .term-kind[data-kind="convention"] { color: var(--term-violet); }
+
   /* Dense tables for scanning; under 40rem each row stacks into labelled lines, so nothing scrolls sideways. */
   .data-table {
     border-collapse: collapse;
