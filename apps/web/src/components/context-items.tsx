@@ -101,7 +101,7 @@ export function ContextItems({ items, empty, retire }: { items: ContextItem[]; e
             </button>
           ))}
         </div>
-        <div className="min-w-0 flex-1 sm:max-w-xs">
+        <div className="w-full sm:w-auto sm:min-w-0 sm:max-w-xs sm:flex-1">
           <label htmlFor="item-search" className="sr-only">
             Search items
           </label>
