@@ -19,6 +19,8 @@ export interface ContextRun {
   merged: number;
   superseded: number;
   dropped: string[];
+  /** Of those, pitfalls and decisions nothing in their sources backs (D86). */
+  untraced: number;
   retryReasons: string[];
   costUsd: number | null;
 }

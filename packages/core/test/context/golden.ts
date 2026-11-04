@@ -9,7 +9,7 @@ import { payloadFor } from '../shared/store-contract.js';
 export const golden = JSON.parse(readFileSync(new URL('./golden-context.json', import.meta.url), 'utf8')) as {
   summaries: ({ developer: string } & Record<string, unknown>)[];
   firstRun: string[];
-  expect: { decision: string; pitfall: string; superseded: { old: string; new: string }; temporary: string[]; mustNotAppear: string[] };
+  expect: { decision: string; pitfall: string; superseded: { old: string; new: string }; temporary: string[]; mustNotAppear: string[]; notPitfalls: string[] };
 };
 export const GOLDEN_REPO = 'github.com/acme/eval';
 
@@ -38,5 +38,7 @@ export function goldenFailures(items: readonly ContextItem[]): string[] {
   }
   for (const phrase of e.temporary) for (const i of items) if (has(i, phrase)) failures.push(`${i.id} keeps temporary "${phrase}"`);
   for (const phrase of e.mustNotAppear) for (const i of items) if (has(i, phrase)) failures.push(`${i.id} contains "${phrase}"`);
+  // No summary rejected these, so a pitfall about them was invented (D86).
+  for (const phrase of e.notPitfalls) for (const i of items) if (i.type === 'pitfall' && has(i, phrase)) failures.push(`${i.id} is an invented pitfall about "${phrase}"`);
   return failures;
 }
