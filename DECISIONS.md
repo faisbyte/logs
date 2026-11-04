@@ -1197,6 +1197,16 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - **A: move the convenience.** `createLogin` gets a `sessions` object instead of `kv`, as many real handlers do, so using the shared store means threading a new dependency through `createApp` and the tests. `cache.increment(key, ttlMs)` stays a one-line import already used in `src/users/profile.js`. The non-obvious reason stays out of the code. This is the smallest change, and it tests the realistic case where the correct choice costs more work.
   - **B: a different trap.** Pick a mistake the code invites by itself. One example: a rate limit on password-reset emails, where `kv` isn't available to the mailer at all and the teammate's note says why a per-process limiter fails. This is a cleaner test of knowledge only the brief has, but it's a new fixture, and its scoring would need redoing.
 - **Next:** the owner picks A or B, then a new pilot (about $0.30) runs with the same gate before the full run.
+- **Redesign chosen (2026-11-04): neither A nor B as written.**
+  - **Why:** "in-process counters break across instances" is textbook knowledge, so the baseline avoids it regardless. A trap has to test knowledge only the brief carries.
+  - **What a trap needs:**
+    - a tempting approach that is convenient and sound by general standards;
+    - a reason it's wrong that is local, can't be derived from the code or general knowledge, and is recorded only in a teammate's approved summary;
+    - separate hidden tests for "task done" and "trap".
+  - **Two candidates, in one `billing-service` fixture** (`docs/context-experiment.md`):
+    - **"Ledgerly dates":** ISO 8601 dates in a CSV export. Our customers' Ledgerly importer accepts only `DD.MM.YYYY`.
+    - **"AcmePay keys":** a UUID idempotency key on retried charges. AcmePay silently ignores keys over 32 characters or with anything but letters, digits and underscores, so it charges twice.
+  - **Pilot:** one combined pilot, 3 no-brief runs and 1 with-brief run per candidate. A candidate passes its gate when at least 2 of its 3 no-brief runs fall in. The owner then picks the candidate, and the full run waits for that.
 
 ## D86. Provenance for context items, and duplicates across types
 
