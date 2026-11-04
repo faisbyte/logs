@@ -9,11 +9,12 @@ import { focusRings } from './focus';
 const seed = () => JSON.parse(readFileSync(new URL('./.data/seed.json', import.meta.url), 'utf8')) as { repoId: string; developer: string; reader: string; ids: Record<string, string> };
 const API = 'http://127.0.0.1:8799';
 
+/** Signs in and waits for the role's home: the overview for a developer, the archive for a reader. */
 async function signIn(page: Page, token: string) {
   await page.goto('/sign-in');
   await page.getByLabel('Your token').fill(token);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/digests$/);
+  await expect(page).toHaveURL(token === seed().developer ? /\/overview$/ : /\/digests$/);
 }
 
 const sessionOf = async (page: Page) => (await page.context().cookies()).find((c) => c.name === 'logs_session')!;
@@ -79,6 +80,7 @@ test.describe('a reader', () => {
 
 test('a developer also sees digests in preview and withdrawn ones', async ({ page }) => {
   await signIn(page, seed().developer);
+  await page.goto('/digests');
   await expect(page.getByRole('table').getByRole('row')).toHaveCount(5);
   await expect(page.getByText('Withdrawn', { exact: true })).toBeVisible();
   await expect(page.getByText('In preview', { exact: true })).toBeVisible();
@@ -144,6 +146,7 @@ test.describe('the archive list', () => {
 
   test('is navigable by keyboard alone: one tab stop per row, Enter opens it, with a visible focus ring', async ({ page }) => {
     await signIn(page, seed().developer);
+    await page.goto('/digests');
     const links = page.getByRole('table').getByRole('link');
     await expect(links).toHaveCount(4);
     await links.first().focus();
@@ -217,9 +220,22 @@ test.describe('theme default by role', () => {
 });
 
 test.describe('developer views', () => {
-  test('a developer gets Tickets and Context in the nav', async ({ page }) => {
+  test('a developer gets the overview, Tickets and Context in the nav, and starts on the overview', async ({ page }) => {
     await signIn(page, seed().developer);
-    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Tickets', 'Context', 'Digests', 'Reports']);
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Overview', 'Tickets', 'Context', 'Digests', 'Reports']);
+  });
+
+  test('the overview shows recent sessions, recently active tickets, the latest digests and what is in preview', async ({ page }) => {
+    await signIn(page, seed().developer);
+    await expect(page.getByRole('heading', { level: 1, name: 'Repo overview' })).toBeVisible();
+    await expect(page.getByText('2 approved summaries from 2 developers, on 2 tickets. 3 active context items.')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'In preview' }).getByRole('link', { name: 'Week of 2026-04-20' })).toBeVisible();
+    const sessions = page.getByRole('region', { name: 'Recent sessions' }).getByRole('row');
+    await expect(sessions).toHaveCount(3);
+    await expect(sessions.nth(1)).toContainText('Bob');
+    await expect(page.getByRole('region', { name: 'Latest digests' }).getByRole('row')).toHaveCount(4);
+    await sessions.nth(2).getByRole('link').click();
+    await expect(page).toHaveURL(/\/tickets\/PROJ-201$/);
   });
 
   test('the ticket timeline shows approved summaries oldest first, with decisions and dropped approaches marked', async ({ page }) => {
@@ -268,7 +284,7 @@ test.describe('developer views', () => {
     test(`pass axe (WCAG 2.1 AA) in the ${theme} theme and don't scroll sideways at 360px`, async ({ page }) => {
       await page.addInitScript((t) => localStorage.setItem('logs-theme', t), theme);
       await signIn(page, seed().developer);
-      for (const path of ['/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth', '/context?status=superseded']) {
+      for (const path of ['/overview', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth', '/context?status=superseded']) {
         await page.setViewportSize({ width: 1280, height: 900 });
         await page.goto(path);
         const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
@@ -307,7 +323,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.goto('/sign-in');
     await check('/sign-in');
     await signIn(page, seed().developer);
-    for (const path of ['/digests', `/digests/${seed().ids.corrected}`, '/reports?sprint=Sprint+7', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth']) {
+    for (const path of ['/overview', '/digests', `/digests/${seed().ids.corrected}`, '/reports?sprint=Sprint+7', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth']) {
       await page.goto(path);
       await check(path);
     }

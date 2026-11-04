@@ -27,7 +27,7 @@ export async function signIn(_: SignInState, form: FormData): Promise<SignInStat
     path: '/',
     expires: new Date(started.expiresAt),
   });
-  redirect('/digests');
+  redirect(started.identity.role === 'developer' ? '/overview' : '/digests');
 }
 
 export async function signOut(): Promise<void> {
