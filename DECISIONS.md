@@ -1249,3 +1249,26 @@ Option A first: no repo-write credentials on the server, and a person starts eve
   - A pitfall attached only to a helper's path is invisible to a folder query. For the experiment, bob's summary now lists the prototype file he edited (`src/invoices/export.js`).
   - The path matching itself is unchanged and open.
 - **Next:** the owner picks a candidate for the full 20 runs. Nothing more runs until then.
+
+## D88. Stable item paths, and briefs that widen to the nearest parent folder
+
+- **Date:** 2026-11-04
+- **Found in the round-2 pilot (D87):** extraction attached paths differently from run to run, and once filed bob's Ledgerly pitfall only under `src/lib/csv.js`. `sprintdigest context src/invoices` then couldn't see it, and the pilot needed bob's summary edited to pass. Real use has no such edit.
+- **Decision:**
+  - **Paths come only from the sources** (`context-v2`).
+    - An item's paths are files from its source summaries' `filesTouched`, copied exactly. The model may pick from that list but never add to it: a folder or an unlisted file is dropped without a retry.
+    - An item with no valid path left gets all of its sources' files, sorted.
+    - The prompt says the same: "the files from its summaries' Files lines…, copied exactly. Never a folder, and never a file that isn't listed."
+  - **Matching** (`sprintdigest context <q>`, of the three rules the owner offered): an item matches when any of its paths is under q's **nearest parent folder**.
+    - **A file** `src/invoices/export.js` matches everything in `src/invoices/`.
+    - **A folder** `src/invoices` matches everything under `src/`.
+    - **A top-level** `docs` has no parent to widen to, so only what is inside it matches.
+  - **Ranking:**
+    - type first (pitfalls, then decisions, then conventions);
+    - then closeness: 0 inside q or a folder holding q, 1 in the same folder as q, 2 elsewhere under the parent;
+    - then newest, then id.
+- **Why this rule:**
+  - It's the only one of the three that survives the failure actually seen: a pitfall filed under a helper in a sibling folder (`src/lib/`) while the query names the feature folder (`src/invoices`).
+  - "Inside the queried folder" misses it. So does "same folder as the queried file", for a folder query.
+  - The price is wider briefs: a folder query now also brings its sibling folders' notes. Closeness ranking and the 300-word cap keep the nearest notes first, while pitfalls still lead, because a rejected approach is what a new session most needs to see.
+- **Check:** a live stability test extracts the round-2 summaries 3 times through the real distillation, and requires the trap item in its target's brief every time (D89).

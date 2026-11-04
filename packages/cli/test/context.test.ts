@@ -39,7 +39,11 @@ describe('sprintdigest context', () => {
     const { pushTarget, repo } = await setup();
     const auth = await run(['context', 'src/auth', '--repo', repo], { pushTarget, now });
     expect(auth).toMatchObject({ exitCode: 0, stderr: '' });
-    expect(auth.stdout).toBe(`${HEADER}\n\n- Pitfall, 2026-03-10 (b2): Counting failed logins in memory was tried and dropped. Why: The counts reset on every deploy.\n`);
+    // src/auth's nearest parent is src, so the billing note in a sibling folder comes too, after the closer one (D88).
+    expect(auth.stdout).toBe(
+      `${HEADER}\n\n- Pitfall, 2026-03-10 (b2): Counting failed logins in memory was tried and dropped. Why: The counts reset on every deploy.\n- Convention, 2026-03-15 (b2): Billing amounts are stored in cents. Why: Floats lose pennies.\n`,
+    );
+    expect((await run(['context', 'src/auth/lockout.ts', '--repo', repo], { pushTarget, now })).stdout).not.toContain('Billing');
     expect((await run(['context', 'PROJ-9', '--repo', repo], { pushTarget, now })).stdout).toContain('Billing amounts are stored in cents.');
     expect((await run(['context', '--repo', repo], { pushTarget, now })).stdout.split('\n').filter((l) => l.startsWith('- '))).toHaveLength(2);
   });

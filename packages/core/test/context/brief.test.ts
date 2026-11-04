@@ -16,12 +16,25 @@ describe('selectItems', () => {
     expect(selectItems(all, undefined).map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002', 'ctx-00000003']);
   });
 
-  it('matches a path to items about it, inside it, or about a folder containing it', () => {
-    expect(selectItems(all, 'src/auth').map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002']);
+  it("matches items with a path under the queried path's nearest parent folder (DECISIONS.md D88)", () => {
+    // A file: everything in its own folder.
     expect(selectItems(all, 'src/auth/lockout.ts').map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002']);
-    expect(selectItems(all, './src/auth/login.ts').map((i) => i.id)).toEqual(['ctx-00000002']);
-    expect(selectItems(all, 'src/aut').map((i) => i.id)).toEqual([]);
+    expect(selectItems(all, './src/auth/login.ts').map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002']);
+    // A folder: everything under its parent, so a helper filed in a sibling folder still shows.
+    expect(selectItems(all, 'src/auth').map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002', 'ctx-00000003']);
+    expect(selectItems(all, 'src/aut').map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002', 'ctx-00000003']);
+    // A top-level path has no parent to widen to: only what is inside it.
     expect(selectItems(all, 'src/').map((i) => i.id)).toEqual(['ctx-00000001', 'ctx-00000002', 'ctx-00000003']);
+    expect(selectItems(all, 'docs')).toEqual([]);
+  });
+
+  it('ranks by type, then by how close the item is to the query, then newest first', () => {
+    const helper = contextItem({ id: 'ctx-00000006', type: 'pitfall', date: '2026-03-20', paths: ['src/lib/csv.js'] });
+    const sibling = contextItem({ id: 'ctx-00000007', type: 'pitfall', date: '2026-03-19', paths: ['src/app.js'] });
+    const inside = contextItem({ id: 'ctx-00000008', type: 'pitfall', date: '2026-03-01', paths: ['src/invoices/store.js'] });
+    const decisionInside = contextItem({ id: 'ctx-00000009', type: 'decision', date: '2026-03-25', paths: ['src/invoices/totals.js'] });
+    // Inside the folder, then in the same folder as it, then elsewhere under the parent; pitfalls before decisions.
+    expect(selectItems([helper, sibling, inside, decisionInside], 'src/invoices').map((i) => i.id)).toEqual(['ctx-00000008', 'ctx-00000007', 'ctx-00000006', 'ctx-00000009']);
   });
 
   it('matches a ticket key to items from its summaries', () => {
@@ -32,7 +45,7 @@ describe('selectItems', () => {
 
 describe('contextBrief', () => {
   it('opens with the framing line, then one line per item with its type, date and a short source', () => {
-    expect(contextBrief(all, 'src/auth')).toBe(
+    expect(contextBrief(all, 'src/auth/lockout.ts')).toBe(
       [
         BRIEF_HEADER,
         '',

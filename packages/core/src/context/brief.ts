@@ -14,11 +14,27 @@ const LABEL: Record<ContextItemType, string> = { pitfall: 'Pitfall', decision: '
 const normalise = (path: string) => path.replace(/^(\.\/)+/, '').replace(/\/+$/, '');
 const within = (inner: string, outer: string) => inner === outer || inner.startsWith(`${outer}/`);
 
-/** Active items matching a repo-relative path (either way round) or a ticket key; all active ones with no target. */
+const parent = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
+
+/**
+ * How close an item path is to a queried path (D88): 0 inside it (or a folder holding it), 1 in the same folder as it,
+ * 2 elsewhere under its nearest parent folder, null not near it. A top-level query has no parent to widen to.
+ */
+function closeness(path: string, query: string): number | null {
+  const [p, q] = [normalise(path), normalise(query)];
+  if (within(p, q) || within(q, p)) return 0;
+  const folder = parent(q);
+  if (!folder) return null;
+  if (parent(p) === folder) return 1;
+  return within(p, folder) ? 2 : null;
+}
+
+/** Active items for a repo path or a ticket key (all of them with no target): pitfalls first, then the closest, then the newest. */
 export function selectItems(items: readonly ContextItem[], target: string | undefined): ContextItem[] {
   const active = items.filter((i) => i.status === 'active');
-  const wanted = target === undefined ? active : TICKET.test(target) ? active.filter((i) => i.tickets.includes(target)) : active.filter((i) => i.paths.some((p) => within(normalise(p), normalise(target)) || within(normalise(target), normalise(p))));
-  return wanted.sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  const near = (i: ContextItem) => (target === undefined || TICKET.test(target) ? 0 : Math.min(...i.paths.map((p) => closeness(p, target) ?? Infinity)));
+  const wanted = target === undefined ? active : TICKET.test(target) ? active.filter((i) => i.tickets.includes(target)) : active.filter((i) => near(i) !== Infinity);
+  return wanted.sort((a, b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || near(a) - near(b) || b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
 }
 
 /** "fe5d7843.p3 +1": the first source's session id, cut to 8 characters, keeping a work-period suffix. */
