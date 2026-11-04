@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { ContextItem, StoredSummary as SessionRecord, TicketReport } from '@digest/core';
+import type { ContextItem, RetireResult, StoredSummary as SessionRecord, TicketReport } from '@digest/core';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
@@ -75,6 +75,7 @@ export const api = {
   tickets: (repoId: string) => call<TicketReport>(`/v1/tickets?${query({ repoId, ...ALL_TIME })}`),
   ticketSummaries: async (repoId: string, ticket: string) => (await call<{ summaries: SessionRecord[] }>(`/v1/summaries?${query({ repoId, ticket })}`)).summaries,
   contextItems: async (repoId: string) => (await call<{ items: ContextItem[] }>(`/v1/context-items?${query({ repoId })}`)).items,
+  retireContextItem: (repoId: string, id: string) => call<RetireResult>('/v1/context-retirements', { method: 'POST', body: { repoId, id } }),
   startSession: (token: string) => call<{ session: string; expiresAt: string; identity: Viewer }>('/v1/sessions', { method: 'POST', body: { token }, session: null }),
   endSession: (session: string) => call<{ ended: boolean }>('/v1/sessions', { method: 'DELETE', session }),
   digests: async (repoId: string) => (await call<{ digests: DigestRow[] }>(`/v1/digests?${query({ repoId })}`)).digests,
