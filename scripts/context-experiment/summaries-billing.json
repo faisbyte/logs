@@ -95,7 +95,7 @@
         { "approach": "Writing invoice dates in the CSV export as ISO 8601 (YYYY-MM-DD).", "reason": "Most of our customers import the file into Ledgerly, whose importer accepts dates only as DD.MM.YYYY and rejects the whole file otherwise." }
       ],
       "risksOrFollowUps": ["Finish the CSV export after the payments release."],
-      "filesTouched": ["src/invoices/export.js"]
+      "filesTouched": ["src/invoices/store.js", "src/lib/csv.js"]
     },
     {
       "developer": "priya",
