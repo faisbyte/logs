@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens, carried over from the showcase site (logs-website/src/styles/globals.css) unchanged.
+ * Dark is the default; [data-theme="light"] overrides. The theme attribute is set before paint by the script in
+ * layout.tsx. Terminal tokens stay dark in both themes on purpose. See docs/dashboard-design.md.
+ */
+:root {
+  color-scheme: dark;
+
+  --bg: #0a0b0a;
+  --bg-elev: #101211;
+  --bg-subtle: #161917;
+  --line: #232825;
+  --line-strong: #353c38;
+  --fg: #eceeec;
+  --fg-muted: #a6aea9;
+  --fg-subtle: #858d88;
+  --accent: #6ee7a0;
+  --accent-soft: rgb(110 231 160 / 0.1);
+  --on-accent: #03200e;
+  --amber: #f5b84c;
+  --blue: #8ab4ff;
+  --violet: #c4a7ff;
+  --red: #ff8a80;
+
+  --term-bg: #0c0e0d;
+  --term-bar: #141715;
+  --term-line: #262b28;
+  --term-fg: #e3e7e4;
+  --term-muted: #8f9893;
+  --term-accent: #6ee7a0;
+  --term-amber: #f5b84c;
+  --term-blue: #8ab4ff;
+  --term-violet: #c4a7ff;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #fafaf7;
+  --bg-elev: #ffffff;
+  --bg-subtle: #f1f1ec;
+  --line: #e2e2da;
+  --line-strong: #c9c9bf;
+  --fg: #0f1210;
+  --fg-muted: #4a524d;
+  --fg-subtle: #5f6762;
+  --accent: #12753f;
+  --accent-soft: rgb(18 117 63 / 0.08);
+  --on-accent: #ffffff;
+  --amber: #8f5300;
+  --blue: #2350b0;
+  --violet: #6a3cbf;
+  --red: #b42318;
+
+  --term-line: #262b28;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, serif;
+
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-amber: var(--amber);
+  --color-blue: var(--blue);
+  --color-violet: var(--violet);
+  --color-red: var(--red);
+
+  --color-term-bg: var(--term-bg);
+  --color-term-fg: var(--term-fg);
+  --color-term-muted: var(--term-muted);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--on-accent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer components {
+  /* Status pills: one accent per meaning (safe, attention, decision, convention), hairline border, no fill colour. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 0.05rem 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    color: var(--fg-muted);
+  }
+  .pill::before {
+    content: "";
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 999px;
+    background-color: currentColor;
+  }
+  .pill[data-tone="safe"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .pill[data-tone="attention"] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+  .pill[data-tone="decision"] { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 45%, transparent); }
+  .pill[data-tone="convention"] { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
+  .pill[data-tone="neutral"]::before { background-color: var(--fg-subtle); }
+
+  .callout-attention {
+    border-color: color-mix(in srgb, var(--amber) 45%, transparent);
+    color: var(--fg);
+  }
+
+  /* Terminal panels keep the terminal palette in both themes. */
+  .terminal {
+    background-color: var(--term-bg);
+    border-color: var(--term-line);
+    color: var(--term-fg);
+  }
+  .terminal-bar {
+    background-color: var(--term-bar);
+    border-color: var(--term-line);
+  }
+  .terminal-title { color: var(--term-muted); text-align: center; }
+  .terminal-dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background-color: #3a403c; }
+
+  /* Dense tables for scanning; under 40rem each row stacks into labelled lines, so nothing scrolls sideways. */
+  .data-table {
+    border-collapse: collapse;
+  }
+  .data-table th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fg-subtle);
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .data-table td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  .data-table tbody tr:hover { background-color: var(--bg-subtle); }
+  @media (max-width: 40rem) {
+    .data-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .data-table,
+    .data-table tbody,
+    .data-table tr,
+    .data-table td { display: block; width: 100%; }
+    .data-table tr { border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem; }
+    .data-table td { border: 0; padding: 0.2rem 0; display: grid; grid-template-columns: 6.5rem 1fr; gap: 0.75rem; }
+    .data-table td::before {
+      content: attr(data-label);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: var(--fg-subtle);
+      padding-top: 0.15rem;
+    }
+  }
+
+  /* A row arriving: the one kind of motion the dashboard uses, because it carries state. */
+  .row-arrive { animation: row-arrive 280ms ease-out both; }
+}
+
+@keyframes row-arrive {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print and save as PDF: light paper and the serif, without the app's chrome. */
+@media print {
+  :root,
+  [data-theme] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-elev: #ffffff;
+    --bg-subtle: #ffffff;
+    --line: #d9d9d0;
+    --line-strong: #c9c9bf;
+    --fg: #111111;
+    --fg-muted: #2b2b2b;
+    --fg-subtle: #555555;
+    --accent: #12753f;
+    --amber: #8f5300;
+  }
+  body { background: #ffffff; }
+  .no-print { display: none !important; }
+  .digest { border: 0 !important; }
+  .digest > div { padding: 0 !important; font-size: 11.5pt; }
+  a { color: inherit; text-decoration: none; }
+}

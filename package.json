@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -b packages/core packages/cli packages/server",
-    "test": "pnpm build && vitest run",
+    "test": "pnpm build && vitest run && pnpm --filter @digest/web test",
     "test:watch": "vitest",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
