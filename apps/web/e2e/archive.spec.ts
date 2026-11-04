@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { focusRings } from './focus';
 
 // The stakeholder digest archive end to end (DECISIONS.md D93): sign-in by session, what each role can reach, the
 // rendered digest, the report estimate, accessibility in both themes, and no sideways scroll at 360px.
@@ -292,6 +293,27 @@ test('stacked table rows at 360px keep every part of a cell in the value column,
   expect(pill.width).toBeLessThan(120);
 });
 
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`every focus ring is at least 2px and 3:1 against what it is drawn on, in the ${theme} theme`, async ({ page }) => {
+    await page.addInitScript((t) => localStorage.setItem('logs-theme', t), theme);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const weak: string[] = [];
+    const check = async (path: string) => {
+      const rings = await focusRings(page);
+      expect(rings.length, path).toBeGreaterThan(2);
+      for (const r of rings) if (r.width < 2 || r.ratio < 3) weak.push(`${path} ${r.stop}: ${r.width}px, ${r.ratio.toFixed(2)}:1`);
+    };
+    await page.goto('/sign-in');
+    await check('/sign-in');
+    await signIn(page, seed().developer);
+    for (const path of ['/digests', `/digests/${seed().ids.corrected}`, '/reports?sprint=Sprint+7', '/tickets', '/tickets/PROJ-201', '/context?path=src%2Fauth']) {
+      await page.goto(path);
+      await check(path);
+    }
+    expect(weak).toEqual([]);
+  });
+}
 
 // Last, because it changes the seeded data: a developer retires an item from the dashboard.
 test('a developer retires an active item after confirming; it moves to Retired', async ({ page }) => {

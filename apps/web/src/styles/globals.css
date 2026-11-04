@@ -103,7 +103,10 @@
     color: var(--bg);
   }
 
-  :focus-visible {
+  /* A date input's calendar button sits in the input's shadow tree, where :focus-visible doesn't match: the ring stays on
+     the input while anything inside it has focus. */
+  :focus-visible,
+  input:focus-within {
     outline: 2px solid var(--fg);
     outline-offset: 3px;
     border-radius: 4px;
