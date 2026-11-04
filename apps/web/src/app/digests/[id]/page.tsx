@@ -5,6 +5,7 @@ import { DigestDocument } from '~/components/digest-document';
 import { PrintButton } from '~/components/print-button';
 import { StatusPill, toneForDigest } from '~/components/status-pill';
 import { api, ApiError, viewer } from '~/lib/api';
+import { TERMS } from '~/lib/terms';
 
 export const metadata: Metadata = { title: 'Digest' };
 
@@ -29,7 +30,7 @@ export default async function DigestPage({ params }: { params: Promise<{ id: str
       <h1 className="sr-only">{digest.periodLabel}</h1>
       {digest.status === 'withdrawn' ? (
         <p role="note" className="callout-attention no-print mt-4 rounded-md border px-4 py-3 text-sm">
-          A developer withdrew a summary this digest included, so it was withdrawn. Readers no longer see it.
+          A developer {TERMS.withdrawnSummary} this digest included, so it was withdrawn. Readers no longer see it.
         </p>
       ) : null}
       <div className="mt-4">

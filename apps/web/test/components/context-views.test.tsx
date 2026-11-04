@@ -48,7 +48,7 @@ describe('ContextTable', () => {
     expect(within(rows[0]!).getByText('b2b2b2b2')).toBeInTheDocument();
     expect(within(rows[0]!).getByText('Active')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('Superseded by ctx-00000003')).toBeInTheDocument();
-    expect(within(rows[2]!).getByText('Retired by a retraction')).toBeInTheDocument();
+    expect(within(rows[2]!).getByText('Retired: its summary was withdrawn')).toBeInTheDocument();
   });
 
   it('says plainly when there is nothing in a list', () => {

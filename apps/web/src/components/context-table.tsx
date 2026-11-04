@@ -1,7 +1,6 @@
 import { shortSource, type ContextItem } from '@digest/core';
 import { StatusPill, toneForItem } from '~/components/status-pill';
-
-const TYPE = { pitfall: 'Pitfall', decision: 'Decision', convention: 'Convention' } as const;
+import { ITEM_TYPE, TERMS } from '~/lib/terms';
 
 /** A path that may wrap after each slash, never inside a file or folder name. */
 const Path = ({ path }: { path: string }) => (
@@ -20,9 +19,10 @@ const Path = ({ path }: { path: string }) => (
 );
 
 function status(i: ContextItem) {
-  if (i.status === 'superseded') return `Superseded by ${i.supersededBy}`;
-  if (i.status === 'retired') return `Retired by ${i.retiredBy === 'retraction' ? 'a retraction' : i.retiredBy}`;
-  return 'Active';
+  if (i.status === 'superseded') return `${TERMS.superseded} by ${i.supersededBy}`;
+  // retiredBy 'retraction': every summary it came from was withdrawn (D80).
+  if (i.status === 'retired') return i.retiredBy === 'retraction' ? `${TERMS.retired}: its summary was withdrawn` : `${TERMS.retired} by ${i.retiredBy}`;
+  return TERMS.active;
 }
 
 /** Context items with their type colour, reason, paths, sources, date and status. Rows stack on narrow screens. */
@@ -47,7 +47,7 @@ export function ContextTable({ items, empty = 'No items yet.' }: { items: Contex
         {items.map((i) => (
           <tr key={i.id} id={i.id}>
             <td data-label="Type">
-              <StatusPill tone={toneForItem(i.type)}>{TYPE[i.type]}</StatusPill>
+              <StatusPill tone={toneForItem(i.type)}>{ITEM_TYPE[i.type]}</StatusPill>
             </td>
             <td data-label="Note" className="max-w-xl">
               <p className="text-pretty">{i.text}</p>

@@ -21,3 +21,27 @@ The logs dashboard (`apps/web`) uses the showcase site's design language (logs-w
 - **Reading the digest:** one centred column, with the back link and the print button aligned to it. Small markers sit on "Key decisions" (blue) and "Risks and open questions" (amber), like a memo's margin notes. Under 640px the card falls away so the text uses the full width, and combined ticket headings put one ticket per line.
 - **Print:** printing or saving as PDF sets the digest on light paper in the serif, without the app's chrome.
 - **No hero, no marketing sections, no footer credits.** The site sells the idea. The dashboard is the work.
+
+## Terminology
+
+One user-facing term per concept, in every view. The labels live in `apps/web/src/lib/terms.ts`, and
+`terminology.test.ts` fails if a view writes one itself or uses a synonym. Internal field names are unchanged. The CLI
+keeps its own wording.
+
+| Concept | Internal name | Shown as | Where |
+|---|---|---|---|
+| An approach a session tried, then dropped | `rejectedApproaches` | Tried and dropped | Ticket timeline, digest |
+| The context item distilled from one | `type: 'pitfall'` | Pitfall | Context view, agent brief |
+| A summary's decisions | `decisions` | Decisions (the digest picks "Key decisions") | Ticket timeline, digest |
+| The context item distilled from one | `type: 'decision'` | Decision | Context view, agent brief |
+| A way the team does things | `type: 'convention'` | Convention | Context view, agent brief |
+| A summary's risks and next steps | `risksOrFollowUps` | Follow-ups (the digest combines them into "Risks and open questions") | Ticket timeline, digest |
+| A summary the developer changed before approving | `editedByDeveloper: true` | Edited by developer (neutral) | Ticket timeline |
+| A summary approved by the auto-approve setting | `approvedBy: 'auto'` | Auto-approved (amber: nobody read it first) | Ticket timeline |
+| Approved by its developer, unedited | `approvedBy: 'developer'` | Nothing: every entry is approved | Ticket timeline |
+| Context item states | `active`, `superseded`, `retired` | Active, Superseded, Retired | Context view |
+| A summary taken back after sharing | retraction, `retiredBy: 'retraction'` | "withdrew a summary"; "Retired: its summary was withdrawn" | Digest, context view |
+| A digest a withdrawn summary was in | `status: 'withdrawn'` | Withdrawn | Digest archive |
+
+"Pitfall" never appears in the timeline or the digest, and "Tried and dropped" never appears in the context view. The text of
+a context item is written by the model and is left as it is.

@@ -5,13 +5,14 @@ import { ContextBriefPanel } from '~/components/context-brief';
 import { ContextTable } from '~/components/context-table';
 import { SectionHeader } from '~/components/section-header';
 import { api, developerOnly } from '~/lib/api';
+import { TERMS } from '~/lib/terms';
 
 export const metadata: Metadata = { title: 'Context' };
 
 const TABS = [
-  { status: 'active', label: 'Active', empty: 'No active items yet. They appear once approved summaries have been distilled.' },
-  { status: 'superseded', label: 'Superseded', empty: 'No superseded items.' },
-  { status: 'retired', label: 'Retired', empty: 'No retired items.' },
+  { status: 'active', label: TERMS.active, empty: 'No active items yet. They appear once approved summaries have been distilled.' },
+  { status: 'superseded', label: TERMS.superseded, empty: 'No superseded items.' },
+  { status: 'retired', label: TERMS.retired, empty: 'No retired items.' },
 ] as const;
 
 export default async function ContextPage({ searchParams }: { searchParams: Promise<{ path?: string; status?: string }> }) {
@@ -26,7 +27,7 @@ export default async function ContextPage({ searchParams }: { searchParams: Prom
   const href = (status: string) => `/context?${new URLSearchParams({ ...(path ? { path } : {}), status })}`;
   return (
     <>
-      <SectionHeader index="04" label="Context" title="Team context" line="What past sessions decided, kept doing, or tried and dropped, and the brief an agent gets for a path." />
+      <SectionHeader index="04" label="Context" title="Team context" line="The decisions, conventions and pitfalls distilled from approved summaries, and the brief an agent gets for a path." />
 
       <section aria-labelledby="brief-heading" className="mt-8 max-w-4xl">
         <h2 id="brief-heading" className="sr-only">
