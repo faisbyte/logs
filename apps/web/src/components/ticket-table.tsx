@@ -8,6 +8,8 @@ export type TicketRowGroup = {
 };
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+// aria-labelledby splits on spaces, so an id can't keep the sprint's own name.
+const headingId = (sprint: string) => `sprint-${sprint.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
 /** The server's grouped ticket report, flattened into what the table shows. */
 export function ticketRows(report: TicketReport): TicketRowGroup[] {
@@ -37,8 +39,8 @@ export function TicketTable({ groups }: { groups: TicketRowGroup[] }) {
   return (
     <div className="space-y-10">
       {groups.map((group) => (
-        <section key={group.sprint} aria-labelledby={`sprint-${group.sprint}`}>
-          <h2 id={`sprint-${group.sprint}`} className="text-fg-subtle font-mono text-xs tracking-wide uppercase">
+        <section key={group.sprint} aria-labelledby={headingId(group.sprint)}>
+          <h2 id={headingId(group.sprint)} className="text-fg-subtle font-mono text-xs tracking-wide uppercase">
             {group.sprint}
           </h2>
           {group.tickets.length ? (

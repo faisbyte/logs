@@ -12,6 +12,8 @@ export type DigestRow = {
   createdAt: string;
   sentAt: string | null;
   corrects: string | null;
+  previewUntil?: string | null;
+  warnings?: string[];
 };
 
 const STATUS = { ready: 'Ready', preview: 'In preview', sent: 'Sent', withdrawn: 'Withdrawn' } as const;

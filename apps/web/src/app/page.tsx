@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation';
+import { viewer } from '~/lib/api';
 
-// The archive is the one view every role has, so it is home for now.
-export default function Home() {
-  redirect('/digests');
+// Home by role: developers start on the overview, readers on the digest archive, the one view they have (D51).
+export default async function Home() {
+  const me = await viewer();
+  if (!me) redirect('/sign-in');
+  redirect(me.role === 'developer' ? '/overview' : '/digests');
 }

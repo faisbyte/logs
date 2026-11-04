@@ -6,11 +6,12 @@ import { signOut } from '~/lib/auth-actions';
 
 /**
  * The views a role can open. Readers get the digest archive and reports only (DECISIONS.md D51); the server enforces it
- * too. The overview and digest previews join the developer list as they are built.
+ * too. Developers start on the overview.
  */
 export const navFor = (role: Viewer['role']) => [
   ...(role === 'developer'
     ? [
+        { href: '/overview', label: 'Overview' },
         { href: '/tickets', label: 'Tickets' },
         { href: '/context', label: 'Context' },
       ]
@@ -24,7 +25,7 @@ export function AppHeader({ viewer }: { viewer: Viewer | null }) {
     <header className="border-line bg-bg/95 no-print z-40 border-b backdrop-blur sm:sticky sm:top-0">
       {/* Under 640px: the wordmark and controls on one row, the nav on its own full-width row below. */}
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 px-4 sm:h-14 sm:flex-nowrap sm:px-6">
-        <Link href="/digests" aria-label="logs, home" className="flex h-12 shrink-0 items-center text-[15px] sm:h-auto">
+        <Link href="/" aria-label="logs, home" className="flex h-12 shrink-0 items-center text-[15px] sm:h-auto">
           <Wordmark />
         </Link>
         {viewer ? (

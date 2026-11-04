@@ -24,6 +24,8 @@ describe('TicketTable', () => {
   it('lists every ticket under its sprint, each row one link to its timeline, with counts and last activity', () => {
     render(<TicketTable groups={ticketRows(report)} />);
     expect(screen.getByRole('heading', { level: 2, name: 'Sprint 7' })).toBeInTheDocument();
+    // The sprint's section is named by its heading, even with a space in the sprint's name.
+    expect(screen.getByRole('region', { name: 'Sprint 7' })).toContainElement(screen.getByRole('table'));
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
     expect(rows.map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))).toEqual([
       ['PROJ-201', 'Account lockout', '2 summaries · 2 developers', '2026-04-12'],
