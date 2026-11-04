@@ -1286,3 +1286,40 @@ Option A first: no repo-write credentials on the server, and a person starts eve
 
 - **Reading:** round 1 reproduced the failure that needed the pilot edit, with the pitfall filed only under the helper in `src/lib/`. The nearest-parent rule (D88) still brought it into the `src/invoices` brief. Extraction's path choice still varies, but retrieval no longer depends on it. The total was $0.075.
 - **Next:** the owner approved the stability test only. The 40-run experiment (about $2.64 typical, $4.24 high, a $40 ceiling) waits for a go, and so does the Phase 8 "Done when" verdict.
+
+## D90. Phase 8's 40-run experiment is parked; its "Done when" is outstanding
+
+- **Date:** 2026-11-04
+- **Decision:** the owner parked the full A/B experiment, 10 runs with the brief and 10 without per candidate, about $2.64 typical. Phase 9 starts.
+- **Where the evidence stands:**
+  - **Round 2 pilot (D87):** on both traps, every no-brief run fell in, 3 of 3 for Ledgerly and 3 of 3 for AcmePay. Every with-brief run avoided the trap and did the task, 1 of 1 for each.
+  - **Stability (D89):** the trap notes reached their briefs in 3 of 3 rounds through the real pipeline (approved summaries, `distill`, `sprintdigest context`).
+  - **What it supports:** suggestive, not significant. Fisher's exact p is 0.25 per candidate with one with-brief run each.
+- **Still outstanding:** Phase 8's "Done when" (a new session given the context output avoids a teammate's recorded mistake) isn't met until the full run reports, like D57 and D73. The harness is ready (`harness.mjs full`). Briefs are generated once and reused, runs are saved one at a time, and the report includes per-run mentions of the note and a Fisher test per candidate.
+
+## D91. How a browser session gets a token for the dashboard (open)
+
+- **Date:** 2026-11-04
+- **Status:** open, waiting for the owner. The scaffold, design tokens and shared components come first, because they don't depend on it.
+- **Common to both options:**
+  - **The browser never calls the digest server directly.** The Next.js app's own server code calls it, with the credential added there, so no credential is ever readable from JavaScript.
+  - **A new `GET /v1/whoami`** returns the caller's role, repo and display name, so the UI renders only what the role can see. The server still enforces every role (D51): a reader is refused on developer endpoints whatever the UI does.
+  - **Cookies** are `httpOnly`, `Secure` (outside localhost), `SameSite=Strict`, and scoped to the dashboard. Writes check the `Origin` header.
+
+### Option A: paste the token once; the dashboard keeps it in an encrypted cookie
+
+- **How:** a sign-in page takes the developer's or reader's existing token and checks it with `whoami`. The dashboard server then stores it in an encrypted, signed `httpOnly` cookie (AES-GCM with a `DASHBOARD_SECRET`). Each page load decrypts it server-side and calls the API with it.
+- **Exposure:** the token passes through the browser once, while it is typed and posted. After that it lives only inside the encrypted cookie. A stolen cookie is the long-lived token itself, usable until an admin re-issues it.
+- **Logout:** it clears the cookie. The token stays valid on the server, so logout doesn't revoke a copied cookie.
+- **Cost:** no server change beyond `whoami`. The dashboard needs one secret.
+
+### Option B: exchange the token for a short-lived server-side session
+
+- **How:** the sign-in page posts the token to a new `POST /v1/sessions` on the digest server. That returns a random session id with the token's identity and role and a 12-hour expiry, stored hashed like tokens (a new migration). The dashboard keeps only the session id in its `httpOnly` cookie and calls the API with `Authorization: Session <id>`.
+- **Exposure:** the long-lived token passes through the browser once and is never stored anywhere in the browser. A stolen cookie is worth at most 12 hours, for one role.
+- **Logout:** `DELETE /v1/sessions` ends the session on the server at once, so a copied cookie stops working. Expiry needs no cleanup to be safe.
+- **Cost:** a second auth scheme on the server, a sessions table and its tests. It also fits Phase 10's audit log better: a session is a natural place to record who viewed what.
+
+### Recommendation
+
+Option B. Logout that really revokes and a 12-hour blast radius are worth one small table. A reader's dashboard session shouldn't carry a credential that never expires.
