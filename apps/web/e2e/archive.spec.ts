@@ -344,6 +344,16 @@ for (const theme of ['dark', 'light'] as const) {
   });
 }
 
+test('at 360px the item search takes its own full-width line under the type chips', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await signIn(page, seed().developer);
+  await page.goto('/context');
+  const search = (await page.getByRole('searchbox', { name: 'Search items' }).boundingBox())!;
+  const chips = (await page.getByRole('group', { name: 'Filter by type' }).boundingBox())!;
+  expect(search.width).toBeGreaterThan(300);
+  expect(search.y).toBeGreaterThan(chips.y + chips.height - 1);
+});
+
 // Last, because it changes the seeded data: a developer retires an item from the dashboard.
 test('a developer retires an active item after confirming; it moves to Retired', async ({ page }) => {
   await signIn(page, seed().developer);
