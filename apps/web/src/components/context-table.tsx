@@ -1,4 +1,7 @@
-import { shortSource, type ContextItem } from '@digest/core';
+import type { ContextItem } from '@digest/core';
+// The brief module alone: it has no Node imports, so the table can render in the browser too.
+import { shortSource } from '@digest/core/brief';
+import type { ReactNode } from 'react';
 import { StatusPill, toneForItem } from '~/components/status-pill';
 import { ITEM_TYPE, TERMS } from '~/lib/terms';
 
@@ -25,8 +28,8 @@ function status(i: ContextItem) {
   return TERMS.active;
 }
 
-/** Context items with their type colour, reason, paths, sources, date and status. Rows stack on narrow screens. */
-export function ContextTable({ items, empty = 'No items yet.' }: { items: ContextItem[]; empty?: string }) {
+/** Context items with their type colour, reason, paths, sources, date and status, and an optional action per row. Rows stack on narrow screens. */
+export function ContextTable({ items, empty = 'No items yet.', action }: { items: ContextItem[]; empty?: string; action?: (item: ContextItem) => ReactNode }) {
   if (!items.length) {
     return <p className="border-line text-fg-muted rounded-lg border border-dashed px-5 py-6 text-sm">{empty}</p>;
   }
@@ -71,7 +74,8 @@ export function ContextTable({ items, empty = 'No items yet.' }: { items: Contex
               <span className="whitespace-nowrap">{i.date}</span>
             </td>
             <td data-label="Status" className="text-fg-muted text-xs">
-              {status(i)}
+              <span className="block">{status(i)}</span>
+              {action?.(i)}
             </td>
           </tr>
         ))}

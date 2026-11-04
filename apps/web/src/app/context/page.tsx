@@ -2,17 +2,20 @@ import { contextBrief } from '@digest/core';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ContextBriefPanel } from '~/components/context-brief';
-import { ContextTable } from '~/components/context-table';
+import { ContextItems } from '~/components/context-items';
 import { SectionHeader } from '~/components/section-header';
 import { api, developerOnly } from '~/lib/api';
+import { SERVER_CLI } from '~/lib/brand';
+import { retireItem } from '~/lib/context-actions';
 import { TERMS } from '~/lib/terms';
 
 export const metadata: Metadata = { title: 'Context' };
 
+// What each state means, so an empty tab says why it is empty rather than looking broken.
 const TABS = [
-  { status: 'active', label: TERMS.active, empty: 'No active items yet. They appear once approved summaries have been distilled.' },
-  { status: 'superseded', label: TERMS.superseded, empty: 'No superseded items.' },
-  { status: 'retired', label: TERMS.retired, empty: 'No retired items.' },
+  { status: 'active', label: TERMS.active, empty: ['No active items yet.', `Items appear once approved summaries are distilled on the server (${SERVER_CLI} context distill).`] },
+  { status: 'superseded', label: TERMS.superseded, empty: ['Nothing has been superseded yet.', 'An item is superseded when a newer decision on the same topic replaces it. The older one is kept here, with a link to what replaced it.'] },
+  { status: 'retired', label: TERMS.retired, empty: ['Nothing has been retired yet.', 'An item is retired when a developer marks it wrong, or when every summary it came from is withdrawn. It never comes back on its own.'] },
 ] as const;
 
 export default async function ContextPage({ searchParams }: { searchParams: Promise<{ path?: string; status?: string }> }) {
@@ -72,7 +75,17 @@ export default async function ContextPage({ searchParams }: { searchParams: Prom
           </ul>
         </nav>
         <div className="mt-4">
-          <ContextTable items={shown} empty={tab.empty} />
+          <ContextItems
+            key={tab.status}
+            items={shown}
+            retire={tab.status === 'active' ? retireItem : undefined}
+            empty={
+              <>
+                <p className="text-fg font-medium">{tab.empty[0]}</p>
+                <p className="mt-1">{tab.empty[1]}</p>
+              </>
+            }
+          />
         </div>
       </section>
     </>

@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./brief": {
+      "types": "./dist/context/brief.d.ts",
+      "default": "./dist/context/brief.js"
     }
   },
   "scripts": {

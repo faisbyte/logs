@@ -41,6 +41,9 @@ test.describe('a reader', () => {
     for (const path of [`/v1/summaries?repoId=${repo}`, `/v1/context-items?repoId=${repo}`, `/v1/tickets?repoId=${repo}&sprint=Sprint%207`]) {
       expect((await request.get(`${API}${path}`, { headers: { authorization: `Session ${cookie.value}` } })).status()).toBe(403);
     }
+    // The endpoint the dashboard's Retire calls, the same one as `sprintdigest context retire`.
+    const retire = await request.post(`${API}/v1/context-retirements`, { headers: { authorization: `Session ${cookie.value}` }, data: { repoId: seed().repoId, id: 'ctx-e2e00001' } });
+    expect(retire.status()).toBe(403);
   });
 
   test('reads a corrected digest, marked as corrected, with its coverage line', async ({ page }) => {
@@ -245,6 +248,21 @@ test.describe('developer views', () => {
     await expect(page.getByText('Retired by alice')).toBeVisible();
   });
 
+  test('the context items filter by type chip and by text search', async ({ page }) => {
+    await signIn(page, seed().developer);
+    await page.goto('/context');
+    const rows = page.getByRole('table').getByRole('row');
+    await page.getByRole('button', { name: /^Decision/ }).click();
+    await expect(rows).toHaveCount(2);
+    await expect(page.getByRole('status')).toHaveText(/Showing 1 of 3 items/);
+    await page.getByRole('button', { name: /^Decision/ }).click();
+    await page.getByRole('searchbox', { name: 'Search items' }).fill('messages.ts');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(1)).toContainText('Lockout messages say when to try again.');
+    await page.getByRole('searchbox', { name: 'Search items' }).fill('nothing like this');
+    await expect(page.getByText('No items match these filters.')).toBeVisible();
+  });
+
   for (const theme of ['dark', 'light'] as const) {
     test(`pass axe (WCAG 2.1 AA) in the ${theme} theme and don't scroll sideways at 360px`, async ({ page }) => {
       await page.addInitScript((t) => localStorage.setItem('logs-theme', t), theme);
@@ -274,3 +292,16 @@ test('stacked table rows at 360px keep every part of a cell in the value column,
   expect(pill.width).toBeLessThan(120);
 });
 
+
+// Last, because it changes the seeded data: a developer retires an item from the dashboard.
+test('a developer retires an active item after confirming; it moves to Retired', async ({ page }) => {
+  await signIn(page, seed().developer);
+  await page.goto('/context');
+  await page.getByRole('button', { name: 'Retire ctx-e2e00003' }).click();
+  await expect(page.getByRole('group', { name: 'Retire ctx-e2e00003?' }).getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.getByRole('button', { name: 'Retire item' }).click();
+  await expect(page.getByText('Retired ctx-e2e00003. It won’t come back on its own.')).toBeVisible();
+  await expect(page.locator('#ctx-e2e00003')).toHaveCount(0);
+  await page.getByRole('link', { name: /Retired/ }).click();
+  await expect(page.locator('#ctx-e2e00003')).toContainText('Retired by alice');
+});
