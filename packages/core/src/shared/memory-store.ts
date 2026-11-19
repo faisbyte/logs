@@ -19,6 +19,7 @@ import {
 } from './tickets.js';
 
 import { randomUUID } from 'node:crypto';
+import type { AuditEvent } from './audit.js';
 import type { ContextChanges } from '../context/extract.js';
 import type { ContextItem, ContextItemStatus } from '../context/item.js';
 import { allSourcesRetracted, byNewest, checkContextChanges, runSummaries, type ContextRun, type RetireResult } from '../context/store.js';
@@ -42,6 +43,7 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   readonly #runs: ContextRun[] = [];
   /** session hash → the token hash it came from, and when it expires */
   readonly #sessions = new Map<string, { tokenHash: string; expiresAt: string }>();
+  readonly #audit: AuditEvent[] = [];
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -94,6 +96,17 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   async purgeSummariesBefore(repoId: string, before: string): Promise<Purge> {
     const { keys: _, ...purged } = this.#purge(repoId, (s) => Date.parse(s.summary.endedAt) < Date.parse(before));
     return purged;
+  }
+
+  async recordAudit(event: AuditEvent): Promise<void> {
+    this.#audit.push(structuredClone(event));
+  }
+
+  async auditEvents(repoId: string, { since, limit }: { since?: string; limit?: number } = {}): Promise<AuditEvent[]> {
+    // Recorded order breaks ties in time, newest first.
+    const events = this.#audit.map((e, seq) => ({ e, seq })).filter(({ e }) => e.repoId === repoId && (!since || Date.parse(e.at) >= Date.parse(since)));
+    events.sort((a, b) => Date.parse(b.e.at) - Date.parse(a.e.at) || b.seq - a.seq);
+    return structuredClone(events.slice(0, limit ?? events.length).map(({ e }) => e));
   }
 
   async retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]> {

@@ -4,6 +4,7 @@ import {
   DigestError,
   digestInput,
   reportSummaryKeys,
+  SERVER_ACTOR,
   storedFields,
   ticketReport,
   writeDigest,
@@ -73,7 +74,10 @@ async function deliver(deps: SendDueDeps, digest: StoredDigest, deliveries: Deli
     if (digest.deliveries[delivery.channel]) continue;
     try {
       await delivery.send({ subject, markdown: digest.markdown });
-      await deps.store.updateDigest(digest.repoId, digest.id, { deliveries: { [delivery.channel]: now() } });
+      const at = now();
+      await deps.store.updateDigest(digest.repoId, digest.id, { deliveries: { [delivery.channel]: at } });
+      // Who was sent what (D100): one event per channel, so a retry leaves its own record.
+      await deps.store.recordAudit({ repoId: digest.repoId, at, ...SERVER_ACTOR, action: 'digest.sent', target: digest.id, detail: `${delivery.channel}: ${digest.periodLabel}` });
       sent.push(delivery.channel);
     } catch (err) {
       failed.push(`${delivery.channel} failed: ${(err as Error).message}`);

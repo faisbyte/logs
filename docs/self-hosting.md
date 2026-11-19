@@ -43,6 +43,7 @@ docker compose exec server sprintdigest-server sprint --repo github.com/org/repo
 docker compose exec server sprintdigest-server repo --repo github.com/org/repo --schedule sprint-end --email po@example.com
 docker compose exec server sprintdigest-server repo --repo github.com/org/repo --retention-days 365   # summaries age out; default: kept for good
 docker compose exec server sprintdigest-server delete-data --repo github.com/org/repo --developer alice --yes   # a departed developer
+docker compose exec server sprintdigest-server audit --repo github.com/org/repo --limit 50   # who viewed or sent what
 ```
 
 With Postgres there is no need to stop the server first (that's only for the local PGlite mode).

@@ -4,6 +4,7 @@ import { digestStoreContract } from './digest-contract.js';
 import { ticketStoreContract } from './ticket-contract.js';
 import { contextStoreContract } from './context-contract.js';
 import { sessionContract } from './session-contract.js';
+import { auditContract } from './audit-contract.js';
 import { dataDeletionContract, retentionContract } from './data-contract.js';
 
 summaryStoreContract('InMemorySummaryStore', () => new InMemorySummaryStore());
@@ -13,3 +14,4 @@ contextStoreContract('InMemorySummaryStore', () => new InMemorySummaryStore());
 sessionContract('InMemorySummaryStore', (now) => new InMemorySummaryStore({ now }));
 dataDeletionContract('InMemorySummaryStore', () => new InMemorySummaryStore());
 retentionContract('InMemorySummaryStore', () => new InMemorySummaryStore());
+auditContract('InMemorySummaryStore', () => new InMemorySummaryStore());

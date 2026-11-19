@@ -232,3 +232,32 @@ describe('sprintdigest-server retention apply (D99)', () => {
     expect((await cli(['retention', ...data])).stderr).toContain('usage: sprintdigest-server');
   });
 });
+
+describe('sprintdigest-server audit (D100)', () => {
+  const REPO = 'github.com/acme/webapp';
+  const line = (rest: string) => new RegExp(`^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC  ${rest}$`);
+
+  it("records the admin's and the jobs' actions, and shows a repo's log newest first, with --since and --limit", async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
+    expect(await cli(['audit', ...data, '--repo', REPO])).toEqual({ exitCode: 0, stderr: '', stdout: `No audit events for ${REPO}.\n` });
+    await cli(['token', ...data, '--repo', REPO, '--developer', 'alice', '--name', 'Alice']);
+    await cli(['token', ...data, '--repo', REPO, '--reader', 'pat', '--name', 'Pat (PO)']);
+    const { store, close } = await openStore({ dataDir: data[1] });
+    await store.push({ repoId: REPO, developerId: 'alice', developerName: 'Alice' }, payloadFor({ sessionId: 'a1' }));
+    await close();
+    await cli(['repo', ...data, '--repo', REPO, '--retention-days', '30']);
+    await cli(['retention', 'apply', ...data]);
+    await cli(['delete-data', ...data, '--repo', REPO, '--developer', 'alice', '--yes']);
+    const shown = await cli(['audit', ...data, '--repo', REPO]);
+    expect(shown.exitCode).toBe(0);
+    const lines = shown.stdout.trimEnd().split('\n');
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toMatch(line('admin \\(admin\\)  deleted data  alice  0 summaries'));
+    expect(lines[1]).toMatch(line('server \\(server\\)  applied retention  kept 30 days: 1 summary'));
+    expect(lines[2]).toMatch(line('admin \\(admin\\)  issued a token  pat  reader'));
+    expect(lines[3]).toMatch(line('admin \\(admin\\)  issued a token  alice  developer'));
+    expect((await cli(['audit', ...data, '--repo', REPO, '--limit', '1'])).stdout.trimEnd().split('\n')).toHaveLength(1);
+    expect((await cli(['audit', ...data, '--repo', REPO, '--since', '2100-01-01'])).stdout).toBe(`No audit events for ${REPO}.\n`);
+    expect((await cli(['audit', ...data, '--repo', REPO, '--limit', 'all'])).stderr).toContain('--limit must be a whole number');
+  });
+});

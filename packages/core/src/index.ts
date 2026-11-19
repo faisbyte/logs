@@ -101,6 +101,7 @@ export { localPushTarget, type ContextItemsOutcome,
 export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type DigestPeriod, type DigestTicket, type DigestWork } from './digest/input.js';
 export { assertDeliverable, checkDigest, DEFAULT_JARGON, jargonIn, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';
+export { ADMIN_ACTOR, SERVER_ACTOR, type AuditAction, type AuditEvent, type AuditRole, type AuditStore } from './shared/audit.js';
 export { checkNewDigest, defaultRepoSettings, sameReport, warningText, type DigestKind, type DigestPatch, type DigestStatus, type DigestStore, type NewDigest, type RepoSettings, type ReportKey, type StoredDigest } from './shared/digests.js';
 export { capRefusal, costCapRefusal, monthStart, onDemandReport, periodKey, reportEstimate, storedFields, writeDigest, type DigestDeps, type ReportEstimate, type ReportResult } from './shared/reports.js';
 export { judgeDigest, judgeSystemPrompt, JudgeSchema, type JudgeVerdict } from './digest/judge.js';

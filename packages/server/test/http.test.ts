@@ -257,6 +257,69 @@ describe('digest server HTTP API', () => {
     });
   });
 
+  describe('the audit log (D100)', () => {
+    const repo = encodeURIComponent(REPO);
+    const digest = (status: 'sent' | 'preview') => ({ repoId: REPO, kind: 'scheduled' as const, periodKey: `week:${status}`, periodLabel: `Week (${status})`, from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# w\n', summaryCount: 1, developerCount: 1, costUsd: 0, status, previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z' });
+    const actions = async (store: InMemorySummaryStore) => (await store.auditEvents(REPO)).reverse().map(({ action, actorId, actorRole, target, detail }) => ({ action, actorId, actorRole, target, detail }));
+
+    it('records who signed in and who viewed which digest, and nothing for a list, a refusal or a miss', async () => {
+      const { store, call, token } = await start();
+      const sent = await store.saveDigest(digest('sent'));
+      const preview = await store.saveDigest(digest('preview'));
+      const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+      const { session } = await (await call('/v1/sessions', { method: 'POST', body: { token: reader } })).json();
+      await call(`/v1/digests?repoId=${repo}`, { session });
+      await call(`/v1/digests/${sent.id}?repoId=${repo}`, { session });
+      expect((await call(`/v1/digests/${preview.id}?repoId=${repo}`, { session })).status).toBe(404);
+      await call(`/v1/digests/${sent.id}?repoId=${repo}`, { token: 'dgt_wrong' });
+      await call(`/v1/digests/${preview.id}?repoId=${repo}`, { token });
+      const events = await store.auditEvents(REPO);
+      expect(events.every((e) => Date.parse(e.at) > 0 && e.repoId === REPO)).toBe(true);
+      expect(await actions(store)).toEqual([
+        { action: 'session.started', actorId: 'pat', actorRole: 'reader', target: null, detail: null },
+        { action: 'digest.viewed', actorId: 'pat', actorRole: 'reader', target: sent.id, detail: 'Week (sent)' },
+        { action: 'digest.viewed', actorId: 'alice', actorRole: 'developer', target: preview.id, detail: 'Week (preview)' },
+      ]);
+      expect(JSON.stringify(events)).not.toContain(session);
+      expect(JSON.stringify(events)).not.toContain(reader);
+    });
+
+    it('records pushes, retractions, retirements and deletions as their developer, never content or tokens', async () => {
+      const { store, call, token, push } = await start();
+      const ref = `claude-code/${payloadFor().sessionId}`;
+      await push(payloadFor());
+      await push(payloadFor());
+      await call('/v1/retractions', { method: 'POST', token, body: { repoId: REPO, agent: 'claude-code', sessionId: payloadFor().sessionId } });
+      await store.applyContextChanges(REPO, { added: [contextItem()], merged: [], superseded: [] });
+      await call('/v1/context-retirements', { method: 'POST', token, body: { repoId: REPO, id: 'ctx-0000000a' } });
+      await push(payloadFor({ sessionId: 'second' }));
+      await call('/v1/data-deletions', { method: 'POST', token, body: { repoId: REPO } });
+      expect(await actions(store)).toEqual([
+        { action: 'summary.pushed', actorId: 'alice', actorRole: 'developer', target: ref, detail: null },
+        { action: 'summary.retracted', actorId: 'alice', actorRole: 'developer', target: ref, detail: null },
+        { action: 'context.retired', actorId: 'alice', actorRole: 'developer', target: 'ctx-0000000a', detail: null },
+        { action: 'summary.pushed', actorId: 'alice', actorRole: 'developer', target: 'claude-code/second', detail: null },
+        { action: 'data.deleted', actorId: 'alice', actorRole: 'developer', target: 'alice', detail: '2 summaries' },
+      ]);
+      const text = JSON.stringify(await store.auditEvents(REPO));
+      expect(text).not.toContain(token);
+      expect(text).not.toContain(payloadFor().goal);
+    });
+
+    it('records a report when it is written, not when the cached one is served again', async () => {
+      const output = { overview: 'Login is safer.', tickets: [{ key: 'PROJ-142', achieved: 'Repeated attempts are limited.', aiInvolvement: 'AI wrote most of it.', keyDecisions: [] }], otherWork: null, risksAndOpenQuestions: [] };
+      const { store, call, push } = await start({ llm: new FakeLlmClient(() => JSON.stringify(output), 'claude-sonnet-5-5'), model: 'claude-sonnet-5-5', defaultCapUsd: 10 });
+      await push(payloadFor());
+      const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+      const body = { repoId: REPO, from: '2026-03-01', to: '2026-04-01' };
+      const made = await (await call('/v1/reports', { method: 'POST', token: reader, body })).json();
+      await call('/v1/reports', { method: 'POST', token: reader, body });
+      expect((await actions(store)).filter((e) => e.action === 'report.written')).toEqual([
+        { action: 'report.written', actorId: 'pat', actorRole: 'reader', target: made.digest.id, detail: made.digest.periodLabel },
+      ]);
+    });
+  });
+
   describe('reports and digests (DECISIONS.md D51, D53)', () => {
     const output = { overview: 'Login is safer.', tickets: [{ key: 'PROJ-142', achieved: 'Repeated attempts are limited.', aiInvolvement: 'AI wrote most of it.', keyDecisions: [] }], otherWork: null, risksAndOpenQuestions: [] };
     const llm = () => new FakeLlmClient(() => JSON.stringify(output), 'claude-sonnet-5-5');

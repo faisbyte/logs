@@ -1501,3 +1501,23 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **A separate retention period for digests.** Left out until someone needs it; a digest is a few paragraphs per period.
   - **Age by push time.** Rejected: the work's date is what "old" means to a reader, and a late push shouldn't extend it.
   - **Retract instead of delete.** Rejected: retention exists so the data is gone.
+
+## D100. The audit log
+
+- **Date:** 2026-11-19
+- **Decision:** the server records who viewed or sent what, and the other actions that change what people see.
+  - **What each event holds:** the time, who (id, name and role: developer, reader, admin or server), the action, and the item (a digest id, an `agent/sessionId`, a context item id, a developer id). It may also hold a short label such as a digest's period or a delivery channel. Never content, never a token.
+  - **Recorded:**
+    - **Viewing:** a digest being opened (`GET /v1/digests/:id`; lists aren't views) and dashboard sign-ins.
+    - **Sending:** each delivery of a scheduled digest, one event per channel at the moment it went, so a retry has its own record.
+    - **Writing:** a report written (not a cached one served again).
+    - **Changes:** summaries pushed (not unchanged repeats) and retracted, context items retired, data deleted, and retention runs that deleted something.
+    - **Admin:** tokens issued, recorded before the token is printed.
+  - **Not recorded:** refusals, misses and reads of other lists.
+  - **Reading it:** only the admin, with `sprintdigest-server audit --repo [--since] [--limit]`. There's no HTTP endpoint, following D97.
+  - **Delete my data doesn't erase audit events.** They hold names and ids, not content, and an audit trail that its subjects could erase would show nothing. Retention doesn't age them out either.
+  - **Storage:** migration 14 adds `audit_events`, ordered by time and then by insertion, so events in the same instant keep their order.
+- **Alternatives:**
+  - **Log lines instead of a table.** Logs already carry method, path and status (D43), but they rotate and can't be queried by repo.
+  - **Recording list views and refusals too.** That's mostly noise; refusals belong with rate limiting (D101).
+  - **A dashboard page for the log.** That would need the admin token role D97 declined.

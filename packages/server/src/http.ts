@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AgentSchema, onDemandReport, READER_REFUSAL, reportEstimate, receivePush, ticketReport, type DigestDeps, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
+import { AgentSchema, onDemandReport, READER_REFUSAL, reportEstimate, receivePush, ticketReport, type AuditAction, type DigestDeps, type Identity, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 // The digest server's HTTP API (DECISIONS.md D43). Every request is authenticated by a per-developer, per-repo
 // token and may only touch that token's repo. Logs carry method, path and status, never tokens or content.
@@ -100,6 +102,9 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
     if (identity.role !== 'developer') throw new HttpError(403, READER_REFUSAL);
     return identity;
   };
+  /** The audit log (D100): who did what to which item, after it happened. Never content, never a token. */
+  const audit = (who: Identity, action: AuditAction, target: string | null = null, detail: string | null = null) =>
+    store.recordAudit({ repoId: who.repoId, at: new Date().toISOString(), actorId: who.developerId, actorName: who.developerName, actorRole: who.role, action, target, detail });
 
   const route = async (req: IncomingMessage, url: URL): Promise<[number, unknown]> => {
     const methods: Record<string, string[]> = {
@@ -133,6 +138,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       if (typeof body?.token !== 'string' || !body.token) throw new HttpError(400, 'token is required');
       const started = await store.startSession(body.token);
       if (!started) throw new HttpError(401, 'unknown or revoked token');
+      await audit(started.identity, 'session.started');
       return [201, started];
     }
     if (url.pathname === '/v1/whoami') {
@@ -152,8 +158,9 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       const body = (await readJson(req)) as Record<string, unknown> | null;
       const repoId = body?.repoId;
       if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
-      await reader(req, repoId);
+      const identity = await reader(req, repoId);
       const result = await onDemandReport({ ...digests, store }, repoId, periodFrom((name) => body?.[name]));
+      if (result.status === 'ok' && !result.cached) await audit(identity, 'report.written', result.digest.id, result.digest.periodLabel);
       return result.status === 'ok' ? [200, result] : [REPORT_STATUS[result.status], result];
     }
     if (url.pathname === '/v1/digests' || digestId) {
@@ -165,6 +172,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       if (!digestId) return [200, { digests: (await store.digests(repoId, statuses ? { statuses: [...statuses] } : {})).map(listed) }];
       const digest = await store.getDigest(repoId, decodeURIComponent(digestId));
       if (!digest || (statuses && !statuses.includes(digest.status as 'ready'))) throw new HttpError(404, 'no such digest');
+      await audit(identity, 'digest.viewed', digest.id, digest.periodLabel);
       return [200, { digest }];
     }
 
@@ -193,7 +201,9 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       const repoId = body?.repoId;
       if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
       if (typeof body?.id !== 'string' || !body.id) throw new HttpError(400, 'id is required');
-      const result = await store.retireContextItem(await developer(req, repoId), body.id);
+      const identity = await developer(req, repoId);
+      const result = await store.retireContextItem(identity, body.id);
+      if (result.status === 'retired') await audit(identity, 'context.retired', body.id);
       return [result.status === 'not-found' ? 404 : 200, result];
     }
     // Delete my data (D98): the caller's own summaries and what came only from them, in the caller's repo.
@@ -201,11 +211,16 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       const body = (await readJson(req)) as Record<string, unknown> | null;
       const repoId = body?.repoId;
       if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
-      return [200, { status: 'deleted', ...(await store.deleteDeveloperData(await developer(req, repoId))) }];
+      const identity = await developer(req, repoId);
+      const result = await store.deleteDeveloperData(identity);
+      await audit(identity, 'data.deleted', identity.developerId, count(result.summaries, 'summary', 'summaries'));
+      return [200, { status: 'deleted', ...result }];
     }
     if (url.pathname === '/v1/retractions') {
       const { repoId, ref } = linkTarget(await readJson(req));
-      const result = await store.retract(await developer(req, repoId), ref);
+      const identity = await developer(req, repoId);
+      const result = await store.retract(identity, ref);
+      if (result.status === 'retracted') await audit(identity, 'summary.retracted', `${ref.agent}/${ref.sessionId}`);
       return [RETRACT_STATUS[result.status], result];
     }
 
@@ -222,6 +237,10 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       const repoId = (body as { repoId?: unknown })?.repoId;
       if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
       const result = await receivePush(store, bearer(req), repoId, (body as { payload?: unknown }).payload);
+      if (result.status === 'created') {
+        const { developerId, developerName, summary } = result.stored;
+        await audit({ repoId, developerId, developerName, role: 'developer' }, 'summary.pushed', `${summary.agent}/${summary.sessionId}`);
+      }
       const response = result.status === 'created' || result.status === 'unchanged' ? { status: result.status, pushedAt: result.stored.pushedAt } : result;
       return [PUSH_STATUS[result.status], response];
     }
