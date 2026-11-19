@@ -148,77 +148,84 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] Write the findings to research/interviews.md.
 
 **Done when:** you have written evidence for or against stakeholder demand.
+**Status:** not started.
 
 ### Phase 1: Session discovery and parsing
-- [ ] Inspect real files first:
+- [x] Inspect real files first:
   - Claude Code: usually ~/.claude/projects/<encoded-project-path>/<session-id>.jsonl, one JSON event per line (user and assistant messages, tool use, timestamps, cwd, git branch).
   - Codex CLI: usually ~/.codex/sessions/YYYY/MM/DD/*.jsonl.
   - **Verify both on your machine and record the actual formats in docs/formats.md.**
-- [ ] Define a normalised ParsedSession schema in packages/core (zod).
-- [ ] Write a parser adapter per agent.
-- [ ] Filter sessions to the current repo (match cwd against the repo root).
-- [ ] Track already-processed sessions in a local state file (.digest/state.json, gitignored).
-- [ ] Strip or truncate tool outputs (file dumps, command output). Keep user prompts, assistant reasoning text, tool call names, and file paths.
-- [ ] Extract metadata: branch, files touched, start and end time, commit SHAs made during the session if detectable.
-- [ ] CLI command digest list shows the sessions found for this repo.
+- [x] Define a normalised ParsedSession schema in packages/core (zod).
+- [x] Write a parser adapter per agent.
+- [x] Filter sessions to the current repo (match cwd against the repo root).
+- [x] Track already-processed sessions in a local state file (.digest/state.json, gitignored).
+- [x] Strip or truncate tool outputs (file dumps, command output). Keep user prompts, assistant reasoning text, tool call names, and file paths.
+- [x] Extract metadata: branch, files touched, start and end time, commit SHAs made during the session if detectable.
+- [x] CLI command digest list shows the sessions found for this repo.
 
 **Done when:** digest list correctly shows your real Claude Code and Codex sessions for a test repo, and parser unit tests pass on fixture files.
+**Status:** Met (formats in docs/formats.md).
 
 ### Phase 2: Redaction
-- [ ] Use regex detectors for common secrets (AWS keys, GitHub tokens, Anthropic/OpenAI keys, JWTs, private keys, .env-style KEY=value, connection strings).
-- [ ] Add entropy-based detection for unknown high-entropy strings.
-- [ ] Add optional PII detection (emails, phone numbers).
-- [ ] Support a configurable allow/deny list in .digest/config.json.
-- [ ] Replace matches with typed placeholders like [REDACTED:aws_key].
-- [ ] Write unit tests with a fixture file full of fake secrets.
+- [x] Use regex detectors for common secrets (AWS keys, GitHub tokens, Anthropic/OpenAI keys, JWTs, private keys, .env-style KEY=value, connection strings).
+- [x] Add entropy-based detection for unknown high-entropy strings.
+- [x] Add optional PII detection (emails, phone numbers).
+- [x] Support a configurable allow/deny list in .digest/config.json.
+- [x] Replace matches with typed placeholders like [REDACTED:aws_key].
+- [x] Write unit tests with a fixture file full of fake secrets.
 
 **Done when:** no fixture secret survives redaction, and redaction runs before any LLM call or network request.
+**Status:** Met: redaction can't be skipped (D16, D17).
 
 ### Phase 3: Per-session summarisation
-- [ ] Write the summariser prompt (see Section 6) that returns JSON matching SessionSummary.
-- [ ] Validate the output with zod and retry once on invalid JSON.
-- [ ] Chunk long sessions: summarise the chunks, then merge.
-- [ ] Cache summaries locally keyed by session ID and content hash.
-- [ ] CLI command digest summarize [sessionId].
-- [ ] Track cost: log the tokens used per summary.
+- [x] Write the summariser prompt (see Section 6) that returns JSON matching SessionSummary.
+- [x] Validate the output with zod and retry once on invalid JSON.
+- [x] Chunk long sessions: summarise the chunks, then merge.
+- [x] Cache summaries locally keyed by session ID and content hash.
+- [x] CLI command digest summarize [sessionId].
+- [x] Track cost: log the tokens used per summary.
 
 **Done when:** summaries of 5+ real sessions are accurate and readable, as judged by you.
+**Status:** Met: the owner's review of the dogfood summaries drove the fixes in D31 to D38.
 
 ### Phase 4: Developer review and approval
-- [ ] CLI command digest review: show each draft summary, let the developer approve, edit (open in $EDITOR), or reject.
-- [ ] Rejected sessions are never uploaded.
-- [ ] Mark summaries editedByDeveloper when changed.
-- [ ] Add a config option to auto-approve for solo or trusted setups (off by default).
+- [x] CLI command digest review: show each draft summary, let the developer approve, edit (open in $EDITOR), or reject.
+- [x] Rejected sessions are never uploaded.
+- [x] Mark summaries editedByDeveloper when changed.
+- [x] Add a config option to auto-approve for solo or trusted setups (off by default).
 
 **Done when:** nothing can be uploaded without an explicit approval state.
+**Status:** Met: approval is a type the push path requires (D34).
 
 ### Phase 5: Backend and shared store
-- [ ] API with token auth per developer and per repo.
-- [ ] Endpoints: register repo, push summaries, list summaries by repo, branch, ticket or date.
-- [ ] CLI command digest push, and digest sync (= discover, summarise, review, push).
-- [ ] Optional git hook installer: digest init adds a post-commit or pre-push reminder.
-- [ ] Alternative storage mode (decide in DECISIONS.md): store approved summaries as JSON on an orphan git branch instead of a server, Entire-style.
+- [x] API with token auth per developer and per repo.
+- [x] Endpoints: register repo, push summaries, list summaries by repo, branch, ticket or date. (A repo is registered when the server issues its first token, an admin command rather than an endpoint: D43.)
+- [x] CLI command digest push, and digest sync (= discover, summarise, review, push).
+- [x] Optional git hook installer: digest init adds a post-commit or pre-push reminder.
+- [x] Alternative storage mode (decide in DECISIONS.md): store approved summaries as JSON on an orphan git branch instead of a server, Entire-style. (Decided in D39: the server. The git branch was not built.)
 
 **Done when:** two developer accounts can push summaries for the same repo, and both appear in one combined list.
+**Status:** Met in the server tests, against PGlite and real Postgres (D43).
 
 ### Phase 6: Ticket linking
-- [ ] Extract ticket keys from branch names and commit messages (configurable regex, e.g. [A-Z]+-\d+).
-- [ ] Allow manual ticket tagging during review.
-- [ ] Optional Jira and Linear integrations to fetch ticket titles and sprint membership.
+- [x] Extract ticket keys from branch names and commit messages (configurable regex, e.g. [A-Z]+-\d+).
+- [x] Allow manual ticket tagging during review.
+- [ ] Optional Jira and Linear integrations to fetch ticket titles and sprint membership. (The interface and a fake are built, D47; real clients wait for a sandbox, in Phase 11.)
 
 **Done when:** summaries are grouped correctly by ticket and sprint for a test project.
+**Status:** Met in tests, with a fake tracker (D46, D47).
 
 ### Phase 7: Stakeholder digest
-- [ ] Digest prompt (see Section 6): plain language, grouped by ticket, no code, a short "risks and open questions" section, and the AI involvement level per ticket.
-- [ ] Schedule weekly or end of sprint (cron or a queue).
-- [ ] Delivery: Slack incoming webhook and email (Resend, Postmark or SMTP).
-- [ ] Store sent digests and let stakeholders view past ones in the dashboard.
-- [ ] Add a "developer preview" step: developers can see the digest before it's sent (configurable).
-- [ ] On-demand team report: a manager can generate one document covering all developers'
+- [x] Digest prompt (see Section 6): plain language, grouped by ticket, no code, a short "risks and open questions" section, and the AI involvement level per ticket.
+- [x] Schedule weekly or end of sprint (cron or a queue).
+- [x] Delivery: Slack incoming webhook and email (Resend, Postmark or SMTP).
+- [x] Store sent digests and let stakeholders view past ones in the dashboard.
+- [x] Add a "developer preview" step: developers can see the digest before it's sent (configurable).
+- [x] On-demand team report: a manager can generate one document covering all developers'
       approved AI work on a repo for any sprint or date range, not just on the schedule.
       Available from the dashboard and as `digest report --from --to` (or `--sprint`).
-- [ ] Export the report as Markdown and PDF. (Markdown done; PDF moved to the backlog, with the Phase 9 dashboard.)
-- [ ] The report states its coverage, e.g. "Based on 23 approved session summaries from
+- [x] Export the report as Markdown and PDF. (Markdown from the CLI; PDF through the dashboard's "Print or save as PDF" and its print stylesheet, D93.)
+- [x] The report states its coverage, e.g. "Based on 23 approved session summaries from
       4 developers." Whether it also shows how many sessions are still unreviewed is a
       decision to log in DECISIONS.md.
 - [ ] (Moved to the backlog, waiting for interview evidence.) Per-developer breakdown: off by default (see the "no judgement of individual
@@ -226,27 +233,31 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
       that repo can see is on.
 
 **Done when:** a real sprint's worth of summaries produces a digest that a non-technical person can understand. Test this with an actual PO or SM.
+**Status:** Built and accepted (D73). **Outstanding:** the reader test with a real PO or SM, and a sprint with several developers (D57).
 
 ### Phase 8: Context distillation (the developer-side value)
-- [ ] From approved summaries, extract ContextItems (decisions, conventions, pitfalls) with the file paths they relate to.
-- [ ] Deduplicate and supersede. Newer decisions on the same topic mark older ones superseded.
-- [ ] CLI command digest context [path|ticket] returns a brief of at most about 300 words with only active, relevant items.
-- [ ] Generate proposed edits to AGENTS.md / CLAUDE.md and open them as a pull request for human review. Never commit directly.
+- [x] From approved summaries, extract ContextItems (decisions, conventions, pitfalls) with the file paths they relate to.
+- [x] Deduplicate and supersede. Newer decisions on the same topic mark older ones superseded.
+- [x] CLI command digest context [path|ticket] returns a brief of at most about 300 words with only active, relevant items.
+- [x] Generate proposed edits to AGENTS.md / CLAUDE.md and open them as a pull request for human review. Never commit directly.
 - [ ] Later: expose context as an MCP server tool so agents can query it themselves.
 
 **Done when:** a new session given the digest context output avoids a mistake or rejected approach recorded earlier by a teammate (test this deliberately).
+**Status:** Built. **Outstanding:** the 40-run experiment is parked (D90); the harness is ready.
 
 ### Phase 9: Web dashboard
-- [ ] Repo overview: recent sessions, tickets, digests.
-- [ ] Ticket view: all summaries for a ticket, as a timeline.
-- [ ] Stakeholder view: digest archive only, with no transcript access.
-- [ ] Context view: active and superseded ContextItems.
+- [x] Repo overview: recent sessions, tickets, digests.
+- [x] Ticket view: all summaries for a ticket, as a timeline.
+- [x] Stakeholder view: digest archive only, with no transcript access.
+- [x] Context view: active and superseded ContextItems.
+
+**Status:** Built (D93 to D95), with end-to-end and axe tests in CI. **Outstanding:** the owner's review of the round 3 screenshots.
 
 ### Phase 10: Hardening
-- [ ] Roles: developer, stakeholder, admin. Stakeholders never see raw content.
+- [ ] Roles: developer, stakeholder, admin. Stakeholders never see raw content. (Developer and reader roles are built and enforced by the server, D51; admin isn't.)
 - [ ] Data retention settings and a delete-my-data option.
 - [ ] Self-host option (Docker Compose).
-- [ ] Rate limiting and LLM cost caps per repo.
+- [ ] Rate limiting and LLM cost caps per repo. (The monthly cost cap is built, D53; rate limiting isn't.)
 - [ ] Audit log of who viewed or sent what.
 
 ### Phase 11 (later): Interoperability
@@ -256,7 +267,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] Add more agents (Gemini CLI, Cursor CLI).
 - [ ] Opt-in GitHub issue references (#123, fixes #45) as ticket keys (left out of Phase 6).
 - [ ] Per-developer breakdown in reports (from Phase 7): off by default, a repo-level setting every developer can see is on. Waiting for interview evidence that stakeholders need it.
-- [ ] PDF export of reports (from Phase 7): with the Phase 9 dashboard.
+- [x] PDF export of reports (from Phase 7): with the Phase 9 dashboard. (Print or save as PDF, D93.)
 - [ ] Tracker work left from Phase 6, waiting for a Jira or Linear sandbox (DECISIONS.md D47): real Jira and Linear clients, a `digest-server` command that runs refreshTracker, removing tickets a tracker no longer knows, and tracker sprint dates.
 
 ---
