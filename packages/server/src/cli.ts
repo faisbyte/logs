@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { parseArgs } from 'node:util';
-import { AnthropicLlmClient, normalizeRemoteUrl, type DigestDeps, type Effort, type RepoSettings, type SharedStore } from '@digest/core';
+import { ADMIN_ACTOR, AnthropicLlmClient, normalizeRemoteUrl, SERVER_ACTOR, type AuditAction, type DigestDeps, type Effort, type RepoSettings, type SharedStore } from '@digest/core';
 import { deliveriesFor } from './delivery.js';
 import pg from 'pg';
 import { createHandler, type HandlerOptions } from './http.js';
@@ -32,6 +32,7 @@ const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server digest send-due [--data <dir>]
        sprintdigest-server context distill [--data <dir>]
        sprintdigest-server retention apply [--data <dir>]
+       sprintdigest-server audit --repo <repo> [--since <date>] [--limit <n>] [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
 export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
@@ -95,6 +96,7 @@ interface Args {
   schedule?: string;
   weekday?: string;
   since?: string;
+  limit?: string;
   'preview-hours'?: string;
   email?: string;
   'slack-env'?: string;
@@ -208,6 +210,9 @@ async function retentionCommand(store: SharedStore, now: Date, io: ServerIo): Pr
   for (const { repoId, retentionDays } of repos) {
     const before = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
     const r = await store.purgeSummariesBefore(repoId, before);
+    if (r.summaries) {
+      await store.recordAudit({ repoId, at: now.toISOString(), ...SERVER_ACTOR, action: 'retention.applied', target: null, detail: `kept ${retentionDays} days: ${count(r.summaries, 'summary', 'summaries')}` });
+    }
     io.stdout(
       `${repoId}  kept ${retentionDays} days: ` +
         (r.summaries
@@ -228,6 +233,7 @@ async function deleteDataCommand(storage: { databaseUrl?: string; dataDir?: stri
   const { store, close } = await openStore(storage);
   try {
     const r = await store.deleteDeveloperData({ repoId, developerId, developerName: developerId });
+    await store.recordAudit({ repoId, at: new Date().toISOString(), ...ADMIN_ACTOR, action: 'data.deleted', target: developerId, detail: count(r.summaries, 'summary', 'summaries') });
     io.stdout(
       `Deleted ${developerId}'s data on ${repoId}: ${count(r.summaries, 'summary', 'summaries')}, ${count(r.ticketLinks, 'ticket link', 'ticket links')}, ` +
         `${count(r.contextItemsDeleted, 'context item', 'context items')} deleted and ${r.contextItemsEdited} edited, ${count(r.digestsWithdrawn, 'digest', 'digests')} withdrawn and ${r.digestsDeleted} deleted.\n`,
@@ -236,6 +242,33 @@ async function deleteDataCommand(storage: { databaseUrl?: string; dataDir?: stri
   } finally {
     await close();
   }
+}
+
+const VERB: Record<AuditAction, string> = {
+  'digest.viewed': 'viewed digest',
+  'digest.sent': 'sent digest',
+  'report.written': 'wrote report',
+  'summary.pushed': 'pushed summary',
+  'summary.retracted': 'retracted summary',
+  'context.retired': 'retired context item',
+  'data.deleted': 'deleted data',
+  'retention.applied': 'applied retention',
+  'token.issued': 'issued a token',
+  'session.started': 'signed in to the dashboard',
+};
+
+/** The audit log (D100), newest first, for the admin only: there is no HTTP endpoint for it. */
+async function auditCommand(store: SharedStore, repoId: string, values: Args, io: ServerIo): Promise<number> {
+  const fail = (message: string) => (io.stderr(`sprintdigest-server: ${message}\n`), 1);
+  const since = values.since === undefined ? undefined : sprintDate(values.since);
+  if (since === null) return fail('--since must be a date such as 2026-03-01, or an ISO date-time.');
+  if (values.limit !== undefined && !/^[1-9]\d*$/.test(values.limit)) return fail('--limit must be a whole number from 1.');
+  const events = await store.auditEvents(repoId, { ...(since ? { since } : {}), ...(values.limit ? { limit: Number(values.limit) } : {}) });
+  if (!events.length) return (io.stdout(`No audit events for ${repoId}.\n`), 0);
+  for (const e of events) {
+    io.stdout(`${[`${e.at.slice(0, 16).replace('T', ' ')} UTC`, `${e.actorName} (${e.actorRole})`, VERB[e.action], e.target, e.detail].filter(Boolean).join('  ')}\n`);
+  }
+  return 0;
 }
 
 export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
@@ -260,6 +293,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         schedule: { type: 'string' },
         weekday: { type: 'string' },
         since: { type: 'string' },
+        limit: { type: 'string' },
         'preview-hours': { type: 'string' },
         email: { type: 'string' },
         'slack-env': { type: 'string' },
@@ -271,7 +305,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   } catch (err) {
     return fail(`${(err as Error).message}\n${USAGE}`);
   }
-  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data', 'retention'].includes(command ?? '')) return fail(USAGE);
+  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data', 'retention', 'audit'].includes(command ?? '')) return fail(USAGE);
   const sub = { digest: 'send-due', context: 'distill', retention: 'apply' }[command as string];
   if (sub ? positionals.join(' ') !== sub : positionals.length) return fail(USAGE);
   const storage = { databaseUrl: io.env.DATABASE_URL, dataDir: values.data };
@@ -324,11 +358,19 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
     }
   }
 
-  if (command === 'token' || command === 'sprint' || command === 'repo' || command === 'delete-data') {
+  if (command === 'token' || command === 'sprint' || command === 'repo' || command === 'delete-data' || command === 'audit') {
     if (!values.repo) return fail('--repo is required.');
     const repoId = repoIdFrom(values.repo);
     if (!repoId) return fail('--repo must be a repo URL or host/path id, e.g. git@github.com:acme/webapp.git or github.com/acme/webapp.');
     if (command === 'delete-data') return deleteDataCommand(storage, repoId, values, io);
+    if (command === 'audit') {
+      const { store, close } = await openStore(storage);
+      try {
+        return await auditCommand(store, repoId, values, io);
+      } finally {
+        await close();
+      }
+    }
     if (command === 'sprint') {
       const { store, close } = await openStore(storage);
       try {
@@ -352,6 +394,8 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
     if (!person || !values.name || (values.developer && values.reader)) return fail('--developer (or --reader) and --name are required.');
     const { store, close } = await openStore(storage);
     try {
+      // Recorded before the token is shown; the token itself never reaches the log.
+      await store.recordAudit({ repoId, at: new Date().toISOString(), ...ADMIN_ACTOR, action: 'token.issued', target: person, detail: values.reader ? 'reader' : 'developer' });
       if (values.reader) {
         const { token } = await store.issueToken({ repoId, developerId: values.reader, developerName: values.name }, 'reader');
         io.stdout(`Read-only token for ${values.name} (${values.reader}) on ${repoId}: digests and reports only. It is shown only this once:\n${token}\nIssuing another reader token for this person and repo revokes this one.\n`);

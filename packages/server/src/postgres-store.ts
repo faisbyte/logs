@@ -20,6 +20,7 @@ import {
   teamReportFrom,
   UploadPayloadSchema,
   DELETED_DIGEST_TEXT,
+  type AuditEvent,
   type DataDeletion,
   type Purge,
   type ContextChanges,
@@ -310,6 +311,21 @@ const MIGRATIONS: string[][] = [
       created_at timestamptz not null
     )`,
   ],
+  [
+    // The audit log (DECISIONS.md D100): who viewed or sent what. Names and ids only, never content.
+    `create table audit_events (
+      seq bigserial primary key,
+      repo_id text not null,
+      at timestamptz not null,
+      actor_id text not null,
+      actor_name text not null,
+      actor_role text not null,
+      action text not null,
+      target text,
+      detail text
+    )`,
+    'create index audit_events_repo_at on audit_events (repo_id, at)',
+  ],
 ];
 
 /**
@@ -534,6 +550,27 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
 
   async purgeSummariesBefore(repoId: string, before: string): Promise<Purge> {
     return inTransaction(this.#sql, async (tx) => purgeKeys(tx, repoId, await keysWhere(tx, repoId, 'ended_at < $2', [before])));
+  }
+
+  async recordAudit(e: AuditEvent): Promise<void> {
+    await this.#sql.query('insert into audit_events (repo_id, at, actor_id, actor_name, actor_role, action, target, detail) values ($1, $2, $3, $4, $5, $6, $7, $8)', [
+      e.repoId,
+      e.at,
+      e.actorId,
+      e.actorName,
+      e.actorRole,
+      e.action,
+      e.target,
+      e.detail,
+    ]);
+  }
+
+  async auditEvents(repoId: string, { since, limit }: { since?: string; limit?: number } = {}): Promise<AuditEvent[]> {
+    const { rows } = await this.#sql.query<{ at: Date | string; actor_id: string; actor_name: string; actor_role: AuditEvent['actorRole']; action: AuditEvent['action']; target: string | null; detail: string | null }>(
+      'select * from audit_events where repo_id = $1 and ($2::timestamptz is null or at >= $2::timestamptz) order by at desc, seq desc limit $3',
+      [repoId, since ?? null, limit ?? null],
+    );
+    return rows.map((r) => ({ repoId, at: iso(r.at), actorId: r.actor_id, actorName: r.actor_name, actorRole: r.actor_role, action: r.action, target: r.target, detail: r.detail }));
   }
 
   async retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]> {

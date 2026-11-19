@@ -99,6 +99,19 @@ describe('sendDue', () => {
     expect(slack.sent).toHaveLength(1);
   });
 
+  it('records each delivery in the audit log as the server, when it happens, a retry included (D100)', async () => {
+    const { store, slack, deps, advance } = await setup();
+    slack.failNext = true;
+    await sendDue(deps);
+    advance(1);
+    await sendDue(deps);
+    const id = (await store.scheduledDigest(REPO, 'sprint:Sprint 1'))!.id;
+    expect((await store.auditEvents(REPO)).reverse()).toEqual([
+      { repoId: REPO, at: '2026-03-16T06:00:00.000Z', actorId: 'server', actorName: 'server', actorRole: 'server', action: 'digest.sent', target: id, detail: 'email: Sprint 1 (2026-03-02 to 2026-03-15)' },
+      { repoId: REPO, at: '2026-03-16T07:00:00.000Z', actorId: 'server', actorName: 'server', actorRole: 'server', action: 'digest.sent', target: id, detail: 'slack: Sprint 1 (2026-03-02 to 2026-03-15)' },
+    ]);
+  });
+
   it('reports missing delivery settings and the cost cap, and writes nothing it can not send', async () => {
     const missing = await setup();
     const noDelivery = { ...missing.deps, deliveries: () => ({ deliveries: [], problems: ['email: set SMTP_URL and DIGEST_EMAIL_FROM on the server'] }) };
