@@ -43,7 +43,8 @@ docker compose exec server sprintdigest-server token --repo github.com/org/repo 
 docker compose exec server sprintdigest-server sprint --repo github.com/org/repo --name "Sprint 1" --from 2026-03-02 --to 2026-03-16
 docker compose exec server sprintdigest-server repo --repo github.com/org/repo --schedule sprint-end --email po@example.com
 docker compose exec server sprintdigest-server repo --repo github.com/org/repo --retention-days 365   # summaries age out; default: kept for good
-docker compose exec server sprintdigest-server delete-data --repo github.com/org/repo --developer alice --yes   # a departed developer
+docker compose exec server sprintdigest-server token --repo github.com/org/repo --developer alice --revoke   # someone leaves: end their token
+docker compose exec server sprintdigest-server delete-data --repo github.com/org/repo --developer alice --yes   # and, if they ask, their data
 docker compose exec server sprintdigest-server audit --repo github.com/org/repo --limit 50   # who viewed or sent what
 ```
 

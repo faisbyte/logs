@@ -121,6 +121,8 @@ export interface TokenStore {
   /** Issues the token for one person, role and repo, replacing any earlier one. The token is returned once and stored only as a hash. */
   issueToken(identity: PushIdentity, role?: Role): Promise<{ token: string }>;
   authenticate(token: string): Promise<Identity | null>;
+  /** Ends one person's token for one role on a repo, and its dashboard sessions (D102); false when there was none. */
+  revokeToken(person: { repoId: string; developerId: string }, role: Role): Promise<boolean>;
   /**
    * Exchanges a valid token for a dashboard session (D91): a random id, returned once and stored only as a hash, that
    * expires after SESSION_HOURS and dies with its token when the token is re-issued.

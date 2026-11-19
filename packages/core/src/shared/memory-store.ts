@@ -154,6 +154,16 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
     return { token };
   }
 
+  async revokeToken(person: { repoId: string; developerId: string }, role: Role): Promise<boolean> {
+    for (const [hash, held] of this.#tokens) {
+      if (held.repoId !== person.repoId || held.developerId !== person.developerId || held.role !== role) continue;
+      this.#tokens.delete(hash);
+      for (const [session, s] of this.#sessions) if (s.tokenHash === hash) this.#sessions.delete(session);
+      return true;
+    }
+    return false;
+  }
+
   async authenticate(token: string): Promise<Identity | null> {
     const identity = token ? this.#tokens.get(hashToken(token)) : undefined;
     return identity ? { ...identity } : null;

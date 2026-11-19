@@ -279,3 +279,21 @@ describe('sprintdigest-server audit (D100)', () => {
     expect((await cli(['audit', ...data, '--repo', REPO, '--limit', 'all'])).stderr).toContain('--limit must be a whole number');
   });
 });
+
+describe('sprintdigest-server token --revoke (D102)', () => {
+  it("ends one person's token for one role, logs it, and says when there was none", async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
+    const repo = ['--repo', 'github.com/acme/webapp'];
+    const token = /^(dgt_\S+)$/m.exec((await cli(['token', ...data, ...repo, '--developer', 'alice', '--name', 'Alice'])).stdout)![1]!;
+    expect(await cli(['token', ...data, ...repo, '--developer', 'alice', '--revoke'])).toEqual({
+      exitCode: 0,
+      stderr: '',
+      stdout: "Revoked alice's developer token on github.com/acme/webapp. Their dashboard sessions ended with it.\n",
+    });
+    const { store, close } = await openStore({ dataDir: data[1] });
+    expect(await store.authenticate(token)).toBeNull();
+    expect((await store.auditEvents('github.com/acme/webapp'))[0]).toMatchObject({ action: 'token.revoked', actorRole: 'admin', target: 'alice', detail: 'developer' });
+    await close();
+    expect(await cli(['token', ...data, ...repo, '--reader', 'pat', '--revoke'])).toMatchObject({ exitCode: 1, stderr: 'sprintdigest-server: pat has no reader token on github.com/acme/webapp.\n' });
+  });
+});

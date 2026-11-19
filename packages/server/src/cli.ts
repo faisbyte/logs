@@ -25,6 +25,7 @@ export interface ServerIo {
 
 const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server token --repo <repo URL or host/path> (--developer <id> | --reader <id>) --name <display name> [--data <dir>]
+       sprintdigest-server token --repo <repo> (--developer <id> | --reader <id>) --revoke [--data <dir>]
        sprintdigest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
        sprintdigest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
                           [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default]
@@ -96,6 +97,7 @@ interface Args {
   from?: string;
   to?: string;
   remove?: boolean;
+  revoke?: boolean;
   schedule?: string;
   weekday?: string;
   since?: string;
@@ -257,6 +259,7 @@ const VERB: Record<AuditAction, string> = {
   'data.deleted': 'deleted data',
   'retention.applied': 'applied retention',
   'token.issued': 'issued a token',
+  'token.revoked': 'revoked a token',
   'session.started': 'signed in to the dashboard',
 };
 
@@ -293,6 +296,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         from: { type: 'string' },
         to: { type: 'string' },
         remove: { type: 'boolean' },
+        revoke: { type: 'boolean' },
         schedule: { type: 'string' },
         weekday: { type: 'string' },
         since: { type: 'string' },
@@ -394,6 +398,19 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
       }
     }
     const person = values.developer ?? values.reader;
+    if (values.revoke) {
+      if (!person || (values.developer && values.reader)) return fail('--developer (or --reader) is required.');
+      const role = values.reader ? 'reader' : 'developer';
+      const { store, close } = await openStore(storage);
+      try {
+        if (!(await store.revokeToken({ repoId, developerId: person }, role))) return fail(`${person} has no ${role} token on ${repoId}.`);
+        await store.recordAudit({ repoId, at: new Date().toISOString(), ...ADMIN_ACTOR, action: 'token.revoked', target: person, detail: role });
+        io.stdout(`Revoked ${person}'s ${role} token on ${repoId}. Their dashboard sessions ended with it.\n`);
+        return 0;
+      } finally {
+        await close();
+      }
+    }
     if (!person || !values.name || (values.developer && values.reader)) return fail('--developer (or --reader) and --name are required.');
     const { store, close } = await openStore(storage);
     try {

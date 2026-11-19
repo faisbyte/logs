@@ -282,6 +282,44 @@ describe('digest server HTTP API', () => {
     expect(logs.join('\n')).not.toContain(alice);
   });
 
+  it('gives a reader the digest views only: every other endpoint is refused, and nothing a reader gets holds summary content (D51, D102)', async () => {
+    const { store, call, push, token } = await start();
+    await push(payloadFor());
+    await store.applyContextChanges(REPO, { added: [contextItem()], merged: [], superseded: [] });
+    await store.saveDigest({ repoId: REPO, kind: 'scheduled', periodKey: 'week:1', periodLabel: 'Week 1', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# Week 1\n\nAll good.\n', summaryCount: 1, developerCount: 1, costUsd: 0, status: 'sent', previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z', summaryKeys: [`claude-code/${payloadFor().sessionId}`] });
+    const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+    const repo = encodeURIComponent(REPO);
+    const ref = { repoId: REPO, agent: 'claude-code', sessionId: payloadFor().sessionId };
+    const developerOnly: [string, string, unknown?][] = [
+      ['GET', `/v1/summaries?repoId=${repo}`],
+      ['POST', '/v1/summaries', { repoId: REPO, payload: payloadFor({ sessionId: 'by-reader' }) }],
+      ['GET', `/v1/team-report?repoId=${repo}&from=2026-01-01&to=2027-01-01`],
+      ['GET', `/v1/tickets?repoId=${repo}&from=2026-01-01&to=2027-01-01`],
+      ['POST', '/v1/ticket-links', { ...ref, ticket: 'PROJ-9' }],
+      ['DELETE', '/v1/ticket-links', { ...ref, ticket: 'PROJ-9' }],
+      ['PUT', '/v1/ticket-titles', { repoId: REPO, ticket: 'PROJ-9', title: 'x' }],
+      ['POST', '/v1/retractions', ref],
+      ['GET', `/v1/context-items?repoId=${repo}`],
+      ['POST', '/v1/context-retirements', { repoId: REPO, id: 'ctx-0000000a' }],
+      ['POST', '/v1/data-deletions', { repoId: REPO }],
+    ];
+    for (const [method, path, body] of developerOnly) {
+      expect(`${method} ${path} ${(await call(path, { method, token: reader, ...(body ? { body } : {}) })).status}`).toBe(`${method} ${path} 403`);
+      // The same read works for a developer, so the 403 is the role, not a bad request.
+      if (method === 'GET') expect(`${path} ${(await call(path, { token })).status}`).toBe(`${path} 200`);
+    }
+    const seen: string[] = [];
+    for (const path of [`/v1/digests?repoId=${repo}`, `/v1/sprints?repoId=${repo}`, '/v1/whoami', `/v1/reports/estimate?repoId=${repo}&from=2026-03-01&to=2026-04-01`]) {
+      const response = await call(path, { token: reader });
+      expect(`${path} ${response.status}`).toBe(`${path} 200`);
+      seen.push(await response.text());
+    }
+    const [{ id }] = (await store.digests(REPO)) as [{ id: string }];
+    seen.push(await (await call(`/v1/digests/${id}?repoId=${repo}`, { token: reader })).text());
+    const content = [payloadFor().goal, payloadFor().whatWasDone, ...payloadFor().filesTouched, contextItem().text, 'alice', 'Alice'];
+    for (const text of content) expect(seen.join('\n')).not.toContain(text);
+  });
+
   describe('the audit log (D100)', () => {
     const repo = encodeURIComponent(REPO);
     const digest = (status: 'sent' | 'preview') => ({ repoId: REPO, kind: 'scheduled' as const, periodKey: `week:${status}`, periodLabel: `Week (${status})`, from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# w\n', summaryCount: 1, developerCount: 1, costUsd: 0, status, previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z' });
