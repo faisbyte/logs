@@ -1553,3 +1553,9 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 - **Alternatives:**
   - **An admin token role with HTTP endpoints and dashboard pages** (D97). Declined: it adds the most dangerous network surface for something a self-hoster does rarely, at a shell.
   - **Expiring tokens.** Left out: revocation covers leaving, and dashboard sessions already expire after 12 hours.
+
+## D103. Phase 10 is accepted
+
+- **Date:** 2026-11-19
+- **Decision:** the owner ran the self-host stack and the checks listed for acceptance, found it worked as expected, and accepted Phase 10 as built (D97 to D102).
+- **Decisions confirmed by acceptance:** the admin is the server operator, with no admin token or dashboard pages (D97, D102); deleting a developer's data keeps their audit entries (D100); there's no stricter limit on failed sign-ins (D101).
