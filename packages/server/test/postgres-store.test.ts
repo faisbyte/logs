@@ -31,3 +31,35 @@ describe('migrations', () => {
     expect(rows.map((r) => r.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   });
 });
+
+describe('transactions on a connection pool', () => {
+  // A pg.Pool hands each query to whichever connection is free, so begin and commit through pool.query can land on
+  // different connections. A transaction must check out one connection and run every statement on it.
+  function fakePool() {
+    const log: { conn: string; text: string }[] = [];
+    let n = 0;
+    const conn = (name: string) => ({ query: async (text: string) => (log.push({ conn: name, text: text.trim().split(/\s+/)[0]!.toLowerCase() }), { rows: [] }) });
+    const released: string[] = [];
+    return {
+      log,
+      released,
+      pool: {
+        query: async (text: string) => conn(`pool-${n++}`).query(text),
+        checkout: async () => {
+          const name = `client-${n++}`;
+          return { ...conn(name), release: () => void released.push(name) };
+        },
+      },
+    };
+  }
+  const item = { id: 'ctx-0000000a', repoId: 'r', type: 'decision' as const, text: 'Counts are per account.', reason: 'Offices share an address.', paths: ['src/a.ts'], tickets: [], sources: ['claude-code/s1'], date: '2026-04-07', status: 'active' as const, supersededBy: null, retiredBy: null, retiredAt: null, createdAt: '2026-04-08T00:00:00.000Z' };
+
+  it('runs a context change, from begin to commit, on one checked-out connection, then releases it', async () => {
+    const { pool, log, released } = fakePool();
+    await new PostgresSummaryStore(pool).applyContextChanges('r', { added: [item], merged: [], superseded: [{ id: 'ctx-0000000b', by: 'ctx-0000000a' }] });
+    expect(log.map((l) => l.text)).toEqual(['begin', 'insert', 'update', 'commit']);
+    expect(new Set(log.map((l) => l.conn)).size).toBe(1);
+    expect(log[0]!.conn).toMatch(/^client-/);
+    expect(released).toEqual([log[0]!.conn]);
+  });
+});

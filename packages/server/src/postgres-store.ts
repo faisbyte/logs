@@ -59,6 +59,39 @@ import {
 /** The slice of node-postgres and PGlite this store needs. */
 export interface Sql {
   query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
+  /** A pool's (see poolSql): one connection, held until released. PGlite and a single pg.Client have no pool. */
+  checkout?(): Promise<Sql & { release(): void }>;
+}
+
+/** A pg.Pool as an Sql whose transactions check out one connection. Pass a pool to the store only through this. */
+export const poolSql = (pool: { query: Sql['query']; connect(): Promise<{ query: Sql['query']; release(): void }> }): Sql => ({
+  query: (text, params) => pool.query(text, params),
+  checkout: async () => {
+    const client = await pool.connect();
+    return { query: (text, params) => client.query(text, params), release: () => client.release() };
+  },
+});
+
+/**
+ * Runs `work` in one transaction. On a pool, every statement must run on the same connection, so one is checked out
+ * for the whole transaction; pool.query could hand begin, the work and commit to different connections.
+ */
+async function inTransaction<T>(sql: Sql, work: (tx: Sql) => Promise<T>): Promise<T> {
+  const conn = sql.checkout ? await sql.checkout() : null;
+  const tx = conn ?? sql;
+  try {
+    await tx.query('begin');
+    try {
+      const result = await work(tx);
+      await tx.query('commit');
+      return result;
+    } catch (err) {
+      await tx.query('rollback');
+      throw err;
+    }
+  } finally {
+    conn?.release();
+  }
 }
 
 const MIGRATIONS: string[][] = [
@@ -615,24 +648,23 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
   async applyContextChanges(repoId: string, changes: ContextChanges, run?: ContextRun): Promise<void> {
     checkContextChanges(repoId, changes);
     // One extraction's changes, and its run record, land together or not at all.
-    await this.#sql.query('begin');
-    try {
+    await inTransaction(this.#sql, async (tx) => {
       if (run) {
-        await this.#sql.query(
+        await tx.query(
           `insert into context_runs (repo_id, at, model, prompt_version, summaries, added, merged, superseded, dropped, retry_reasons, cost_usd, untraced)
            values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12)`,
           [repoId, run.at, run.model, run.promptVersion, JSON.stringify(run.summaries), run.added, run.merged, run.superseded, JSON.stringify(run.dropped), JSON.stringify(run.retryReasons), run.costUsd, run.untraced],
         );
       }
       for (const i of changes.added) {
-        await this.#sql.query(
+        await tx.query(
           `insert into context_items (repo_id, id, type, text, reason, paths, tickets, sources, date, status, superseded_by, retired_by, retired_at, created_at)
            values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9, $10, $11, $12, $13, $14) on conflict do nothing`,
           [repoId, i.id, i.type, i.text, i.reason, JSON.stringify(i.paths), JSON.stringify(i.tickets), JSON.stringify(i.sources), i.date, i.status, i.supersededBy, i.retiredBy, i.retiredAt, i.createdAt],
         );
       }
       for (const m of changes.merged) {
-        await this.#sql.query("update context_items set sources = $3::jsonb, paths = $4::jsonb, tickets = $5::jsonb, date = $6 where repo_id = $1 and id = $2 and status = 'active'", [
+        await tx.query("update context_items set sources = $3::jsonb, paths = $4::jsonb, tickets = $5::jsonb, date = $6 where repo_id = $1 and id = $2 and status = 'active'", [
           repoId,
           m.id,
           JSON.stringify(m.sources),
@@ -642,13 +674,9 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
         ]);
       }
       for (const s of changes.superseded) {
-        await this.#sql.query("update context_items set status = 'superseded', superseded_by = $3 where repo_id = $1 and id = $2 and status = 'active'", [repoId, s.id, s.by]);
+        await tx.query("update context_items set status = 'superseded', superseded_by = $3 where repo_id = $1 and id = $2 and status = 'active'", [repoId, s.id, s.by]);
       }
-      await this.#sql.query('commit');
-    } catch (err) {
-      await this.#sql.query('rollback');
-      throw err;
-    }
+    });
   }
 
   async contextRuns(repoId: string): Promise<ContextRun[]> {
