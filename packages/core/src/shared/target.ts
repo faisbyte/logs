@@ -1,7 +1,7 @@
 import type { ContextItem } from '../context/item.js';
 import type { RetireResult } from '../context/store.js';
 import type { UploadPayload } from './payload.js';
-import { READER_REFUSAL, receivePush, type PushIdentity, type RetractResult } from './store.js';
+import { READER_REFUSAL, receivePush, type DataDeletion, type PushIdentity, type RetractResult } from './store.js';
 import { ticketReport, type TicketReport, type TicketReportFilter } from './ticket-report.js';
 import type { StoredDigest } from './digests.js';
 import type { LinkResult, SharedStore, Sprint, SummaryRef, TitleResult, UnlinkResult } from './tickets.js';
@@ -24,6 +24,7 @@ export type SprintsOutcome = { status: 'ok'; sprints: Sprint[] } | Refused;
 export type PreviewsOutcome = { status: 'ok'; digests: StoredDigest[] } | Refused;
 export type ContextItemsOutcome = { status: 'ok'; items: ContextItem[] } | Refused;
 export type RetireOutcome = RetireResult | Refused;
+export type DeletionOutcome = ({ status: 'deleted' } & DataDeletion) | Refused;
 
 export interface PushTarget {
   push(repoId: string, payload: UploadPayload): Promise<PushOutcome>;
@@ -44,6 +45,8 @@ export interface PushTarget {
   contextItems(repoId: string): Promise<ContextItemsOutcome>;
   /** Retire a wrong context item; it never comes back automatically (D77). */
   retireContextItem(repoId: string, id: string): Promise<RetireOutcome>;
+  /** Delete everything this developer pushed to the repo, and what was derived only from it (D98). */
+  deleteMyData(repoId: string): Promise<DeletionOutcome>;
 }
 
 /** A PushTarget for a store in this process (tests, and local end-to-end runs). */
@@ -93,6 +96,10 @@ export function localPushTarget(store: SharedStore, token: string): PushTarget {
     async retireContextItem(repoId, id) {
       const identity = await as(repoId);
       return refused(identity) ? identity : store.retireContextItem(identity, id);
+    },
+    async deleteMyData(repoId) {
+      const identity = await as(repoId);
+      return refused(identity) ? identity : { status: 'deleted', ...(await store.deleteDeveloperData(identity)) };
     },
   };
 }

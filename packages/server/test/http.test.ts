@@ -199,6 +199,21 @@ describe('digest server HTTP API', () => {
     expect((await call('/v1/context-retirements', { method: 'POST', token: reader, body: { repoId: REPO, id: 'ctx-0000000a' } })).status).toBe(403);
   });
 
+  it("deletes the caller's own data (D98): only theirs, only in their repo; a reader gets 403", async () => {
+    const { store, call, token, bobToken, push } = await start();
+    await push(payloadFor({ sessionId: 'a1' }));
+    await push(payloadFor({ sessionId: 'b1' }), bobToken);
+    const deleted = await call('/v1/data-deletions', { method: 'POST', token, body: { repoId: REPO } });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ status: 'deleted', summaries: 1, ticketLinks: 0, contextItemsDeleted: 0, contextItemsEdited: 0, digestsWithdrawn: 0, digestsDeleted: 0 });
+    expect((await store.list({ repoId: REPO })).map((s) => s.developerId)).toEqual(['bob']);
+    expect((await call('/v1/data-deletions', { method: 'POST', token, body: {} })).status).toBe(400);
+    expect((await call('/v1/data-deletions', { method: 'POST', token, body: { repoId: 'github.com/acme/other' } })).status).toBe(403);
+    const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
+    expect((await call('/v1/data-deletions', { method: 'POST', token: reader, body: { repoId: REPO } })).status).toBe(403);
+    expect((await store.list({ repoId: REPO })).map((s) => s.developerId)).toEqual(['bob']);
+  });
+
   describe('dashboard sessions (DECISIONS.md D91)', () => {
     it('exchanges a token for a session, answers whoami with either, and ends the session on logout', async () => {
       const { call, token, logs } = await start();

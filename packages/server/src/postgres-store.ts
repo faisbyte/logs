@@ -19,6 +19,8 @@ import {
   SESSION_HOURS,
   teamReportFrom,
   UploadPayloadSchema,
+  DELETED_DIGEST_TEXT,
+  type DataDeletion,
   type ContextChanges,
   type ContextRun,
   type ContextItem,
@@ -485,6 +487,36 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
       [identity.repoId, retractedAt],
     );
     return { status: 'retracted', retractedAt };
+  }
+
+  async deleteDeveloperData(identity: PushIdentity): Promise<DataDeletion> {
+    const { repoId, developerId } = identity;
+    // All of it, or none of it (D98).
+    return inTransaction(this.#sql, async (tx) => {
+      const count = async (text: string, params: unknown[]) => (await tx.query(text, params)).rows.length;
+      const { rows } = await tx.query<{ key: string }>("select agent || '/' || session_id as key from summaries where repo_id = $1 and developer_id = $2", [repoId, developerId]);
+      const keys = rows.map((r) => r.key);
+      const keysJson = JSON.stringify(keys);
+      // Links reference summaries, so they go first.
+      const ticketLinks = await count("delete from ticket_links where repo_id = $1 and agent || '/' || session_id = any($2::text[]) returning 1", [repoId, keys]);
+      const summaries = await count('delete from summaries where repo_id = $1 and developer_id = $2 returning 1', [repoId, developerId]);
+      await tx.query('delete from retractions where repo_id = $1 and developer_id = $2', [repoId, developerId]);
+      const contextItemsDeleted = await count('delete from context_items where repo_id = $1 and jsonb_array_length(sources) > 0 and sources <@ $2::jsonb returning 1', [repoId, keysJson]);
+      const contextItemsEdited = await count(
+        `update context_items set sources = (select coalesce(jsonb_agg(src), '[]'::jsonb) from jsonb_array_elements_text(sources) src where src <> all($2::text[]))
+         where repo_id = $1 and exists (select 1 from jsonb_array_elements_text(sources) src where src = any($2::text[])) returning 1`,
+        [repoId, keys],
+      );
+      await tx.query(
+        `update context_runs set summaries = (select coalesce(jsonb_agg(s), '[]'::jsonb) from jsonb_array_elements(summaries) s where (s->>'key') <> all($2::text[]))
+         where repo_id = $1 and exists (select 1 from jsonb_array_elements(summaries) s where (s->>'key') = any($2::text[]))`,
+        [repoId, keys],
+      );
+      const included = 'exists (select 1 from jsonb_array_elements_text(summary_keys) k where k = any($2::text[]))';
+      const digestsWithdrawn = await count(`update digests set status = 'withdrawn', markdown = $3 where repo_id = $1 and status in ('sent', 'withdrawn') and ${included} returning 1`, [repoId, keys, DELETED_DIGEST_TEXT]);
+      const digestsDeleted = await count(`delete from digests where repo_id = $1 and status <> 'withdrawn' and ${included} returning 1`, [repoId, keys]);
+      return { summaries, ticketLinks, contextItemsDeleted, contextItemsEdited, digestsWithdrawn, digestsDeleted };
+    });
   }
 
   async retractions(repoId: string): Promise<Retraction[]> {

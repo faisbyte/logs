@@ -166,3 +166,41 @@ describe('sprintdigest-server context distill (DECISIONS.md D82)', () => {
     expect((await cli(['context', '--data', data])).stderr).toContain('usage: sprintdigest-server');
   });
 });
+
+describe('sprintdigest-server delete-data (D98)', () => {
+  const REPO = 'github.com/acme/webapp';
+  async function seeded() {
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
+    const { store, close } = await openStore({ dataDir: data });
+    await store.push({ repoId: REPO, developerId: 'alice', developerName: 'Alice' }, payloadFor({ sessionId: 'a1' }));
+    await store.push({ repoId: REPO, developerId: 'bob', developerName: 'Bob' }, payloadFor({ sessionId: 'b1' }));
+    await close();
+    return data;
+  }
+  const remaining = async (data: string) => {
+    const { store, close } = await openStore({ dataDir: data });
+    try {
+      return (await store.list({ repoId: REPO })).map((s) => s.developerId);
+    } finally {
+      await close();
+    }
+  };
+
+  it("lets the admin delete a departed developer's data, after --yes, and says what went", async () => {
+    const data = await seeded();
+    const asked = await cli(['delete-data', '--data', data, '--repo', REPO, '--developer', 'alice']);
+    expect(asked).toMatchObject({ exitCode: 1, stderr: `sprintdigest-server: this permanently deletes every summary alice pushed to ${REPO}, and what was made only from them. Run it again with --yes to go ahead.\n` });
+    expect(await remaining(data)).toEqual(['alice', 'bob']);
+    const done = await cli(['delete-data', '--data', data, '--repo', REPO, '--developer', 'alice', '--yes']);
+    expect(done).toEqual({
+      exitCode: 0,
+      stderr: '',
+      stdout: `Deleted alice's data on ${REPO}: 1 summary, 0 ticket links, 0 context items deleted and 0 edited, 0 digests withdrawn and 0 deleted.\n`,
+    });
+    expect(await remaining(data)).toEqual(['bob']);
+  });
+
+  it('needs --repo and --developer', async () => {
+    expect((await cli(['delete-data', '--data', '/tmp/x', '--repo', REPO])).stderr).toContain('--developer is required');
+  });
+});

@@ -1,4 +1,4 @@
-import { bySessionStart, decidePush, decideRetract, digestSummaryKey, hashToken, matchesQuery, newSession, newToken, SESSION_HOURS, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
+import { bySessionStart, DELETED_DIGEST_TEXT, decidePush, decideRetract, digestSummaryKey, type DataDeletion, hashToken, matchesQuery, newSession, newToken, SESSION_HOURS, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
 import {
   byFrom,
   byLinkTime,
@@ -75,6 +75,31 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
       if (item.repoId === identity.repoId && item.status !== 'retired' && allSourcesRetracted(item, retracted)) Object.assign(item, { status: 'retired', retiredBy: 'retraction', retiredAt: retractedAt });
     }
     return { status: 'retracted', retractedAt };
+  }
+
+  async deleteDeveloperData(identity: PushIdentity): Promise<DataDeletion> {
+    const { repoId, developerId } = identity;
+    const theirs = [...this.#summaries].filter(([, s]) => s.repoId === repoId && s.developerId === developerId);
+    const keys = new Set(theirs.map(([, s]) => digestSummaryKey(s.summary)));
+    const result: DataDeletion = { summaries: theirs.length, ticketLinks: 0, contextItemsDeleted: 0, contextItemsEdited: 0, digestsWithdrawn: 0, digestsDeleted: 0 };
+    for (const [k] of theirs) this.#summaries.delete(k);
+    removeWhere(this.#retractions, (r) => r.repoId === repoId && r.developerId === developerId);
+    result.ticketLinks = removeWhere(this.#links, (l) => l.repoId === repoId && keys.has(digestSummaryKey(l)));
+    result.contextItemsDeleted = removeWhere(this.#context, (i) => i.repoId === repoId && i.sources.length > 0 && i.sources.every((s) => keys.has(s)));
+    for (const item of this.#context) {
+      if (item.repoId !== repoId || !item.sources.some((s) => keys.has(s))) continue;
+      item.sources = item.sources.filter((s) => !keys.has(s));
+      result.contextItemsEdited++;
+    }
+    for (const run of this.#runs) if (run.repoId === repoId) run.summaries = run.summaries.filter((s) => !keys.has(s.key));
+    const included = (d: StoredDigest) => d.repoId === repoId && d.summaryKeys.some((k) => keys.has(k));
+    for (const d of this.#digests) {
+      if (!included(d) || (d.status !== 'sent' && d.status !== 'withdrawn')) continue;
+      Object.assign(d, { status: 'withdrawn', markdown: DELETED_DIGEST_TEXT });
+      result.digestsWithdrawn++;
+    }
+    result.digestsDeleted = removeWhere(this.#digests, (d) => included(d) && d.status !== 'withdrawn');
+    return result;
   }
 
   async retractions(repoId: string): Promise<Retraction[]> {
@@ -287,4 +312,11 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   async ticketTitles(repoId: string): Promise<TicketTitle[]> {
     return structuredClone([...(this.#titles.get(repoId)?.values() ?? [])].sort((a, b) => a.key.localeCompare(b.key)));
   }
+}
+
+/** Removes the matching entries in place; returns how many. */
+function removeWhere<T>(list: T[], match: (item: T) => boolean): number {
+  let removed = 0;
+  for (let i = list.length - 1; i >= 0; i--) if (match(list[i]!)) (list.splice(i, 1), removed++);
+  return removed;
 }

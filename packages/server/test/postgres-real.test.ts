@@ -8,6 +8,7 @@ import { digestStoreContract } from '../../core/test/shared/digest-contract.js';
 import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
 import { contextStoreContract } from '../../core/test/shared/context-contract.js';
 import { sessionContract } from '../../core/test/shared/session-contract.js';
+import { dataDeletionContract } from '../../core/test/shared/data-contract.js';
 import { migrate, poolSql, PostgresSummaryStore } from '../src/postgres-store.js';
 
 const url = process.env.DIGEST_TEST_DATABASE_URL;
@@ -31,5 +32,6 @@ describe.skipIf(!url)('real Postgres', () => {
   ticketStoreContract('PostgresSummaryStore (node-postgres)', fresh);
   digestStoreContract('PostgresSummaryStore (node-postgres)', fresh);
   contextStoreContract('PostgresSummaryStore (node-postgres)', fresh);
+  dataDeletionContract('PostgresSummaryStore (node-postgres)', fresh);
   sessionContract('PostgresSummaryStore (node-postgres)', async (now) => (await fresh(), new PostgresSummaryStore(poolSql(pool), { now })));
 });

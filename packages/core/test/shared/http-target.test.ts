@@ -113,4 +113,17 @@ describe('httpPushTarget', () => {
     expect(calls[0]!.url).toBe('https://digest.example.com/v1/context-retirements');
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp', id: 'ctx-0000000a' });
   });
+
+  const counts = { summaries: 2, ticketLinks: 1, contextItemsDeleted: 1, contextItemsEdited: 0, digestsWithdrawn: 1, digestsDeleted: 0 };
+  it.each([
+    [200, { status: 'deleted', ...counts }, { status: 'deleted', ...counts }],
+    [403, { error: 'reader tokens can read digests and reports only' }, { status: 'forbidden', reason: 'reader tokens can read digests and reports only' }],
+    [401, { error: 'unknown or revoked token' }, { status: 'unauthorized', reason: 'unknown or revoked token' }],
+  ])('maps HTTP %i on deleting my data (D98)', async (status, body, expected) => {
+    const { calls, target } = stub(status, body);
+    expect(await target.deleteMyData('github.com/acme/webapp')).toEqual(expected);
+    expect(calls[0]!.url).toBe('https://digest.example.com/v1/data-deletions');
+    expect(calls[0]!.init.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp' });
+  });
 });
