@@ -6,7 +6,7 @@ import { deliveriesFor } from './delivery.js';
 import pg from 'pg';
 import { createHandler, type HandlerOptions } from './http.js';
 import { openPGlite } from './pglite.js';
-import { migrate, PostgresSummaryStore } from './postgres-store.js';
+import { migrate, poolSql, PostgresSummaryStore } from './postgres-store.js';
 import { distill, distillNeedsAttention } from './distill.js';
 import { needsAttention, sendDue } from './schedule.js';
 
@@ -38,7 +38,7 @@ export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string
     await client.connect();
     await migrate(client).finally(() => client.end());
     const pool = new pg.Pool({ connectionString: databaseUrl });
-    return { store: new PostgresSummaryStore(pool), close: () => pool.end() };
+    return { store: new PostgresSummaryStore(poolSql(pool)), close: () => pool.end() };
   }
   if (!dataDir) throw new Error('set DATABASE_URL or pass --data <dir> for a local database.');
   const db = openPGlite(dataDir);
