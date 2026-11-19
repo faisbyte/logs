@@ -233,7 +233,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
       that repo can see is on.
 
 **Done when:** a real sprint's worth of summaries produces a digest that a non-technical person can understand. Test this with an actual PO or SM.
-**Status:** Built and accepted (D73). **Outstanding:** the reader test with a real PO or SM, and a sprint with several developers (D57).
+**Status:** Built and accepted (D73). The reader test is done (D104). **Outstanding:** a sprint with several developers (D57).
 
 ### Phase 8: Context distillation (the developer-side value)
 - [x] From approved summaries, extract ContextItems (decisions, conventions, pitfalls) with the file paths they relate to.
