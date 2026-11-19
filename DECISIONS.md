@@ -1559,3 +1559,10 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 - **Date:** 2026-11-19
 - **Decision:** the owner ran the self-host stack and the checks listed for acceptance, found it worked as expected, and accepted Phase 10 as built (D97 to D102).
 - **Decisions confirmed by acceptance:** the admin is the server operator, with no admin token or dashboard pages (D97, D102); deleting a developer's data keeps their audit entries (D100); there's no stricter limit on failed sign-ins (D101).
+
+## D104. Phase 7's reader test is done
+
+- **Date:** 2026-11-19
+- **Decision:** a non-technical reader read the Sprint 1 digest (`.digest/sprint-1-reader-copy.md`) and understood what had been done. The owner reports it works. This closes the reader test left open in D73.
+- **Still outstanding:** D57's other limit. The digest has been tested only on a single-developer sprint, so coverage across several developers on a team repo, over a normal sprint, is untested with real people.
+- **Not recorded:** who the reader was and their exact answers. Add them to `docs/po-feedback-checklist.md` if they should be kept.
