@@ -54,5 +54,19 @@ export function sessionContract(name: string, make: (now: () => Date) => Promise
       const { session } = (await store.startSession((await store.issueToken(alice)).token))!;
       expect(inspect(store, { depth: 10, showHidden: true })).not.toContain(session.slice(4));
     });
+
+    it("revokes one person's token for one role, ending its sessions at once; their other role and other people keep working (D102)", async () => {
+      const { token } = await store.issueToken(alice);
+      const readerToken = (await store.issueToken(alice, 'reader')).token;
+      const bob = (await store.issueToken({ ...alice, developerId: 'bob', developerName: 'Bob' })).token;
+      const { session } = (await store.startSession(token))!;
+      expect(await store.revokeToken({ repoId: alice.repoId, developerId: 'alice' }, 'developer')).toBe(true);
+      expect(await store.authenticate(token)).toBeNull();
+      expect(await store.authenticateSession(session)).toBeNull();
+      expect(await store.authenticate(readerToken)).toMatchObject({ role: 'reader' });
+      expect(await store.authenticate(bob)).toMatchObject({ developerId: 'bob' });
+      expect(await store.revokeToken({ repoId: alice.repoId, developerId: 'alice' }, 'developer')).toBe(false);
+      expect(await store.revokeToken({ repoId: 'github.com/acme/other', developerId: 'bob' }, 'developer')).toBe(false);
+    });
   });
 }

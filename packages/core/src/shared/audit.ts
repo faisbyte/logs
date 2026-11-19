@@ -11,6 +11,7 @@ export type AuditAction =
   | 'data.deleted'
   | 'retention.applied'
   | 'token.issued'
+  | 'token.revoked'
   | 'session.started';
 
 /** server: the scheduled jobs; admin: whoever runs the server's commands (D97). */

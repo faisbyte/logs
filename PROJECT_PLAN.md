@@ -254,11 +254,13 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 **Status:** Accepted (D96), with end-to-end and axe tests in CI.
 
 ### Phase 10: Hardening
-- [ ] Roles: developer, stakeholder, admin. Stakeholders never see raw content. (Developer and reader roles are built and enforced by the server, D51; admin isn't.)
-- [ ] Data retention settings and a delete-my-data option.
-- [ ] Self-host option (Docker Compose).
-- [ ] Rate limiting and LLM cost caps per repo. (The monthly cost cap is built, D53; rate limiting isn't.)
-- [ ] Audit log of who viewed or sent what.
+- [x] Roles: developer, stakeholder, admin. Stakeholders never see raw content. (Reader tokens for stakeholders, D51; the admin is the server operator, D97, D102.)
+- [x] Data retention settings and a delete-my-data option. (D98, D99.)
+- [x] Self-host option (Docker Compose). (D97, docs/self-hosting.md.)
+- [x] Rate limiting and LLM cost caps per repo. (D53, D101.)
+- [x] Audit log of who viewed or sent what. (D100.)
+
+**Status:** Built (D97 to D102). Waiting for the owner's acceptance.
 
 ### Phase 11 (later): Interoperability
 - [ ] Ingest SpecStory .specstory/history/*.md.

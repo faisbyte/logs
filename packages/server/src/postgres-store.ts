@@ -616,6 +616,15 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     return { token };
   }
 
+  async revokeToken(person: { repoId: string; developerId: string }, role: Role): Promise<boolean> {
+    return inTransaction(this.#sql, async (tx) => {
+      const { rows } = await tx.query<{ token_hash: string }>('delete from tokens where repo_id = $1 and developer_id = $2 and role = $3 returning token_hash', [person.repoId, person.developerId, role]);
+      if (!rows.length) return false;
+      await tx.query('delete from sessions where token_hash = $1', [rows[0]!.token_hash]);
+      return true;
+    });
+  }
+
   async authenticate(token: string): Promise<Identity | null> {
     if (!token) return null;
     const { rows } = await this.#sql.query<{ repo_id: string; developer_id: string; developer_name: string; role: Role }>(

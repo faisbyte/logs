@@ -1537,3 +1537,19 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
     - every dashboard sign-in comes from the dashboard's own address, so a failure limit there would lock out every user together.
   - **A shared store such as Redis.** Only needed with several server processes; there is one.
   - **Sliding windows or token buckets.** Smoother, but a fixed window is enough at this scale and simple to reason about.
+
+## D102. Roles: developer, stakeholder, admin
+
+- **Date:** 2026-11-19
+- **Decision:** Phase 10's three roles are complete as follows:
+  - **Developer:** a developer token. It pushes and reads summaries, tickets and context, and reads digests and previews.
+  - **Stakeholder:** a reader token (D51). It gets the digest views only: digests that are sent or ready, reports, the report estimate, sprints and `whoami`.
+  - **Admin:** whoever runs the server's commands (D97). Tokens, sprints, repo settings, retention, data deletion and the audit log are all theirs, and none of it is on the network.
+- **"Stakeholders never see raw content":**
+  - Raw transcripts never leave a developer's machine, so the server never has them.
+  - Summaries don't reach readers either: a role-matrix test checks that a reader is refused every one of the 11 developer endpoints, and that nothing a reader can fetch holds a summary's text, files, a context item or a developer's name.
+  - That test pins existing behaviour, so it passed when written. A deliberate mutation to watch it fail was blocked by a safety check, as loosening access control is.
+- **Revoking a token:** `sprintdigest-server token --revoke --developer|--reader <id>` ends one person's token for one role, and its dashboard sessions with it. It's recorded in the audit log. Until now a token could only be replaced by re-issuing, so someone who left kept working access.
+- **Alternatives:**
+  - **An admin token role with HTTP endpoints and dashboard pages** (D97). Declined: it adds the most dangerous network surface for something a self-hoster does rarely, at a shell.
+  - **Expiring tokens.** Left out: revocation covers leaving, and dashboard sessions already expire after 12 hours.
