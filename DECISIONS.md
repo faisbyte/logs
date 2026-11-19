@@ -1481,3 +1481,23 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **Keep the digests' text,** since a digest is the team's record. But that text was written from their summaries.
   - **Also revoke the token.** Rejected: an admin re-issues or stops issuing tokens separately.
 - **Fixed on the way:** Postgres transactions sent through a `pg.Pool` could run on different connections. Transactions now check out one connection (`poolSql`).
+
+## D99. Retention
+
+- **Date:** 2026-11-19
+- **Decision:**
+  - **Setting:** each repo has a retention period in days, set by the admin with `sprintdigest-server repo --retention-days <n>|forever`. The default keeps summaries for good, so nothing changes for a repo until someone sets it.
+  - **Running it:** `sprintdigest-server retention apply` runs from cron (and in the compose `jobs` loop). It deletes every summary in the repo that ended more than that many days ago, whoever pushed it, using the same step as delete my data (D98):
+    - their retractions and links go;
+    - context items made only from them are deleted, and shared ones lose those sources;
+    - distillation forgets having read them.
+  - **Digests are left alone:**
+    - they're the stakeholders' record of what was delivered;
+    - they hold no per-developer content;
+    - ageing out isn't a withdrawal, so nothing is withdrawn or corrected.
+  - **Age by session end (`endedAt`):** a session that ends after the cut-off is kept, even if it started before.
+  - The settings printout's heading changes from "Digest settings for" to "Settings for", since retention isn't a digest setting.
+- **Alternatives:**
+  - **A separate retention period for digests.** Left out until someone needs it; a digest is a few paragraphs per period.
+  - **Age by push time.** Rejected: the work's date is what "old" means to a reader, and a late push shouldn't extend it.
+  - **Retract instead of delete.** Rejected: retention exists so the data is gone.

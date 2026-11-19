@@ -1,4 +1,4 @@
-import { bySessionStart, DELETED_DIGEST_TEXT, decidePush, decideRetract, digestSummaryKey, type DataDeletion, hashToken, matchesQuery, newSession, newToken, SESSION_HOURS, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
+import { bySessionStart, DELETED_DIGEST_TEXT, decidePush, decideRetract, digestSummaryKey, type DataDeletion, type Purge, hashToken, matchesQuery, newSession, newToken, SESSION_HOURS, summaryKey, teamReportFrom, type Retraction, type RetractResult, type Identity, type PushIdentity, type Role, type PushResult, type StoredSummary, type SummaryQuery, type TeamReport } from './store.js';
 import {
   byFrom,
   byLinkTime,
@@ -78,20 +78,9 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   }
 
   async deleteDeveloperData(identity: PushIdentity): Promise<DataDeletion> {
-    const { repoId, developerId } = identity;
-    const theirs = [...this.#summaries].filter(([, s]) => s.repoId === repoId && s.developerId === developerId);
-    const keys = new Set(theirs.map(([, s]) => digestSummaryKey(s.summary)));
-    const result: DataDeletion = { summaries: theirs.length, ticketLinks: 0, contextItemsDeleted: 0, contextItemsEdited: 0, digestsWithdrawn: 0, digestsDeleted: 0 };
-    for (const [k] of theirs) this.#summaries.delete(k);
-    removeWhere(this.#retractions, (r) => r.repoId === repoId && r.developerId === developerId);
-    result.ticketLinks = removeWhere(this.#links, (l) => l.repoId === repoId && keys.has(digestSummaryKey(l)));
-    result.contextItemsDeleted = removeWhere(this.#context, (i) => i.repoId === repoId && i.sources.length > 0 && i.sources.every((s) => keys.has(s)));
-    for (const item of this.#context) {
-      if (item.repoId !== repoId || !item.sources.some((s) => keys.has(s))) continue;
-      item.sources = item.sources.filter((s) => !keys.has(s));
-      result.contextItemsEdited++;
-    }
-    for (const run of this.#runs) if (run.repoId === repoId) run.summaries = run.summaries.filter((s) => !keys.has(s.key));
+    const { repoId } = identity;
+    const { keys, ...purged } = this.#purge(repoId, (s) => s.developerId === identity.developerId);
+    const result: DataDeletion = { ...purged, digestsWithdrawn: 0, digestsDeleted: 0 };
     const included = (d: StoredDigest) => d.repoId === repoId && d.summaryKeys.some((k) => keys.has(k));
     for (const d of this.#digests) {
       if (!included(d) || (d.status !== 'sent' && d.status !== 'withdrawn')) continue;
@@ -100,6 +89,36 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
     }
     result.digestsDeleted = removeWhere(this.#digests, (d) => included(d) && d.status !== 'withdrawn');
     return result;
+  }
+
+  async purgeSummariesBefore(repoId: string, before: string): Promise<Purge> {
+    const { keys: _, ...purged } = this.#purge(repoId, (s) => Date.parse(s.summary.endedAt) < Date.parse(before));
+    return purged;
+  }
+
+  async retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]> {
+    return [...this.#settings.values()]
+      .filter((s) => s.retentionDays !== null)
+      .map((s) => ({ repoId: s.repoId, retentionDays: s.retentionDays! }))
+      .sort((a, b) => a.repoId.localeCompare(b.repoId));
+  }
+
+  /** Deletes the matching summaries of a repo and everything that hangs off them alone (D98, D99). */
+  #purge(repoId: string, match: (s: StoredSummary) => boolean): Purge & { keys: Set<string> } {
+    const gone = [...this.#summaries].filter(([, s]) => s.repoId === repoId && match(s));
+    const keys = new Set(gone.map(([, s]) => digestSummaryKey(s.summary)));
+    for (const [k] of gone) this.#summaries.delete(k);
+    removeWhere(this.#retractions, (r) => r.repoId === repoId && keys.has(digestSummaryKey(r)));
+    const ticketLinks = removeWhere(this.#links, (l) => l.repoId === repoId && keys.has(digestSummaryKey(l)));
+    const contextItemsDeleted = removeWhere(this.#context, (i) => i.repoId === repoId && i.sources.length > 0 && i.sources.every((s) => keys.has(s)));
+    let contextItemsEdited = 0;
+    for (const item of this.#context) {
+      if (item.repoId !== repoId || !item.sources.some((s) => keys.has(s))) continue;
+      item.sources = item.sources.filter((s) => !keys.has(s));
+      contextItemsEdited++;
+    }
+    for (const run of this.#runs) if (run.repoId === repoId) run.summaries = run.summaries.filter((s) => !keys.has(s.key));
+    return { keys, summaries: gone.length, ticketLinks, contextItemsDeleted, contextItemsEdited };
   }
 
   async retractions(repoId: string): Promise<Retraction[]> {

@@ -105,7 +105,17 @@ export interface DataStore {
    * work are withdrawn with the text replaced, or deleted when unsent. Their token and other repos are untouched.
    */
   deleteDeveloperData(identity: PushIdentity): Promise<DataDeletion>;
+  /**
+   * Retention (D99): deletes every summary in the repo that ended before `before`, whoever pushed it, with its
+   * retractions and links, and the context it alone produced. Digests are left alone: they're the stakeholders' record.
+   */
+  purgeSummariesBefore(repoId: string, before: string): Promise<Purge>;
+  /** Repos with a retention period set, by repo id. */
+  retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]>;
 }
+
+/** What a retention run removed or changed in one repo (D99). */
+export type Purge = Pick<DataDeletion, 'summaries' | 'ticketLinks' | 'contextItemsDeleted' | 'contextItemsEdited'>;
 
 export interface TokenStore {
   /** Issues the token for one person, role and repo, replacing any earlier one. The token is returned once and stored only as a hash. */

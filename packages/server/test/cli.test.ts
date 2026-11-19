@@ -72,15 +72,16 @@ describe('sprintdigest-server repo (DECISIONS.md D54)', () => {
   it('shows the defaults, then changes what is asked and keeps the rest', async () => {
     const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     expect((await cli(['repo', ...data, ...repo])).stdout).toBe(
-      'Digest settings for github.com/acme/webapp:\n  schedule: off\n  developer preview: off\n  email: none\n  slack: none\n  monthly LLM cost cap: the server default\n',
+      'Settings for github.com/acme/webapp:\n  schedule: off\n  developer preview: off\n  email: none\n  slack: none\n  monthly LLM cost cap: the server default\n  summaries kept: for good\n',
     );
-    const set = await cli(['repo', ...data, ...repo, '--schedule', 'weekly', '--weekday', 'tue', '--since', '2026-03-01', '--preview-hours', '24', '--email', 'po@example.com,sm@example.com', '--slack-env', 'SLACK_WEBHOOK_URL', '--cap-usd', '2.5']);
+    const set = await cli(['repo', ...data, ...repo, '--schedule', 'weekly', '--weekday', 'tue', '--since', '2026-03-01', '--preview-hours', '24', '--email', 'po@example.com,sm@example.com', '--slack-env', 'SLACK_WEBHOOK_URL', '--cap-usd', '2.5', '--retention-days', '90']);
     expect(set).toMatchObject({ exitCode: 0 });
     expect(set.stdout).toBe(
-      'Digest settings for github.com/acme/webapp:\n  schedule: weekly on Tuesday, for periods ending after 2026-03-01\n  developer preview: 24 hours before sending\n  email: po@example.com, sm@example.com\n  slack: the webhook URL in SLACK_WEBHOOK_URL\n  monthly LLM cost cap: $2.50\n',
+      'Settings for github.com/acme/webapp:\n  schedule: weekly on Tuesday, for periods ending after 2026-03-01\n  developer preview: 24 hours before sending\n  email: po@example.com, sm@example.com\n  slack: the webhook URL in SLACK_WEBHOOK_URL\n  monthly LLM cost cap: $2.50\n  summaries kept: 90 days after their session ends\n',
     );
     expect((await cli(['repo', ...data, ...repo, '--slack-env', 'none', '--cap-usd', 'default'])).stdout).toContain('  slack: none\n  monthly LLM cost cap: the server default\n');
     expect((await cli(['repo', ...data, ...repo, '--schedule', 'off'])).stdout).toContain('  schedule: off\n');
+    expect((await cli(['repo', ...data, ...repo, '--retention-days', 'forever'])).stdout).toContain('  summaries kept: for good\n');
   });
 
   it('explains bad values', async () => {
@@ -93,6 +94,8 @@ describe('sprintdigest-server repo (DECISIONS.md D54)', () => {
       ['--cap-usd', 'lots', '--cap-usd must be a number of dollars, or default'],
       ['--cap-usd=-1', undefined, '--cap-usd must be a number of dollars, or default'],
       ['--preview-hours', '1000', '--preview-hours must be a whole number from 0 to 168'],
+      ['--retention-days', '0', '--retention-days must be a whole number of days from 1, or forever'],
+      ['--retention-days', 'soon', '--retention-days must be a whole number of days from 1, or forever'],
     ]) {
       expect((await cli(['repo', ...data, ...repo, flag!, ...(value === undefined ? [] : [value])])).stderr).toContain(message);
     }
@@ -202,5 +205,30 @@ describe('sprintdigest-server delete-data (D98)', () => {
 
   it('needs --repo and --developer', async () => {
     expect((await cli(['delete-data', '--data', '/tmp/x', '--repo', REPO])).stderr).toContain('--developer is required');
+  });
+});
+
+describe('sprintdigest-server retention apply (D99)', () => {
+  it('deletes summaries older than each repo keeps them, says what went, and leaves repos without a period alone', async () => {
+    const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
+    expect(await cli(['retention', 'apply', ...data])).toEqual({ exitCode: 0, stderr: '', stdout: 'No repo has a retention period.\n' });
+    const { store, close } = await openStore({ dataDir: data[1] });
+    // payloadFor sessions ended in March 2026: long past 30 days, inside ten years.
+    for (const repoId of ['github.com/acme/short', 'github.com/acme/long', 'github.com/acme/forever']) {
+      await store.push({ repoId, developerId: 'alice', developerName: 'Alice' }, payloadFor({ sessionId: 'a1' }));
+    }
+    await close();
+    await cli(['repo', ...data, '--repo', 'github.com/acme/short', '--retention-days', '30']);
+    await cli(['repo', ...data, '--repo', 'github.com/acme/long', '--retention-days', '3650']);
+    const run = await cli(['retention', 'apply', ...data]);
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toMatch(
+      /^github\.com\/acme\/long  kept 3650 days: nothing to delete\ngithub\.com\/acme\/short  kept 30 days: deleted 1 summary that ended before \d{4}-\d{2}-\d{2}, 0 ticket links, 0 context items deleted and 0 edited\n$/,
+    );
+    const after = await openStore({ dataDir: data[1] });
+    expect(await after.store.list({ repoId: 'github.com/acme/short' })).toEqual([]);
+    expect(await after.store.list({ repoId: 'github.com/acme/forever' })).toHaveLength(1);
+    await after.close();
+    expect((await cli(['retention', ...data])).stderr).toContain('usage: sprintdigest-server');
   });
 });

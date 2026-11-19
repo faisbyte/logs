@@ -100,3 +100,53 @@ export function dataDeletionContract(name: string, make: () => Promise<SharedSto
 }
 
 export const DELETED_DIGEST_TEXT = '# Deleted\n\nThis digest included work whose developer deleted their data, so its text was deleted too.\n';
+
+// Retention (Phase 10, D99): summaries that ended before a cut-off age out, with what came only from them.
+export function retentionContract(name: string, make: () => Promise<SharedStore> | SharedStore) {
+  describe(`${name}: retention`, () => {
+    let store: SharedStore;
+    const CUTOFF = '2026-03-10T00:00:00.000Z';
+    beforeEach(async () => {
+      store = await make();
+      await store.push(alice, payloadFor({ sessionId: 'old1', startedAt: '2026-03-01T09:00:00.000Z', endedAt: '2026-03-01T10:00:00.000Z' }));
+      await store.push(bob, payloadFor({ sessionId: 'old2', startedAt: '2026-03-05T09:00:00.000Z', endedAt: '2026-03-05T10:00:00.000Z' }));
+      // Ends after the cut-off, though it started before it: kept.
+      await store.push(alice, payloadFor({ sessionId: 'new1', startedAt: '2026-03-09T22:00:00.000Z', endedAt: '2026-03-10T01:00:00.000Z' }));
+      await store.push({ ...alice, repoId: OTHER }, payloadFor({ sessionId: 'old9', startedAt: '2026-03-01T09:00:00.000Z', endedAt: '2026-03-01T10:00:00.000Z' }));
+    });
+
+    it("deletes every developer's summaries that ended before the cut-off, in that repo only, with their links", async () => {
+      await store.addTicketLink(alice, { agent: 'claude-code', sessionId: 'old1' }, 'PROJ-1');
+      await store.addTicketLink(alice, { agent: 'claude-code', sessionId: 'new1' }, 'PROJ-2');
+      expect(await store.purgeSummariesBefore(REPO, CUTOFF)).toEqual({ summaries: 2, ticketLinks: 1, contextItemsDeleted: 0, contextItemsEdited: 0 });
+      expect((await store.list({ repoId: REPO })).map((s) => s.summary.sessionId)).toEqual(['new1']);
+      expect((await store.ticketLinks(REPO)).map((l) => l.ticketKey)).toEqual(['PROJ-2']);
+      expect((await store.list({ repoId: OTHER })).map((s) => s.summary.sessionId)).toEqual(['old9']);
+    });
+
+    it('deletes context items that came only from aged-out summaries, and trims shared ones', async () => {
+      await store.applyContextChanges(REPO, {
+        ...none,
+        added: [contextItem({ id: 'ctx-000000c1', sources: [key('old1'), key('old2')] }), contextItem({ id: 'ctx-000000c2', sources: [key('old1'), key('new1')] })],
+      });
+      expect(await store.purgeSummariesBefore(REPO, CUTOFF)).toMatchObject({ contextItemsDeleted: 1, contextItemsEdited: 1 });
+      expect((await store.contextItems(REPO)).map((i) => [i.id, i.sources])).toEqual([['ctx-000000c2', [key('new1')]]]);
+    });
+
+    it('leaves digests alone: they are the stakeholders’ record, and ageing out is not a withdrawal', async () => {
+      const sent = await store.saveDigest(newDigest({ kind: 'scheduled', periodKey: 'week:1', status: 'sent', summaryKeys: [key('old1')] }));
+      const report = await store.saveDigest(newDigest({ kind: 'report', status: 'ready', summaryKeys: [key('old2')] }));
+      await store.purgeSummariesBefore(REPO, CUTOFF);
+      expect(await store.getDigest(REPO, sent.id)).toMatchObject({ status: 'sent', markdown: newDigest().markdown });
+      expect(await store.getDigest(REPO, report.id)).toMatchObject({ status: 'ready' });
+    });
+
+    it('finds the repos that have a retention period, and nothing to do is fine', async () => {
+      expect(await store.retentionRepos()).toEqual([]);
+      await store.saveRepoSettings(REPO, { retentionDays: 90 });
+      await store.saveRepoSettings(OTHER, { emailTo: ['po@example.com'] });
+      expect(await store.retentionRepos()).toEqual([{ repoId: REPO, retentionDays: 90 }]);
+      expect(await store.purgeSummariesBefore(REPO, '2000-01-01T00:00:00.000Z')).toEqual({ summaries: 0, ticketLinks: 0, contextItemsDeleted: 0, contextItemsEdited: 0 });
+    });
+  });
+}

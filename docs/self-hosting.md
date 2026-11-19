@@ -6,7 +6,7 @@
 |---|---|
 | `db` | Postgres 16, with its data in the `db` volume |
 | `server` | The digest server API on port 8787. Developers' CLIs push here. |
-| `jobs` | Once an hour: `digest send-due`, then `context distill` (the cron jobs in [digests.md](digests.md)) |
+| `jobs` | Once an hour: `digest send-due`, `context distill` and `retention apply` (the cron jobs in [digests.md](digests.md)) |
 | `web` | The dashboard on port 3000 |
 
 Nothing secret is built into the image. `.dockerignore` keeps `.env`, `.digest/`, local databases and session data out
@@ -41,6 +41,8 @@ docker compose exec server sprintdigest-server token --repo github.com/org/repo 
 docker compose exec server sprintdigest-server token --repo github.com/org/repo --reader pat --name "Pat (PO)"
 docker compose exec server sprintdigest-server sprint --repo github.com/org/repo --name "Sprint 1" --from 2026-03-02 --to 2026-03-16
 docker compose exec server sprintdigest-server repo --repo github.com/org/repo --schedule sprint-end --email po@example.com
+docker compose exec server sprintdigest-server repo --repo github.com/org/repo --retention-days 365   # summaries age out; default: kept for good
+docker compose exec server sprintdigest-server delete-data --repo github.com/org/repo --developer alice --yes   # a departed developer
 ```
 
 With Postgres there is no need to stop the server first (that's only for the local PGlite mode).
