@@ -26,6 +26,7 @@ Settings come from your shell or from a `.env` file next to `compose.yaml`. All 
 | `ANTHROPIC_API_KEY` | unset | Writing digests, reports and context. Without it the server serves what it has already written. |
 | `DIGEST_MONTHLY_CAP_USD` | `10` | The default monthly LLM cost cap per repo |
 | `DIGEST_MODEL` | Sonnet 5.5 | The digest model |
+| `RATE_LIMIT_PER_MINUTE` | `300` | Requests a minute per token or dashboard session (per address without one); `0` turns it off |
 | `SMTP_URL`, `DIGEST_EMAIL_FROM` | unset | Email delivery |
 | `SLACK_WEBHOOK_URL` | unset | Slack delivery; name it in the repo's settings with `--slack-env SLACK_WEBHOOK_URL` |
 | `LOGS_API_PORT`, `LOGS_WEB_PORT` | `8787`, `3000` | Host ports |

@@ -156,6 +156,24 @@ describe('startServer', () => {
     await server.close();
     await close();
   });
+
+  it('limits requests per caller when given a limit (D101)', async () => {
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
+    const { store, close } = await openStore({ dataDir: data });
+    const server = await startServer({ store, port: 0, log: () => {}, rateLimit: 1 });
+    expect((await fetch(`${server.url}/v1/whoami`)).status).toBe(401);
+    expect((await fetch(`${server.url}/v1/whoami`)).status).toBe(429);
+    await server.close();
+    await close();
+  });
+
+  it('refuses to start with a nonsense rate limit', async () => {
+    const data = join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db');
+    expect(await cli(['serve', '--data', data, '--port', '0'], { RATE_LIMIT_PER_MINUTE: 'lots' })).toMatchObject({
+      exitCode: 1,
+      stderr: 'sprintdigest-server: RATE_LIMIT_PER_MINUTE must be a whole number of requests a minute, or 0 to turn it off.\n',
+    });
+  });
 });
 
 describe('sprintdigest-server context distill (DECISIONS.md D82)', () => {

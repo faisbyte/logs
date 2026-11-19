@@ -9,6 +9,7 @@ import { openPGlite } from './pglite.js';
 import { migrate, poolSql, PostgresSummaryStore } from './postgres-store.js';
 import { distill, distillNeedsAttention } from './distill.js';
 import { needsAttention, sendDue } from './schedule.js';
+import { RateLimiter, rateLimitFromEnv } from './rate-limit.js';
 
 // sprintdigest-server: `serve` runs the API; `token` issues a developer's token for a repo (DECISIONS.md D43);
 // `sprint` keeps a repo's named date ranges (D45).
@@ -72,8 +73,10 @@ export async function startServer({
   host = '127.0.0.1',
   log,
   digests,
-}: { store: SharedStore; port: number; host?: string; log?: (line: string) => void; digests?: HandlerOptions['digests'] }) {
-  const server = createServer(createHandler(store, { ...(log ? { log } : {}), ...(digests ? { digests } : {}) }));
+  rateLimit = null,
+}: { store: SharedStore; port: number; host?: string; log?: (line: string) => void; digests?: HandlerOptions['digests']; rateLimit?: number | null }) {
+  const limiter = rateLimit ? new RateLimiter(rateLimit) : null;
+  const server = createServer(createHandler(store, { ...(log ? { log } : {}), ...(digests ? { digests } : {}), rateLimit: limiter }));
   await new Promise<void>((listening) => server.listen(port, host, listening));
   const address = server.address() as AddressInfo;
   return { url: `http://${host}:${address.port}`, close: () => new Promise<void>((closed) => server.close(() => closed())) };
@@ -411,6 +414,12 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
 
   const port = Number(values.port ?? io.env.PORT ?? 8787);
   if (!Number.isInteger(port) || port < 0) return fail('--port must be a port number.');
+  let rateLimit: number | null;
+  try {
+    rateLimit = rateLimitFromEnv(io.env);
+  } catch (err) {
+    return fail((err as Error).message);
+  }
   const { store, close } = await openStore(storage);
   let digests: HandlerOptions['digests'];
   try {
@@ -419,7 +428,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
     await close();
     return fail((err as Error).message);
   }
-  const server = await startServer({ store, port, host: io.env.HOST ?? '127.0.0.1', log: (line) => io.stdout(`${line}\n`), digests });
+  const server = await startServer({ store, port, host: io.env.HOST ?? '127.0.0.1', log: (line) => io.stdout(`${line}\n`), digests, rateLimit });
   if (!digests.llm) io.stdout('No ANTHROPIC_API_KEY: serving digests and reports already written, but not writing new ones.\n');
   io.stdout(`sprintdigest-server listening on ${server.url}\n`);
   await new Promise<void>((stop) => {

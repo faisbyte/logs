@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AgentSchema, onDemandReport, READER_REFUSAL, reportEstimate, receivePush, ticketReport, type AuditAction, type DigestDeps, type Identity, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
+import type { RateLimiter } from './rate-limit.js';
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -84,9 +86,20 @@ export interface HandlerOptions {
   log?: (line: string) => void;
   /** How the server writes digests; without it, it serves only what it has already written. */
   digests?: Omit<DigestDeps, 'store'>;
+  /** Requests a minute per caller (D101); none limits nothing. */
+  rateLimit?: RateLimiter | null;
 }
 
-export function createHandler(store: SharedStore, { log = (line: string) => console.log(line), digests = { llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 } }: HandlerOptions = {}) {
+/** Who is asking, for rate limiting: a hash of the credential they send, or their address when they send none. */
+const callerKey = (req: IncomingMessage) => {
+  const credential = req.headers.authorization;
+  return credential ? `credential:${createHash('sha256').update(credential).digest('hex')}` : `address:${req.socket.remoteAddress ?? 'unknown'}`;
+};
+
+export function createHandler(
+  store: SharedStore,
+  { log = (line: string) => console.log(line), digests = { llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 }, rateLimit = null }: HandlerOptions = {},
+) {
   /** The token's identity, required to match the repo being read. */
   /** Whoever the request is: a token, or a dashboard session made from one. */
   const identify = (req: IncomingMessage) => (sessionId(req) ? store.authenticateSession(sessionId(req)) : store.authenticate(bearer(req)));
@@ -273,14 +286,24 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
     const url = new URL(req.url ?? '/', 'http://digest.local');
     let status: number;
     let body: unknown;
-    try {
-      [status, body] = await route(req, url);
-    } catch (err) {
-      status = err instanceof HttpError ? err.status : 500;
-      body = { error: err instanceof HttpError ? err.message : 'internal error' };
-      if (status === 413) req.resume();
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    // D101: counted before anything else runs, per token or session (hashed, so no credential is kept), else per address.
+    const take = rateLimit && url.pathname !== '/healthz' ? rateLimit.take(callerKey(req)) : ({ ok: true } as const);
+    if (!take.ok) {
+      status = 429;
+      body = { error: `too many requests; try again in ${take.retryAfterSeconds} seconds` };
+      headers['retry-after'] = String(take.retryAfterSeconds);
+      req.resume();
+    } else {
+      try {
+        [status, body] = await route(req, url);
+      } catch (err) {
+        status = err instanceof HttpError ? err.status : 500;
+        body = { error: err instanceof HttpError ? err.message : 'internal error' };
+        if (status === 413) req.resume();
+      }
     }
-    res.writeHead(status, { 'content-type': 'application/json' });
+    res.writeHead(status, headers);
     res.end(JSON.stringify(body));
     log(`${req.method} ${url.pathname} ${status}`);
   };

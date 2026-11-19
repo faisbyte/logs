@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { contextItem } from '../../core/test/shared/context-contract.js';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
 import { createHandler } from '../src/http.js';
+import { RateLimiter } from '../src/rate-limit.js';
 
 const REPO = 'github.com/acme/webapp';
 const alice = { repoId: REPO, developerId: 'alice', developerName: 'Alice' };
@@ -255,6 +256,30 @@ describe('digest server HTTP API', () => {
       // A session can't push: pushes need the developer's own token.
       expect((await call('/v1/summaries', { method: 'POST', session, body: { repoId: REPO, payload: payloadFor({ sessionId: 'other' }) } })).status).toBe(401);
     });
+  });
+
+  it('limits each caller to its requests a minute, by token, session or address; the health check is exempt (D101)', async () => {
+    const store = new InMemorySummaryStore();
+    const logs: string[] = [];
+    server = createServer(createHandler(store, { log: (line) => logs.push(line), rateLimit: new RateLimiter(2, () => Date.parse('2026-11-19T10:00:00.000Z')) }));
+    await new Promise<void>((listening) => server!.listen(0, '127.0.0.1', listening));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const as = (authorization?: string) => fetch(`${base}/v1/whoami`, authorization ? { headers: { authorization } } : {});
+    const alice = (await store.issueToken({ repoId: REPO, developerId: 'alice', developerName: 'Alice' })).token;
+    const bob = (await store.issueToken({ repoId: REPO, developerId: 'bob', developerName: 'Bob' })).token;
+    expect([(await as(`Bearer ${alice}`)).status, (await as(`Bearer ${alice}`)).status]).toEqual([200, 200]);
+    const refused = await as(`Bearer ${alice}`);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('retry-after')).toBe('60');
+    expect(await refused.json()).toEqual({ error: 'too many requests; try again in 60 seconds' });
+    expect((await as(`Bearer ${bob}`)).status).toBe(200);
+    expect((await as('Session dgs_one')).status).toBe(401);
+    expect((await as()).status).toBe(401);
+    expect((await as()).status).toBe(401);
+    expect((await as()).status).toBe(429);
+    for (let i = 0; i < 5; i++) expect((await fetch(`${base}/healthz`)).status).toBe(200);
+    expect(logs).toContain('GET /v1/whoami 429');
+    expect(logs.join('\n')).not.toContain(alice);
   });
 
   describe('the audit log (D100)', () => {
