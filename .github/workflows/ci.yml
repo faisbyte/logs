@@ -57,3 +57,16 @@ jobs:
           name: e2e-traces
           path: apps/web/test-results/
           retention-days: 7
+
+  # The self-host stack (compose.yaml) built and checked end to end, then removed.
+  self-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable && corepack install
+      - run: pnpm install --frozen-lockfile
+      - run: DIGEST_DOCKER_TESTS=1 pnpm exec vitest run packages/server/test/compose.test.ts
