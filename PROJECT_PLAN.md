@@ -260,7 +260,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [x] Rate limiting and LLM cost caps per repo. (D53, D101.)
 - [x] Audit log of who viewed or sent what. (D100.)
 
-**Status:** Built (D97 to D102). Waiting for the owner's acceptance.
+**Status:** Accepted (D103).
 
 ### Phase 11 (later): Interoperability
 - [ ] Ingest SpecStory .specstory/history/*.md.
