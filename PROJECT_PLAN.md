@@ -148,7 +148,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [ ] Write the findings to research/interviews.md.
 
 **Done when:** you have written evidence for or against stakeholder demand.
-**Status:** not started.
+**Status:** Closed by the owner without interviews (D105). The "Done when" is not met: there is no written evidence for or against demand, and the items above stay unticked.
 
 ### Phase 1: Session discovery and parsing
 - [x] Inspect real files first:
