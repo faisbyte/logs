@@ -96,14 +96,14 @@ export function digestStoreContract(name: string, make: () => Promise<DigestStor
 
     describe('repo settings', () => {
       it('has defaults: no schedule, no preview, no delivery, no own cap', async () => {
-        expect(await store.repoSettings(REPO)).toEqual({ repoId: REPO, schedule: 'off', weekday: 1, previewHours: 0, emailTo: [], slackWebhookEnv: null, monthlyCapUsd: null, scheduleSince: null });
+        expect(await store.repoSettings(REPO)).toEqual({ repoId: REPO, schedule: 'off', weekday: 1, previewHours: 0, emailTo: [], slackWebhookEnv: null, monthlyCapUsd: null, scheduleSince: null, retentionDays: null });
       });
 
       it('saves changes, keeping the rest, and lists the repos that have a schedule', async () => {
         await store.saveRepoSettings(REPO, { schedule: 'weekly', weekday: 2, scheduleSince: '2026-03-01T00:00:00.000Z' });
         await store.saveRepoSettings(REPO, { emailTo: ['po@example.com'], slackWebhookEnv: 'SLACK_WEBHOOK_URL', monthlyCapUsd: 2.5, previewHours: 24 });
         await store.saveRepoSettings('github.com/acme/quiet', { emailTo: ['x@example.com'] });
-        expect(await store.repoSettings(REPO)).toEqual({ repoId: REPO, schedule: 'weekly', weekday: 2, previewHours: 24, emailTo: ['po@example.com'], slackWebhookEnv: 'SLACK_WEBHOOK_URL', monthlyCapUsd: 2.5, scheduleSince: '2026-03-01T00:00:00.000Z' });
+        expect(await store.repoSettings(REPO)).toEqual({ repoId: REPO, schedule: 'weekly', weekday: 2, previewHours: 24, emailTo: ['po@example.com'], slackWebhookEnv: 'SLACK_WEBHOOK_URL', monthlyCapUsd: 2.5, scheduleSince: '2026-03-01T00:00:00.000Z', retentionDays: null });
         expect(await store.scheduledRepos()).toEqual([REPO]);
       });
     });

@@ -4,7 +4,7 @@ import { digestStoreContract } from '../../core/test/shared/digest-contract.js';
 import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
 import { contextStoreContract } from '../../core/test/shared/context-contract.js';
 import { sessionContract } from '../../core/test/shared/session-contract.js';
-import { dataDeletionContract } from '../../core/test/shared/data-contract.js';
+import { dataDeletionContract, retentionContract } from '../../core/test/shared/data-contract.js';
 import { openPGlite } from '../src/pglite.js';
 import { migrate, PostgresSummaryStore } from '../src/postgres-store.js';
 
@@ -24,6 +24,7 @@ digestStoreContract('PostgresSummaryStore (PGlite)', fresh);
 contextStoreContract('PostgresSummaryStore (PGlite)', fresh);
 sessionContract('PostgresSummaryStore (PGlite)', async (now) => (await fresh(), new PostgresSummaryStore(db, { now })));
 dataDeletionContract('PostgresSummaryStore (PGlite)', fresh);
+retentionContract('PostgresSummaryStore (PGlite)', fresh);
 
 describe('migrations', () => {
   it('can run again without changing anything', async () => {

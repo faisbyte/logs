@@ -54,6 +54,7 @@ export {
   receivePush,
   teamReportFrom,
   type DataDeletion,
+  type Purge,
   type DataStore,
   DELETED_DIGEST_TEXT,
   type Identity,

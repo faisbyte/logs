@@ -61,6 +61,7 @@ node packages/server/dist/main.js repo --data ./server-data --repo github.com/or
 node packages/server/dist/main.js delete-data --data ./server-data --repo github.com/org/repo --developer alice --yes   # a departed developer's data
 node packages/server/dist/main.js digest send-due --data ./server-data   # run from cron; sends what is due, once
 node packages/server/dist/main.js context distill --data ./server-data   # run from cron; turns new approved summaries into context items, under the cost cap
+node packages/server/dist/main.js retention apply --data ./server-data   # run from cron; deletes summaries older than a repo's --retention-days
 node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE_URL for Postgres; PORT defaults to 8787
 ```
 

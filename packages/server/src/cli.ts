@@ -26,10 +26,12 @@ const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server token --repo <repo URL or host/path> (--developer <id> | --reader <id>) --name <display name> [--data <dir>]
        sprintdigest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
        sprintdigest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
-                          [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default] [--data <dir>]
+                          [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default]
+                          [--retention-days <n>|forever] [--data <dir>]
        sprintdigest-server delete-data --repo <repo> --developer <id> [--yes] [--data <dir>]
        sprintdigest-server digest send-due [--data <dir>]
        sprintdigest-server context distill [--data <dir>]
+       sprintdigest-server retention apply [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
 export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
@@ -97,6 +99,7 @@ interface Args {
   email?: string;
   'slack-env'?: string;
   'cap-usd'?: string;
+  'retention-days'?: string;
   yes?: boolean;
 }
 
@@ -109,12 +112,13 @@ function showSettings(s: RepoSettings): string {
       ? 'off'
       : `${s.schedule === 'weekly' ? `weekly on ${title(WEEKDAYS[s.weekday - 1]!)}` : 'at the end of each sprint'}${s.scheduleSince ? `, for periods ending after ${showDate(s.scheduleSince)}` : ''}`;
   return [
-    `Digest settings for ${s.repoId}:`,
+    `Settings for ${s.repoId}:`,
     `  schedule: ${schedule}`,
     `  developer preview: ${s.previewHours ? `${s.previewHours} hours before sending` : 'off'}`,
     `  email: ${s.emailTo.join(', ') || 'none'}`,
     `  slack: ${s.slackWebhookEnv ? `the webhook URL in ${s.slackWebhookEnv}` : 'none'}`,
     `  monthly LLM cost cap: ${s.monthlyCapUsd === null ? 'the server default' : `$${s.monthlyCapUsd.toFixed(2)}`}`,
+    `  summaries kept: ${s.retentionDays === null ? 'for good' : `${s.retentionDays} days after their session ends`}`,
     '',
   ].join('\n');
 }
@@ -157,6 +161,11 @@ function settingsPatch(values: Args, now: Date): { patch: Partial<Omit<RepoSetti
     if (values['cap-usd'] !== 'default' && (!Number.isFinite(cap) || cap < 0)) return { error: '--cap-usd must be a number of dollars, or default.' };
     patch.monthlyCapUsd = values['cap-usd'] === 'default' ? null : cap;
   }
+  if (values['retention-days'] !== undefined) {
+    const days = values['retention-days'];
+    if (days !== 'forever' && (!/^\d+$/.test(days) || Number(days) < 1)) return { error: '--retention-days must be a whole number of days from 1, or forever.' };
+    patch.retentionDays = days === 'forever' ? null : Number(days);
+  }
   return { patch };
 }
 
@@ -191,6 +200,24 @@ async function sprintCommand(store: SharedStore, repoId: string, values: Args, i
 }
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Retention (D99): each repo with a period loses the summaries that ended longer ago. Run from cron, like send-due. */
+async function retentionCommand(store: SharedStore, now: Date, io: ServerIo): Promise<number> {
+  const repos = await store.retentionRepos();
+  if (!repos.length) return (io.stdout('No repo has a retention period.\n'), 0);
+  for (const { repoId, retentionDays } of repos) {
+    const before = new Date(now.getTime() - retentionDays * 86_400_000).toISOString();
+    const r = await store.purgeSummariesBefore(repoId, before);
+    io.stdout(
+      `${repoId}  kept ${retentionDays} days: ` +
+        (r.summaries
+          ? `deleted ${count(r.summaries, 'summary that', 'summaries that')} ended before ${before.slice(0, 10)}, ${count(r.ticketLinks, 'ticket link', 'ticket links')}, ` +
+            `${count(r.contextItemsDeleted, 'context item', 'context items')} deleted and ${r.contextItemsEdited} edited\n`
+          : 'nothing to delete\n'),
+    );
+  }
+  return 0;
+}
 
 /** The admin's delete my data (D98), for a developer who can't run it themselves, such as one who has left. */
 async function deleteDataCommand(storage: { databaseUrl?: string; dataDir?: string }, repoId: string, values: Args, io: ServerIo): Promise<number> {
@@ -237,17 +264,27 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         email: { type: 'string' },
         'slack-env': { type: 'string' },
         'cap-usd': { type: 'string' },
+        'retention-days': { type: 'string' },
         yes: { type: 'boolean' },
       },
     }));
   } catch (err) {
     return fail(`${(err as Error).message}\n${USAGE}`);
   }
-  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data'].includes(command ?? '')) return fail(USAGE);
-  const sub = { digest: 'send-due', context: 'distill' }[command as string];
+  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data', 'retention'].includes(command ?? '')) return fail(USAGE);
+  const sub = { digest: 'send-due', context: 'distill', retention: 'apply' }[command as string];
   if (sub ? positionals.join(' ') !== sub : positionals.length) return fail(USAGE);
   const storage = { databaseUrl: io.env.DATABASE_URL, dataDir: values.data };
   if (!storage.databaseUrl && !storage.dataDir) return fail('set DATABASE_URL or pass --data <dir> for a local database.');
+
+  if (command === 'retention') {
+    const { store, close } = await openStore(storage);
+    try {
+      return await retentionCommand(store, new Date(), io);
+    } finally {
+      await close();
+    }
+  }
 
   if (command === 'context') {
     let deps: ReturnType<typeof digestDepsFromEnv>;

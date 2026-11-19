@@ -21,6 +21,7 @@ import {
   UploadPayloadSchema,
   DELETED_DIGEST_TEXT,
   type DataDeletion,
+  type Purge,
   type ContextChanges,
   type ContextRun,
   type ContextItem,
@@ -63,6 +64,35 @@ export interface Sql {
   query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
   /** A pool's (see poolSql): one connection, held until released. PGlite and a single pg.Client have no pool. */
   checkout?(): Promise<Sql & { release(): void }>;
+}
+
+/** The "agent/sessionId" keys of a repo's summaries matching a condition on the summaries table ($1 is the repo). */
+async function keysWhere(tx: Sql, repoId: string, condition: string, params: unknown[]): Promise<string[]> {
+  const { rows } = await tx.query<{ key: string }>(`select agent || '/' || session_id as key from summaries where repo_id = $1 and ${condition}`, [repoId, ...params]);
+  return rows.map((r) => r.key);
+}
+
+/** Deletes these summaries and everything that hangs off them alone (D98, D99). Run inside a transaction. */
+async function purgeKeys(tx: Sql, repoId: string, keys: string[]): Promise<Purge> {
+  const count = async (text: string) => (await tx.query(text, [repoId, keys])).rows.length;
+  const key = "agent || '/' || session_id = any($2::text[])";
+  // Links reference summaries, so they go first.
+  const ticketLinks = await count(`delete from ticket_links where repo_id = $1 and ${key} returning 1`);
+  const summaries = await count(`delete from summaries where repo_id = $1 and ${key} returning 1`);
+  await tx.query(`delete from retractions where repo_id = $1 and ${key}`, [repoId, keys]);
+  const contextItemsDeleted = await count(
+    'delete from context_items where repo_id = $1 and jsonb_array_length(sources) > 0 and not exists (select 1 from jsonb_array_elements_text(sources) src where src <> all($2::text[])) returning 1',
+  );
+  const contextItemsEdited = await count(
+    `update context_items set sources = (select coalesce(jsonb_agg(src), '[]'::jsonb) from jsonb_array_elements_text(sources) src where src <> all($2::text[]))
+     where repo_id = $1 and exists (select 1 from jsonb_array_elements_text(sources) src where src = any($2::text[])) returning 1`,
+  );
+  await tx.query(
+    `update context_runs set summaries = (select coalesce(jsonb_agg(s), '[]'::jsonb) from jsonb_array_elements(summaries) s where (s->>'key') <> all($2::text[]))
+     where repo_id = $1 and exists (select 1 from jsonb_array_elements(summaries) s where (s->>'key') = any($2::text[]))`,
+    [repoId, keys],
+  );
+  return { summaries, ticketLinks, contextItemsDeleted, contextItemsEdited };
 }
 
 /** A pg.Pool as an Sql whose transactions check out one connection. Pass a pool to the store only through this. */
@@ -493,30 +523,22 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
     const { repoId, developerId } = identity;
     // All of it, or none of it (D98).
     return inTransaction(this.#sql, async (tx) => {
-      const count = async (text: string, params: unknown[]) => (await tx.query(text, params)).rows.length;
-      const { rows } = await tx.query<{ key: string }>("select agent || '/' || session_id as key from summaries where repo_id = $1 and developer_id = $2", [repoId, developerId]);
-      const keys = rows.map((r) => r.key);
-      const keysJson = JSON.stringify(keys);
-      // Links reference summaries, so they go first.
-      const ticketLinks = await count("delete from ticket_links where repo_id = $1 and agent || '/' || session_id = any($2::text[]) returning 1", [repoId, keys]);
-      const summaries = await count('delete from summaries where repo_id = $1 and developer_id = $2 returning 1', [repoId, developerId]);
-      await tx.query('delete from retractions where repo_id = $1 and developer_id = $2', [repoId, developerId]);
-      const contextItemsDeleted = await count('delete from context_items where repo_id = $1 and jsonb_array_length(sources) > 0 and sources <@ $2::jsonb returning 1', [repoId, keysJson]);
-      const contextItemsEdited = await count(
-        `update context_items set sources = (select coalesce(jsonb_agg(src), '[]'::jsonb) from jsonb_array_elements_text(sources) src where src <> all($2::text[]))
-         where repo_id = $1 and exists (select 1 from jsonb_array_elements_text(sources) src where src = any($2::text[])) returning 1`,
-        [repoId, keys],
-      );
-      await tx.query(
-        `update context_runs set summaries = (select coalesce(jsonb_agg(s), '[]'::jsonb) from jsonb_array_elements(summaries) s where (s->>'key') <> all($2::text[]))
-         where repo_id = $1 and exists (select 1 from jsonb_array_elements(summaries) s where (s->>'key') = any($2::text[]))`,
-        [repoId, keys],
-      );
+      const keys = await keysWhere(tx, repoId, 'developer_id = $2', [developerId]);
+      const purged = await purgeKeys(tx, repoId, keys);
       const included = 'exists (select 1 from jsonb_array_elements_text(summary_keys) k where k = any($2::text[]))';
-      const digestsWithdrawn = await count(`update digests set status = 'withdrawn', markdown = $3 where repo_id = $1 and status in ('sent', 'withdrawn') and ${included} returning 1`, [repoId, keys, DELETED_DIGEST_TEXT]);
-      const digestsDeleted = await count(`delete from digests where repo_id = $1 and status <> 'withdrawn' and ${included} returning 1`, [repoId, keys]);
-      return { summaries, ticketLinks, contextItemsDeleted, contextItemsEdited, digestsWithdrawn, digestsDeleted };
+      const digestsWithdrawn = (await tx.query(`update digests set status = 'withdrawn', markdown = $3 where repo_id = $1 and status in ('sent', 'withdrawn') and ${included} returning 1`, [repoId, keys, DELETED_DIGEST_TEXT])).rows.length;
+      const digestsDeleted = (await tx.query(`delete from digests where repo_id = $1 and status <> 'withdrawn' and ${included} returning 1`, [repoId, keys])).rows.length;
+      return { ...purged, digestsWithdrawn, digestsDeleted };
     });
+  }
+
+  async purgeSummariesBefore(repoId: string, before: string): Promise<Purge> {
+    return inTransaction(this.#sql, async (tx) => purgeKeys(tx, repoId, await keysWhere(tx, repoId, 'ended_at < $2', [before])));
+  }
+
+  async retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]> {
+    const { rows } = await this.#sql.query<{ repo_id: string; days: number }>("select repo_id, (settings->>'retentionDays')::integer as days from repo_settings where settings->>'retentionDays' is not null order by repo_id");
+    return rows.map((r) => ({ repoId: r.repo_id, retentionDays: r.days }));
   }
 
   async retractions(repoId: string): Promise<Retraction[]> {
