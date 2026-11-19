@@ -251,7 +251,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [x] Stakeholder view: digest archive only, with no transcript access.
 - [x] Context view: active and superseded ContextItems.
 
-**Status:** Built (D93 to D95), with end-to-end and axe tests in CI. **Outstanding:** the owner's review of the round 3 screenshots.
+**Status:** Accepted (D96), with end-to-end and axe tests in CI.
 
 ### Phase 10: Hardening
 - [ ] Roles: developer, stakeholder, admin. Stakeholders never see raw content. (Developer and reader roles are built and enforced by the server, D51; admin isn't.)
