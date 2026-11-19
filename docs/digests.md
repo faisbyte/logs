@@ -9,6 +9,7 @@ The digest server writes plain-language digests of the team's approved AI work, 
 | `ANTHROPIC_API_KEY` | Lets the server write digests and reports. Without it, the server only serves ones it has already written. |
 | `DIGEST_MODEL`, `DIGEST_EFFORT` | Model and effort for digests (default `claude-sonnet-5-5`, `medium`). |
 | `DIGEST_MONTHLY_CAP_USD` | Default monthly LLM cost cap per repo, in dollars (default 10). Change one repo's cap with `sprintdigest-server repo --cap-usd`. |
+| `RATE_LIMIT_PER_MINUTE` | Requests a minute per token or dashboard session, or per address without one (default 300; `0` turns it off). Over it, the server answers 429 with `Retry-After`. |
 | `SMTP_URL`, `DIGEST_EMAIL_FROM` | Email delivery, e.g. `smtps://user:pass@smtp.example.com:465` (Resend, Postmark or your own server). |
 | Any name you choose, e.g. `SLACK_WEBHOOK_URL` | A Slack incoming webhook URL. Point a repo at it with `sprintdigest-server repo --slack-env SLACK_WEBHOOK_URL`. |
 

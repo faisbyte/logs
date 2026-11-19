@@ -1521,3 +1521,19 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **Log lines instead of a table.** Logs already carry method, path and status (D43), but they rotate and can't be queried by repo.
   - **Recording list views and refusals too.** That's mostly noise; refusals belong with rate limiting (D101).
   - **A dashboard page for the log.** That would need the admin token role D97 declined.
+
+## D101. Rate limiting
+
+- **Date:** 2026-11-19
+- **Decision:** the server counts requests per caller in a fixed one-minute window, in memory.
+  - **Callers:** a caller is a sha256 of the credential it sends (a token or a dashboard session), or its address when it sends none. Credentials are never kept in the clear.
+  - **Limit:** 300 a minute by default. `RATE_LIMIT_PER_MINUTE` changes it, and `0` turns it off; a nonsense value stops the server at start.
+  - **Over the limit:** `429` with `Retry-After` and a plain message, before the request is routed. 429s show in the request log and aren't audited (D100).
+  - `/healthz` is exempt, for health checks.
+  - **Cost:** spending stays limited by the monthly LLM cost cap per repo (D53). With this, Phase 10's "rate limiting and LLM cost caps per repo" is complete.
+- **Alternatives:**
+  - **A tighter limit on failed sign-ins per address.** Rejected:
+    - tokens and sessions are 256-bit random, so guessing one is hopeless at any rate;
+    - every dashboard sign-in comes from the dashboard's own address, so a failure limit there would lock out every user together.
+  - **A shared store such as Redis.** Only needed with several server processes; there is one.
+  - **Sliding windows or token buckets.** Smoother, but a fixed window is enough at this scale and simple to reason about.
