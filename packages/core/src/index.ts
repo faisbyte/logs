@@ -53,6 +53,9 @@ export {
   payloadHash,
   receivePush,
   teamReportFrom,
+  type DataDeletion,
+  type DataStore,
+  DELETED_DIGEST_TEXT,
   type Identity,
   type PushIdentity,
   READER_REFUSAL,
@@ -92,7 +95,8 @@ export { groupByTicket, linksOf, reportSummaryKeys, ticketReport, type SprintGro
 export { FakeTracker, refreshTracker, type Tracker } from './shared/tracker.js';
 export { InMemorySummaryStore } from './shared/memory-store.js';
 export { httpPushTarget } from './shared/http-target.js';
-export { localPushTarget, type ContextItemsOutcome, type RetireOutcome, type TitleOutcome, type SprintsOutcome, type RetractOutcome, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
+export { localPushTarget, type ContextItemsOutcome,
+  type DeletionOutcome, type RetireOutcome, type TitleOutcome, type SprintsOutcome, type RetractOutcome, type PreviewsOutcome, type LinkOutcome, type PushOutcome, type PushTarget, type TicketsOutcome, type UnlinkOutcome } from './shared/target.js';
 export { assertDigestSource, digestInput, isDigestInput, type DigestInput, type DigestPeriod, type DigestTicket, type DigestWork } from './digest/input.js';
 export { assertDeliverable, checkDigest, DEFAULT_JARGON, jargonIn, DigestBlockedError, DigestError, DigestOutputSchema, estimateDigestCost, generateDigest, renderDigest, type Digest, type DigestOutput } from './digest/generate.js';
 export { DIGEST_PROMPT_VERSION, digestMessage, digestSystemPrompt } from './digest/prompt.js';

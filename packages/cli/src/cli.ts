@@ -10,6 +10,7 @@ import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
 import { previewCommand, reportCommand } from './report.js';
 import { retractCommand } from './retract.js';
+import { deleteMyDataCommand } from './delete-my-data.js';
 import { linkCommand, ticketsCommand, ticketTitleCommand } from './tickets.js';
 import { redactCommand } from './redact.js';
 import { reviewCommand, reviewListCommand, transitionCommand } from './review.js';
@@ -201,6 +202,13 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .description('Withdraw a summary you pushed from the shared store; it becomes a draft again here')
     .option(...repoOption)
     .action((sessionId: string, options: { repo?: string }) => guarded('retract', () => retractCommand(sessionId, options, ctx)));
+
+  program
+    .command('delete-my-data')
+    .description('Delete every summary you pushed to the shared store, and what was made only from them; asks for --yes first')
+    .option('--yes', 'delete without asking again')
+    .option(...repoOption)
+    .action((options: { repo?: string; yes?: boolean }) => guarded('delete-my-data', () => deleteMyDataCommand(options, ctx)));
 
   program
     .command('report')

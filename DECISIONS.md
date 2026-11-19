@@ -1455,3 +1455,29 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **A cron container**, or the host's cron, instead of the jobs loop. That's one more image or more host setup, for the same hourly behaviour.
   - **An `admin` token role with HTTP admin endpoints.** It would allow admin pages in the dashboard, but it adds a network surface that can do the most damage. Reconsider it if self-hosters ask for admin work without shell access.
 - **Why:** one `docker compose up` gives a working stack, the same image serves every role, and admin power never leaves the machine.
+
+## D98. Delete my data
+
+- **Date:** 2026-11-19
+- **Decision:** a developer can delete everything they pushed to a repo, and what was made only from it:
+  - with `sprintdigest delete-my-data --yes`, through `POST /v1/data-deletions` (developer tokens only, their own repo only);
+  - or the admin does it for them with `sprintdigest-server delete-data --repo --developer --yes`, for someone who has left.
+
+  Both ask for `--yes` first and then report what went. In one transaction:
+  - **Summaries:** every summary they pushed to that repo is deleted, retracted ones too, along with their retraction records and the ticket links on those summaries. Only a summary's own developer can link it (D45), so those are all the links that are theirs.
+  - **Context items:**
+    - an item that came only from their summaries is deleted;
+    - an item shared with others' summaries keeps the rest of its sources.
+
+    D77's rule that context items are "never deleted, only superseded or retired" gives way here, on purpose.
+  - **Distillation runs:** they forget having read their summaries, so a summary pushed again later is read again. Runs hold keys and counts, never text.
+  - **Digests that included their work:**
+    - a sent or already withdrawn one is withdrawn, and its text is replaced with a short note that it was deleted;
+    - an unsent one (a ready report, a preview) is deleted, as retraction does (D60).
+  - **Kept:** their token (deleting data isn't leaving), their data on other repos, ticket titles (team labels), spend records, and anything already delivered by email or Slack, which can't be recalled.
+  - **Local files:** summaries in `.digest/` stay, still marked as pushed, so `push` and `sync` don't upload them again.
+- **Alternatives:**
+  - **Retract everything instead,** which keeps the summaries hidden but stored (D60). It doesn't meet "delete".
+  - **Keep the digests' text,** since a digest is the team's record. But that text was written from their summaries.
+  - **Also revoke the token.** Rejected: an admin re-issues or stops issuing tokens separately.
+- **Fixed on the way:** Postgres transactions sent through a `pg.Pool` could run on different connections. Transactions now check out one connection (`poolSql`).

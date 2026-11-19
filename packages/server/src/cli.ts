@@ -27,6 +27,7 @@ const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
        sprintdigest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
                           [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default] [--data <dir>]
+       sprintdigest-server delete-data --repo <repo> --developer <id> [--yes] [--data <dir>]
        sprintdigest-server digest send-due [--data <dir>]
        sprintdigest-server context distill [--data <dir>]
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
@@ -96,6 +97,7 @@ interface Args {
   email?: string;
   'slack-env'?: string;
   'cap-usd'?: string;
+  yes?: boolean;
 }
 
 const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -188,6 +190,27 @@ async function sprintCommand(store: SharedStore, repoId: string, values: Args, i
   return 0;
 }
 
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** The admin's delete my data (D98), for a developer who can't run it themselves, such as one who has left. */
+async function deleteDataCommand(storage: { databaseUrl?: string; dataDir?: string }, repoId: string, values: Args, io: ServerIo): Promise<number> {
+  const fail = (message: string) => (io.stderr(`sprintdigest-server: ${message}\n`), 1);
+  const developerId = values.developer;
+  if (!developerId) return fail('--developer is required.');
+  if (!values.yes) return fail(`this permanently deletes every summary ${developerId} pushed to ${repoId}, and what was made only from them. Run it again with --yes to go ahead.`);
+  const { store, close } = await openStore(storage);
+  try {
+    const r = await store.deleteDeveloperData({ repoId, developerId, developerName: developerId });
+    io.stdout(
+      `Deleted ${developerId}'s data on ${repoId}: ${count(r.summaries, 'summary', 'summaries')}, ${count(r.ticketLinks, 'ticket link', 'ticket links')}, ` +
+        `${count(r.contextItemsDeleted, 'context item', 'context items')} deleted and ${r.contextItemsEdited} edited, ${count(r.digestsWithdrawn, 'digest', 'digests')} withdrawn and ${r.digestsDeleted} deleted.\n`,
+    );
+    return 0;
+  } finally {
+    await close();
+  }
+}
+
 export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   const fail = (message: string) => (io.stderr(`sprintdigest-server: ${message}\n`), 1);
   const [command, ...rest] = argv;
@@ -214,12 +237,13 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         email: { type: 'string' },
         'slack-env': { type: 'string' },
         'cap-usd': { type: 'string' },
+        yes: { type: 'boolean' },
       },
     }));
   } catch (err) {
     return fail(`${(err as Error).message}\n${USAGE}`);
   }
-  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context'].includes(command ?? '')) return fail(USAGE);
+  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data'].includes(command ?? '')) return fail(USAGE);
   const sub = { digest: 'send-due', context: 'distill' }[command as string];
   if (sub ? positionals.join(' ') !== sub : positionals.length) return fail(USAGE);
   const storage = { databaseUrl: io.env.DATABASE_URL, dataDir: values.data };
@@ -263,10 +287,11 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
     }
   }
 
-  if (command === 'token' || command === 'sprint' || command === 'repo') {
+  if (command === 'token' || command === 'sprint' || command === 'repo' || command === 'delete-data') {
     if (!values.repo) return fail('--repo is required.');
     const repoId = repoIdFrom(values.repo);
     if (!repoId) return fail('--repo must be a repo URL or host/path id, e.g. git@github.com:acme/webapp.git or github.com/acme/webapp.');
+    if (command === 'delete-data') return deleteDataCommand(storage, repoId, values, io);
     if (command === 'sprint') {
       const { store, close } = await openStore(storage);
       try {

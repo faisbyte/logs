@@ -80,6 +80,33 @@ export interface SummaryStore {
   retractions(repoId: string): Promise<Retraction[]>;
 }
 
+/** What deleting a developer's data removed or changed (D98). */
+export interface DataDeletion {
+  summaries: number;
+  ticketLinks: number;
+  /** Items that came only from their summaries. */
+  contextItemsDeleted: number;
+  /** Items shared with others' summaries, which keep the rest of their sources. */
+  contextItemsEdited: number;
+  /** Sent or already withdrawn digests that included their work: withdrawn, with the text replaced. */
+  digestsWithdrawn: number;
+  /** Unsent digests (ready reports, previews) that included their work. */
+  digestsDeleted: number;
+}
+
+/** The text a withdrawn digest keeps once a developer whose work it included deletes their data. */
+export const DELETED_DIGEST_TEXT = '# Deleted\n\nThis digest included work whose developer deleted their data, so its text was deleted too.\n';
+
+export interface DataStore {
+  /**
+   * Delete my data (D98): every summary the developer pushed to the identity's repo (retracted ones too), their
+   * retractions, the ticket links on those summaries, and what was derived only from their work.
+   * Context items from their summaries alone are deleted and shared ones lose those sources; digests that included their
+   * work are withdrawn with the text replaced, or deleted when unsent. Their token and other repos are untouched.
+   */
+  deleteDeveloperData(identity: PushIdentity): Promise<DataDeletion>;
+}
+
 export interface TokenStore {
   /** Issues the token for one person, role and repo, replacing any earlier one. The token is returned once and stored only as a hash. */
   issueToken(identity: PushIdentity, role?: Role): Promise<{ token: string }>;

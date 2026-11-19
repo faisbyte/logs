@@ -110,6 +110,7 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       '/v1/retractions': ['POST'],
       '/v1/context-items': ['GET'],
       '/v1/context-retirements': ['POST'],
+      '/v1/data-deletions': ['POST'],
       '/v1/sprints': ['GET'],
       '/v1/ticket-titles': ['PUT'],
       '/v1/tickets': ['GET'],
@@ -194,6 +195,13 @@ export function createHandler(store: SharedStore, { log = (line: string) => cons
       if (typeof body?.id !== 'string' || !body.id) throw new HttpError(400, 'id is required');
       const result = await store.retireContextItem(await developer(req, repoId), body.id);
       return [result.status === 'not-found' ? 404 : 200, result];
+    }
+    // Delete my data (D98): the caller's own summaries and what came only from them, in the caller's repo.
+    if (url.pathname === '/v1/data-deletions') {
+      const body = (await readJson(req)) as Record<string, unknown> | null;
+      const repoId = body?.repoId;
+      if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
+      return [200, { status: 'deleted', ...(await store.deleteDeveloperData(await developer(req, repoId))) }];
     }
     if (url.pathname === '/v1/retractions') {
       const { repoId, ref } = linkTarget(await readJson(req));

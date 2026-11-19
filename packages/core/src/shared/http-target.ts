@@ -1,7 +1,7 @@
 import type { ContextItem } from '../context/item.js';
 import type { UploadPayload } from './payload.js';
 import type { StoredDigest } from './digests.js';
-import type { ContextItemsOutcome, LinkOutcome, PreviewsOutcome, RetireOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TitleOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
+import type { ContextItemsOutcome, DeletionOutcome, LinkOutcome, PreviewsOutcome, RetireOutcome, PushOutcome, PushTarget, RetractOutcome, SprintsOutcome, TitleOutcome, TicketsOutcome, UnlinkOutcome } from './target.js';
 import type { TicketReport } from './ticket-report.js';
 import type { Sprint, SummaryRef } from './tickets.js';
 
@@ -86,6 +86,13 @@ export function httpPushTarget(baseUrl: string, token: string, fetchImpl: typeof
       const b = body as Body & { retiredAt?: string };
       if ((b.status === 'retired' || b.status === 'already') && b.retiredAt) return { status: b.status, retiredAt: b.retiredAt };
       if (b.status === 'not-found') return { status: 'not-found' };
+      const no = refused(response, body);
+      if (no) return no;
+      throw unexpected(response, body);
+    },
+    async deleteMyData(repoId): Promise<DeletionOutcome> {
+      const [response, body] = await call('/v1/data-deletions', { method: 'POST', body: { repoId } });
+      if (response.status === 200 && body.status === 'deleted') return body as DeletionOutcome;
       const no = refused(response, body);
       if (no) return no;
       throw unexpected(response, body);

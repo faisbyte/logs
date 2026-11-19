@@ -48,4 +48,14 @@ describe('localPushTarget: ticket links and the tickets view behind the token', 
     expect(await reader.contextItems(REPO)).toMatchObject({ status: 'forbidden' });
     expect(await reader.retireContextItem(REPO, 'ctx-0000000a')).toMatchObject({ status: 'forbidden' });
   });
+
+  it("deletes the token's own data and says what went (D98); a reader is refused", async () => {
+    const store = new InMemorySummaryStore();
+    const target = localPushTarget(store, (await store.issueToken(alice)).token);
+    await target.push(REPO, payloadFor());
+    expect(await target.deleteMyData(REPO)).toEqual({ status: 'deleted', summaries: 1, ticketLinks: 0, contextItemsDeleted: 0, contextItemsEdited: 0, digestsWithdrawn: 0, digestsDeleted: 0 });
+    expect(await store.list({ repoId: REPO })).toEqual([]);
+    const reader = localPushTarget(store, (await store.issueToken(alice, 'reader')).token);
+    expect(await reader.deleteMyData(REPO)).toMatchObject({ status: 'forbidden' });
+  });
 });
