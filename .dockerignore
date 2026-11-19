@@ -1,0 +1,21 @@
+# Nothing secret or local reaches the image: keys, local state, databases and session data stay on the host.
+.env
+.env.*
+.digest/
+server-data/
+local-sessions/
+*.raw.jsonl
+
+# Rebuilt inside the image.
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+apps/web/.next/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/e2e/.data/
+coverage/
+
+.git/
+.github/
+.DS_Store

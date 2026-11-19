@@ -1,0 +1,76 @@
+# Self-hosting logs (DECISIONS.md D97): Postgres, the digest server, its scheduled jobs, and the dashboard.
+#   docker compose up -d --build
+#   docker compose exec server sprintdigest-server token --repo <repo> --developer <id> --name <name>
+# Settings come from the environment or a .env file next to this one; see docs/self-hosting.md.
+
+services:
+  db:
+    image: postgres:16.10-alpine
+    environment:
+      POSTGRES_USER: logs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-logs}
+      POSTGRES_DB: logs
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logs -d logs"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  server:
+    build: .
+    image: logs:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &server-env
+      DATABASE_URL: postgres://logs:${POSTGRES_PASSWORD:-logs}@db:5432/logs
+      # Optional: without a key the server serves what it has written but writes no new digests or context.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DIGEST_MODEL: ${DIGEST_MODEL:-}
+      DIGEST_MONTHLY_CAP_USD: ${DIGEST_MONTHLY_CAP_USD:-10}
+      SMTP_URL: ${SMTP_URL:-}
+      DIGEST_EMAIL_FROM: ${DIGEST_EMAIL_FROM:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    ports:
+      # Developers' CLIs push here. Put it behind HTTPS (a reverse proxy) before exposing it beyond this machine.
+      - "${LOGS_API_BIND:-127.0.0.1}:${LOGS_API_PORT:-8787}:8787"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # Sends due digests and distills context once an hour: the cron jobs from the README, in a loop.
+  jobs:
+    image: logs:local
+    depends_on:
+      server:
+        condition: service_healthy
+    environment: *server-env
+    command: ["sh", "-c", "while true; do sprintdigest-server digest send-due; sprintdigest-server context distill; sleep 3600; done"]
+    restart: unless-stopped
+
+  web:
+    image: logs:local
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      DIGEST_API_URL: http://server:8787
+    command: ["node_modules/.bin/next", "start", "--port", "3000"]
+    working_dir: /app/apps/web
+    ports:
+      - "${LOGS_WEB_BIND:-127.0.0.1}:${LOGS_WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/sign-in').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  db:

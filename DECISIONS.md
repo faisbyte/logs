@@ -1430,3 +1430,28 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 
 - **Date:** 2026-11-19
 - **Decision:** the owner reviewed the dashboard (the round 3 screenshots and the running app) and accepted Phase 9 as built (D93 to D95). Phase 10 starts.
+
+## D97. Self-hosting: one image, Docker Compose, and the admin is the server operator
+
+- **Date:** 2026-11-19
+- **Decision:**
+  - **One image** (`Dockerfile`) holds the built server and dashboard. `compose.yaml` runs four services from it, plus Postgres 16:
+    - `server`, the API;
+    - `jobs`, an hourly loop of `digest send-due` and `context distill`, the cron jobs from docs/digests.md;
+    - `web`, the dashboard, pointed at `http://server:8787`;
+    - `db`.
+  - **Nothing secret in the image:** `.dockerignore` keeps `.env`, `.digest/`, local databases and session data out. The image runs as the unprivileged `node` user. Keys come from the environment at run time.
+  - **Ports bind to 127.0.0.1 by default.** Exposure is meant to go through an HTTPS reverse proxy: tokens travel in headers, and the dashboard's cookie is `Secure`.
+  - **Admin:** the admin is whoever can run commands on the server. Admin work happens through `docker compose exec server sprintdigest-server …`, as D43 chose for token issuing. Phase 10's "admin" role is that operator, not a token role. The admin commands added in this phase (data deletion for a departed developer, retention, the audit log) follow the same rule.
+  - **Test:** `packages/server/test/compose.test.ts` (opt-in with `DIGEST_DOCKER_TESTS=1`, and run in CI) builds the stack on its own project name and ports and checks:
+    - the API is up on Postgres;
+    - a token issued with the admin command signs in;
+    - the dashboard serves;
+    - data survives a server restart.
+
+    Then it removes everything, volumes included.
+- **Alternatives:**
+  - **Separate server and web images**, or a slimmer image (`pnpm deploy`, Next's standalone output). The single image is 1.27 GB because it keeps the whole built workspace. That's simple and works; slimming it is a later optimisation.
+  - **A cron container**, or the host's cron, instead of the jobs loop. That's one more image or more host setup, for the same hourly behaviour.
+  - **An `admin` token role with HTTP admin endpoints.** It would allow admin pages in the dashboard, but it adds a network surface that can do the most damage. Reconsider it if self-hosters ask for admin work without shell access.
+- **Why:** one `docker compose up` gives a working stack, the same image serves every role, and admin power never leaves the machine.
