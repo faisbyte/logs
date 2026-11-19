@@ -1425,3 +1425,8 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 
   Readers can't open a preview at all; the server refuses it.
 - **Fixed on the way:** the ticket table's sprint sections had no accessible name when the sprint name has a space, because `aria-labelledby` splits on spaces. Heading ids are now slugs.
+
+## D96. Phase 9 is accepted
+
+- **Date:** 2026-11-19
+- **Decision:** the owner reviewed the dashboard (the round 3 screenshots and the running app) and accepted Phase 9 as built (D93 to D95). Phase 10 starts.
