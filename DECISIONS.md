@@ -1566,3 +1566,11 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 - **Decision:** a non-technical reader read the Sprint 1 digest (`.digest/sprint-1-reader-copy.md`) and understood what had been done. The owner reports it works. This closes the reader test left open in D73.
 - **Still outstanding:** D57's other limit. The digest has been tested only on a single-developer sprint, so coverage across several developers on a team repo, over a normal sprint, is untested with real people.
 - **Not recorded:** who the reader was and their exact answers. Add them to `docs/po-feedback-checklist.md` if they should be kept.
+
+## D105. Phase 0 is closed without interviews
+
+- **Date:** 2026-11-19
+- **Decision:** the owner closed Phase 0 (validation). No interviews were held and `research/interviews.md` doesn't exist, so its "Done when" (written evidence for or against stakeholder demand) is **not met**. It is closed by the owner's decision, not completed.
+- **Evidence so far:** one non-technical reader understood the Sprint 1 digest (D104). That shows the digest is readable. It says nothing about whether anyone would use or pay for it, or how developers feel about approving summaries.
+- **What stays waiting on interview evidence** (Phase 11): the per-developer breakdown in reports, and anything else that depends on knowing what stakeholders need.
+- **Reopening:** if interviews happen later, put the findings in `research/interviews.md` and note it here.
