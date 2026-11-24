@@ -72,15 +72,17 @@ describe('sprintdigest-server repo (DECISIONS.md D54)', () => {
   it('shows the defaults, then changes what is asked and keeps the rest', async () => {
     const data = ['--data', join(mkdtempSync(join(tmpdir(), 'sprintdigest-server-')), 'db')];
     expect((await cli(['repo', ...data, ...repo])).stdout).toBe(
-      'Settings for github.com/acme/webapp:\n  schedule: off\n  developer preview: off\n  email: none\n  slack: none\n  monthly LLM cost cap: the server default\n  summaries kept: for good\n',
+      'Settings for github.com/acme/webapp:\n  schedule: off\n  developer preview: off\n  email: none\n  slack: none\n  monthly LLM cost cap: the server default\n  summaries kept: for good\n  AI cost line in digests: off\n',
     );
     const set = await cli(['repo', ...data, ...repo, '--schedule', 'weekly', '--weekday', 'tue', '--since', '2026-03-01', '--preview-hours', '24', '--email', 'po@example.com,sm@example.com', '--slack-env', 'SLACK_WEBHOOK_URL', '--cap-usd', '2.5', '--retention-days', '90']);
     expect(set).toMatchObject({ exitCode: 0 });
     expect(set.stdout).toBe(
-      'Settings for github.com/acme/webapp:\n  schedule: weekly on Tuesday, for periods ending after 2026-03-01\n  developer preview: 24 hours before sending\n  email: po@example.com, sm@example.com\n  slack: the webhook URL in SLACK_WEBHOOK_URL\n  monthly LLM cost cap: $2.50\n  summaries kept: 90 days after their session ends\n',
+      'Settings for github.com/acme/webapp:\n  schedule: weekly on Tuesday, for periods ending after 2026-03-01\n  developer preview: 24 hours before sending\n  email: po@example.com, sm@example.com\n  slack: the webhook URL in SLACK_WEBHOOK_URL\n  monthly LLM cost cap: $2.50\n  summaries kept: 90 days after their session ends\n  AI cost line in digests: off\n',
     );
     expect((await cli(['repo', ...data, ...repo, '--slack-env', 'none', '--cap-usd', 'default'])).stdout).toContain('  slack: none\n  monthly LLM cost cap: the server default\n');
     expect((await cli(['repo', ...data, ...repo, '--schedule', 'off'])).stdout).toContain('  schedule: off\n');
+    expect((await cli(['repo', ...data, ...repo, '--cost-line', 'on'])).stdout).toContain('  AI cost line in digests: on\n');
+    expect((await cli(['repo', ...data, ...repo, '--cost-line', 'off'])).stdout).toContain('  AI cost line in digests: off\n');
     expect((await cli(['repo', ...data, ...repo, '--retention-days', 'forever'])).stdout).toContain('  summaries kept: for good\n');
   });
 
@@ -94,6 +96,7 @@ describe('sprintdigest-server repo (DECISIONS.md D54)', () => {
       ['--cap-usd', 'lots', '--cap-usd must be a number of dollars, or default'],
       ['--cap-usd=-1', undefined, '--cap-usd must be a number of dollars, or default'],
       ['--preview-hours', '1000', '--preview-hours must be a whole number from 0 to 168'],
+      ['--cost-line', 'maybe', '--cost-line must be on or off'],
       ['--retention-days', '0', '--retention-days must be a whole number of days from 1, or forever'],
       ['--retention-days', 'soon', '--retention-days must be a whole number of days from 1, or forever'],
     ]) {

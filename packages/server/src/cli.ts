@@ -30,7 +30,7 @@ const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server sprint --repo <repo> [--name <name> --from <date> --to <date> | --remove --name <name>] [--data <dir>]
        sprintdigest-server repo --repo <repo> [--schedule off|weekly|sprint-end] [--weekday mon] [--since <date>] [--preview-hours <n>]
                           [--email <a@x,b@y>|none] [--slack-env <ENV_NAME>|none] [--cap-usd <n>|default]
-                          [--retention-days <n>|forever] [--data <dir>]
+                          [--retention-days <n>|forever] [--cost-line on|off] [--data <dir>]
        sprintdigest-server delete-data --repo <repo> --developer <id> [--yes] [--data <dir>]
        sprintdigest-server digest send-due [--data <dir>]
        sprintdigest-server context distill [--data <dir>]
@@ -112,6 +112,7 @@ interface Args extends CostArgs {
   'slack-env'?: string;
   'cap-usd'?: string;
   'retention-days'?: string;
+  'cost-line'?: string;
   yes?: boolean;
 }
 
@@ -131,6 +132,7 @@ function showSettings(s: RepoSettings): string {
     `  slack: ${s.slackWebhookEnv ? `the webhook URL in ${s.slackWebhookEnv}` : 'none'}`,
     `  monthly LLM cost cap: ${s.monthlyCapUsd === null ? 'the server default' : `$${s.monthlyCapUsd.toFixed(2)}`}`,
     `  summaries kept: ${s.retentionDays === null ? 'for good' : `${s.retentionDays} days after their session ends`}`,
+    `  AI cost line in digests: ${s.costLine ? 'on' : 'off'}`,
     '',
   ].join('\n');
 }
@@ -177,6 +179,10 @@ function settingsPatch(values: Args, now: Date): { patch: Partial<Omit<RepoSetti
     const days = values['retention-days'];
     if (days !== 'forever' && (!/^\d+$/.test(days) || Number(days) < 1)) return { error: '--retention-days must be a whole number of days from 1, or forever.' };
     patch.retentionDays = days === 'forever' ? null : Number(days);
+  }
+  if (values['cost-line'] !== undefined) {
+    if (!['on', 'off'].includes(values['cost-line'])) return { error: '--cost-line must be on or off.' };
+    patch.costLine = values['cost-line'] === 'on';
   }
   return { patch };
 }
@@ -329,6 +335,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         'slack-env': { type: 'string' },
         'cap-usd': { type: 'string' },
         'retention-days': { type: 'string' },
+        'cost-line': { type: 'string' },
         yes: { type: 'boolean' },
         org: { type: 'string' },
         billing: { type: 'string' },

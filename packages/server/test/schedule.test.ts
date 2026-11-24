@@ -1,5 +1,6 @@
-import { defaultRepoSettings, FakeLlmClient, InMemorySummaryStore, type DigestOutput, type RepoSettings } from '@digest/core';
+import { defaultRepoSettings, enableCost, FakeLlmClient, InMemorySummaryStore, saveAccount, type DigestOutput, type RepoSettings } from '@digest/core';
 import { describe, expect, it } from 'vitest';
+import { costRecord } from '../../core/test/cost/cost-contract.js';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
 import type { Delivery, DeliveryMessage } from '../src/delivery.js';
 import { duePeriods, needsAttention, sendDue } from '../src/schedule.js';
@@ -185,5 +186,36 @@ describe('sendDue', () => {
   it('flags for cron only the results where something due was not delivered', () => {
     for (const ok of ['sent to slack, email', 'sent a corrected version to slack', 'already sent', 'in developer preview until 2026-03-17T06:00:00.000Z']) expect(needsAttention(ok)).toBe(false);
     for (const bad of ['sent to email; slack failed: x Will retry on the next run.', 'not sent: email: set SMTP_URL', 'not written: cap']) expect(needsAttention(bad)).toBe(true);
+  });
+});
+
+describe('the AI cost line (Phase 12, D107)', () => {
+  const usage = (over: object = {}) => costRecord({ at: '2026-03-05T10:00:00.000Z', repoId: REPO, ...over });
+  async function withCost(over: Partial<RepoSettings> = {}) {
+    const s = await setup(over);
+    await enableCost(s.store, REPO, new Date('2026-03-01T00:00:00.000Z'));
+    await saveAccount(s.store, { repoId: REPO, email: 'alice@acme.example', developerId: 'alice', developerName: 'Alice', organizationId: null, billing: null });
+    await s.store.recordUsage([usage(), usage({ key: 'k2', costMicros: 1_000_000 }), usage({ key: 'o', place: 'outside', repoId: null, costMicros: 9_000_000 }), usage({ key: 'late', at: '2026-03-16T00:00:00.000Z', costMicros: 9_000_000 })]);
+    return s;
+  }
+
+  it('is off by default', async () => {
+    const { deps, email } = await withCost();
+    await sendDue(deps);
+    expect(email.sent[0]!.markdown).not.toMatch(/AI cost/);
+  });
+
+  it('when on, adds the repo total only: no developer, no other repo', async () => {
+    const { deps, email } = await withCost({ costLine: true });
+    await sendDue(deps);
+    const text = email.sent[0]!.markdown;
+    expect(text).toContain('_Estimated AI cost on this repo for this period: $1.25. On subscriptions this is an API-equivalent estimate, not money spent._');
+    expect(text).not.toMatch(/alice/i);
+  });
+
+  it('is left out when tracking is off or nothing was recorded', async () => {
+    const { deps, email } = await setup({ costLine: true });
+    await sendDue(deps);
+    expect(email.sent[0]!.markdown).not.toMatch(/AI cost/);
   });
 });

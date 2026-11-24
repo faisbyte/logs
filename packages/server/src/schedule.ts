@@ -3,6 +3,7 @@ import {
   capRefusal,
   DigestError,
   digestInput,
+  repoCost,
   reportSummaryKeys,
   SERVER_ACTOR,
   storedFields,
@@ -88,6 +89,15 @@ async function deliver(deps: SendDueDeps, digest: StoredDigest, deliveries: Deli
   return `sent ${what}to ${sent.join(', ')}`;
 }
 
+/** The optional last line (D107): the repo's total only, and only when there is one. */
+async function costLine(deps: SendDueDeps, settings: RepoSettings, from: string | null, to: string | null): Promise<string> {
+  if (!settings.costLine || !from || !to) return '';
+  const micros = await repoCost(deps.store, settings.repoId, { from, to });
+  if (!micros) return '';
+  const usd = (micros / 1e6).toFixed(2);
+  return `\n_Estimated AI cost on this repo for this period: $${usd}. On subscriptions this is an API-equivalent estimate, not money spent._\n`;
+}
+
 async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: DuePeriod, now: Date): Promise<string> {
   const repoId = settings.repoId;
   let digest = await deps.store.scheduledDigest(repoId, period.periodKey);
@@ -105,6 +115,7 @@ async function sendPeriod(deps: SendDueDeps, settings: RepoSettings, period: Due
       const written = await writeDigest(deps, repoId, input);
       const previewUntil = settings.previewHours > 0 ? new Date(now.getTime() + settings.previewHours * 3_600_000).toISOString() : null;
       const fields = storedFields(repoId, written, reportSummaryKeys(report));
+      fields.markdown += await costLine(deps, settings, fields.from, fields.to);
       digest = await deps.store.saveDigest({
         ...fields,
         ...(withdrawn ? { markdown: markCorrected(fields.markdown, withdrawn), corrects: withdrawn.id } : {}),

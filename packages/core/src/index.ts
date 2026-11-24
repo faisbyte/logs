@@ -114,7 +114,7 @@ export { BRIEF_HEADER, BRIEF_MAX_WORDS, contextBrief, selectItems, shortSource }
 export { AGENTS_END, AGENTS_MAX_BYTES, AGENTS_START, agentsSection, withAgentsImport, withAgentsSection } from './context/agents-md.js';
 export { describeTelemetry, usageEvents, type UsageEvent } from './cost/telemetry.js';
 export { disableCost, enableCost, costEnabled, ingestUsage, isIngestToken, issueIngestToken, recordCommit, removeAccount, removePattern, revokeIngestToken, saveAccount, savePattern, type AccountResult, type CommitResult, type IngestResult } from './cost/ingest.js';
-export { costAccess, costCsv, costReport, grantCost, revokeCost, savePrice, type CostAccess, type CostReport, type CostReportResult, type CostSession, type ViewPlace } from './cost/report.js';
+export { costAccess, costCsv, costReport, grantCost, repoCost, revokeCost, savePrice, type CostAccess, type CostReport, type CostReportResult, type CostSession, type ViewPlace } from './cost/report.js';
 export { flagSession, replyToFlag, settleFlag, type FlagChange, type FlagResult } from './cost/flags.js';
 export type { CostAccount, CostCommit, CostConfig, CostFlag, CostPrice, CostRecord, CostStore, FlagNote, NewFlag, Place } from './cost/store.js';
 export { COST_NOTICE } from './cost/notice.js';

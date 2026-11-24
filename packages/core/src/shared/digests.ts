@@ -71,6 +71,8 @@ export interface RepoSettings {
   scheduleSince: string | null;
   /** Days a summary is kept after its session ended (D99); null keeps them for good. */
   retentionDays: number | null;
+  /** Whether scheduled digests end with the repo's estimated AI cost (D107). */
+  costLine: boolean;
 }
 
 export type DigestPatch = Partial<Pick<StoredDigest, 'status' | 'sentAt' | 'previewUntil'>> & { deliveries?: Record<string, string> };
@@ -97,7 +99,7 @@ export interface DigestStore {
   scheduledRepos(): Promise<string[]>;
 }
 
-export const defaultRepoSettings = (repoId: string): RepoSettings => ({ repoId, schedule: 'off', weekday: 1, previewHours: 0, emailTo: [], slackWebhookEnv: null, monthlyCapUsd: null, scheduleSince: null, retentionDays: null });
+export const defaultRepoSettings = (repoId: string): RepoSettings => ({ repoId, schedule: 'off', weekday: 1, previewHours: 0, emailTo: [], slackWebhookEnv: null, monthlyCapUsd: null, scheduleSince: null, retentionDays: null, costLine: false });
 
 /** A kept warning as one line for the preview and send-due, or null (D71). Jargon is the only kind so far. */
 export const warningText = (d: Pick<StoredDigest, 'warnings'>) => (d.warnings.length ? `${d.warnings.join('; ')} (still there after one retry, so kept)` : null);

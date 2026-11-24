@@ -87,17 +87,28 @@ const byText = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: tru
 const sessionOf = (x: { agent: string; sessionId: string; developerId: string }) => JSON.stringify([x.agent, x.sessionId, x.developerId]);
 const add = <K>(map: Map<K, number>, key: K, n: number) => map.set(key, (map.get(key) ?? 0) + n);
 
-export async function costReport(store: SharedStore, who: Identity, { from, to }: { from: string; to: string }): Promise<CostReportResult> {
+export async function costReport(store: SharedStore, who: Identity, period: { from: string; to: string }): Promise<CostReportResult> {
   const access = await costAccess(store, who);
   if (access === 'none' || access === 'off') return { status: access };
-  const { repoId } = who;
+  return { status: 'ok', report: await build(store, who.repoId, access, who.developerId, period) };
+}
+
+/** The repo's total for a period, with no developer in it, for the digest line; null when tracking is off. */
+export async function repoCost(store: SharedStore, repoId: string, period: { from: string; to: string }): Promise<number | null> {
+  if (!(await costEnabled(store, repoId))) return null;
+  const { sessions } = await build(store, repoId, 'all', null, period);
+  return sessions.reduce((sum, s) => sum + (s.repoId === repoId ? (s.micros ?? 0) : 0), 0);
+}
+
+/** `viewerId` is the reader or developer looking; null for nobody in particular. */
+async function build(store: SharedStore, repoId: string, access: 'all' | 'own', viewerId: string | null, { from, to }: { from: string; to: string }): Promise<CostReport> {
   const registered = new Set((await store.costConfig('account')).filter((a) => a.repoId === repoId).map((a) => a.developerId));
-  const developerIds = [...registered].filter((id) => access === 'all' || id === who.developerId);
+  const developerIds = [...registered].filter((id) => access === 'all' || id === viewerId);
 
   const shared = new Set([repoId]);
   if (access === 'all') {
     const enabled = new Set((await store.costConfig('repo')).map((r) => r.repoId));
-    for (const g of await store.costConfig('grant')) if (g.readerId === who.developerId && enabled.has(g.repoId)) shared.add(g.repoId);
+    for (const g of await store.costConfig('grant')) if (g.readerId === viewerId && enabled.has(g.repoId)) shared.add(g.repoId);
   }
 
   const priceOf = pricer(await store.costConfig('price'));
@@ -166,30 +177,27 @@ export async function costReport(store: SharedStore, who: Identity, { from, to }
 
   const people = new Map(sessions.map((s) => [s.developerId, s.developerName]));
   return {
-    status: 'ok',
-    report: {
-      repoId,
-      from,
-      to,
-      scope: access,
-      totalMicros: total(() => true),
-      billing: { api: total((s) => s.billing === 'api'), subscription: total((s) => s.billing === 'subscription'), unknown: total((s) => s.billing === null) },
-      places: { shared: total((s) => s.place === 'shared'), company: total((s) => s.place === 'company'), outside: total((s) => s.place === 'outside'), unknown: total((s) => s.place === 'unknown') },
-      unpricedRequests: sessions.reduce((n, s) => n + s.unpricedRequests, 0),
-      developers: [...people]
-        .map(([developerId, developerName]) => ({
-          developerId,
-          developerName,
-          micros: total((s) => s.developerId === developerId),
-          sessions: new Set(sessions.filter((s) => s.developerId === developerId).map(sessionOf)).size,
-        }))
-        .sort((a, b) => byText(a.developerName, b.developerName) || byText(a.developerId, b.developerId)),
-      models: [...models].map(([model, micros]) => ({ model, micros })).sort((a, b) => byText(a.model, b.model)),
-      tickets: [...perTicket]
-        .map(([ticket, micros]) => ({ ticket, title: ticket === null ? null : (titles.get(ticket) ?? null), micros }))
-        .sort((a, b) => (a.ticket === null ? 1 : b.ticket === null ? -1 : byText(a.ticket, b.ticket))),
-      sessions: sessions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : byText(a.developerName, b.developerName) || a.startedAt.localeCompare(b.startedAt) || byText(a.sessionId, b.sessionId))),
-    },
+    repoId,
+    from,
+    to,
+    scope: access,
+    totalMicros: total(() => true),
+    billing: { api: total((s) => s.billing === 'api'), subscription: total((s) => s.billing === 'subscription'), unknown: total((s) => s.billing === null) },
+    places: { shared: total((s) => s.place === 'shared'), company: total((s) => s.place === 'company'), outside: total((s) => s.place === 'outside'), unknown: total((s) => s.place === 'unknown') },
+    unpricedRequests: sessions.reduce((n, s) => n + s.unpricedRequests, 0),
+    developers: [...people]
+      .map(([developerId, developerName]) => ({
+        developerId,
+        developerName,
+        micros: total((s) => s.developerId === developerId),
+        sessions: new Set(sessions.filter((s) => s.developerId === developerId).map(sessionOf)).size,
+      }))
+      .sort((a, b) => byText(a.developerName, b.developerName) || byText(a.developerId, b.developerId)),
+    models: [...models].map(([model, micros]) => ({ model, micros })).sort((a, b) => byText(a.model, b.model)),
+    tickets: [...perTicket]
+      .map(([ticket, micros]) => ({ ticket, title: ticket === null ? null : (titles.get(ticket) ?? null), micros }))
+      .sort((a, b) => (a.ticket === null ? 1 : b.ticket === null ? -1 : byText(a.ticket, b.ticket))),
+    sessions: sessions.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : byText(a.developerName, b.developerName) || a.startedAt.localeCompare(b.startedAt) || byText(a.sessionId, b.sessionId))),
   };
 }
 
