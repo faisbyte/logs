@@ -181,9 +181,10 @@ The four 0.81 rollouts each last under 1 second and contain one user prompt and 
 - **Edits made through the shell aren't in `filesTouched`.** That covers `sed -i`, `cat > file`, heredocs, and `rm`. Only structured edit tools count: Claude `Write`/`Edit`/`MultiEdit`/`NotebookEdit` and Codex `apply_patch`. 2 of the 10 real Claude Code sessions edited files only through `Bash`, so they show 0 files.
 - **Newer Codex shell tool names** (for example `shell_command` or `exec_command`) haven't been seen locally. They parse as generic tool calls with their raw arguments as input.
 
-## Agent telemetry (OpenTelemetry logs), as documented
+## Agent telemetry (OpenTelemetry logs)
 
-Used only for AI cost tracking (DECISIONS.md D107). **From documentation and source, not yet observed on a live session**
+Used only for AI cost tracking (DECISIONS.md D107). **Claude Code: observed** in one live session on a subscription
+(2026-11-24, DECISIONS.md D108). Field names only were looked at. **Codex: from its source, not yet observed**
 (PROJECT_PLAN.md 12.1). Every field read is in `TELEMETRY_FIELDS` (`packages/core/src/cost/telemetry.ts`).
 
 | | Claude Code `api_request` (its monitoring docs, 2026-11-24) | Codex `codex.sse_event`, kind `response.completed` (its source, 2026-11-24) |
@@ -196,5 +197,8 @@ Used only for AI cost tracking (DECISIONS.md D107). **From documentation and sou
 | Billing | none | `auth_mode` |
 | Request id | `request_id` | none |
 | Commit | only with `OTEL_LOG_TOOL_DETAILS`, which also sends full commands, so not used | none |
+
+Claude Code also sent `anthropic.plan`, `anthropic.provider` and `anthropic.custom_base_url`, which its monitoring docs
+weren't found to describe. They aren't read.
 
 Other Codex log events carry tool arguments and output. Other Claude Code events carry content only when it's turned on.

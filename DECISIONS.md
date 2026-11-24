@@ -1629,3 +1629,13 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **Protobuf on the server.** A new dependency; the collector converts it.
   - **A new manager role.** A grant on a reader is smaller, and covers POs and managers alike.
   - **Reading commits from `OTEL_LOG_TOOL_DETAILS`** (D106). It sends full commands.
+
+## D108. The Claude Code trial matched the design
+
+- **Date:** 2026-11-24
+- **What was run:** the owner pointed one Claude Code session on a subscription at `sprintdigest-server cost trial`, with content logging off. The listener prints field names and stores nothing.
+- **Result:** no change needed. Each model request arrived as an `api_request` with the account, an organisation id, the session, the repo, the tokens, an estimated cost and a request id. `user_prompt` and `assistant_response` records also arrived, and were ignored.
+- **Answered:** Claude Code does send a cost on a subscription, and an organisation id, so `cost account --org` works there.
+- **Why the allowlist matters:** records with `prompt` and `response` fields arrive even with logging off. The documentation says they are redacted then; the trial looked at names only, so it neither confirms nor depends on that.
+- **Not tried:** API billing, Codex, the commit hook in a live session, and the dashboard fed by live data. The amounts weren't compared with a bill.
+- **Left for later:** `anthropic.plan` might tell a subscription from API billing without the admin setting `--billing`. Its values weren't seen, so it isn't read.

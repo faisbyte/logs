@@ -276,7 +276,7 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 Managers and POs can see at any time what AI development cost per developer. It is independent of summaries: developers still choose which summaries to share. Developers are told about it and see their own data. It only tracks: no plan advice, no rankings. It doesn't depend on Phase 11 and can come before it. Steps are done in order.
 
 **12.1 Trial (before any design is fixed)**
-- [ ] (The listener is built: `sprintdigest-server cost trial`. It needs a live session.) Capture real Claude Code telemetry on one machine, on API billing and on a subscription if both are available. Record the fields in docs/formats.md, with no real content.
+- [x] (Subscription only, D108: `sprintdigest-server cost trial`. API billing hasn't been tried.) Capture real Claude Code telemetry on one machine, on API billing and on a subscription if both are available. Record the fields in docs/formats.md, with no real content.
 - [ ] The same for Codex: whether cost, tokens, account, session and repo are available, and whether an admin can set it centrally. (Unconfirmed.)
 - [x] Choose how commit hashes arrive. Claude Code's `OTEL_LOG_TOOL_DETAILS` also sends full shell commands, so it stays off. Chosen: a Claude Code hook that reports only session id, repo and commit hash (D107). Codex has none yet.
 
@@ -319,7 +319,7 @@ Managers and POs can see at any time what AI development cost per developer. It 
 **Not in this phase:** plan recommendations, budget alerts, leaderboards, cost-per-output scores, automatic detection of personal use.
 
 **Done when:** a PO can open the dashboard, see each developer's cost by day and session with commit hashes for shared repos, and flag a session outside them; the developer sees the same data and the flag; and tests show that no prompt, command, outside repo name or personal-account usage is stored.
-**Status:** Built, not accepted (D107). Outstanding: the live trial (12.1) and the check with real bills and people (12.7). It was built from the agents' documentation and source before the trial, at the owner's request, so the trial may change it.
+**Status:** Built, not accepted (D107). The Claude Code trial on a subscription matched the design (D108). Outstanding: Codex and API billing (12.1), and the check with real bills and people (12.7).
 
 ---
 
