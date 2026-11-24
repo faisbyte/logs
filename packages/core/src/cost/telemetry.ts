@@ -28,6 +28,13 @@ export interface UsageEvent {
   repoId: string | null;
 }
 
+/** Every telemetry attribute that is ever read. deploy/otel-collector.yaml drops the rest. */
+export const TELEMETRY_FIELDS = [
+  'event.name', 'event.kind', 'event.timestamp', 'event.sequence', 'session.id', 'conversation.id', 'user.email', 'organization.id', 'auth_mode', 'model', 'request_id', 'client_request_id', 'vcs.repository.url.full',
+  'cost_usd', 'cost_usd_micros', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'input_token_count', 'output_token_count', 'cached_token_count', 'cache_write_token_count',
+] as const;
+const ALLOWED = new Set<string>(TELEMETRY_FIELDS);
+
 type Attributes = Map<string, string | number>;
 
 const MAX_COUNT = 1e12;
@@ -43,7 +50,7 @@ function read(into: Attributes, raw: unknown): Attributes {
   for (const a of list(raw)) {
     const [key, value] = [field(a, 'key'), field(a, 'value')];
     const v = field(value, 'stringValue') ?? field(value, 'intValue') ?? field(value, 'doubleValue');
-    if (typeof key === 'string' && (typeof v === 'string' || typeof v === 'number')) into.set(key, v);
+    if (typeof key === 'string' && ALLOWED.has(key) && (typeof v === 'string' || typeof v === 'number')) into.set(key, v);
   }
   return into;
 }

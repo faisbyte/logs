@@ -73,5 +73,23 @@ services:
       retries: 30
     restart: unless-stopped
 
+  # AI cost tracking only (docs/cost-tracking.md): docker compose --profile cost up -d
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.128.0
+    profiles: ["cost"]
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      LOGS_SERVER_URL: http://server:8787
+      LOGS_TELEMETRY_TOKEN: ${LOGS_TELEMETRY_TOKEN:-}
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./deploy/otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      # Agents send telemetry here. Put it behind HTTPS before exposing it beyond this machine.
+      - "${LOGS_OTLP_BIND:-127.0.0.1}:${LOGS_OTLP_PORT:-4318}:4318"
+    restart: unless-stopped
+
 volumes:
   db:

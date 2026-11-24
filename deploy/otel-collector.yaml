@@ -1,0 +1,41 @@
+# The optional OpenTelemetry Collector for AI cost tracking (DECISIONS.md D107, docs/cost-tracking.md). It accepts what
+# agents send, drops everything the logs server wouldn't read, and passes on the rest. It can run on the server (compose
+# profile "cost") or on each developer's machine, where dropped content never leaves the machine at all.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  filter/usage:
+    error_mode: ignore
+    logs:
+      log_record:
+        # Only model requests: Claude Code's api_request and Codex's completed responses.
+        - 'not (log.attributes["event.name"] == "api_request" or log.attributes["event.name"] == "claude_code.api_request" or (log.attributes["event.name"] == "codex.sse_event" and log.attributes["event.kind"] == "response.completed"))'
+  transform/allowlist:
+    error_mode: propagate
+    log_statements:
+      - context: resource
+        statements:
+          - keep_keys(resource.attributes, ["event.name", "event.kind", "event.timestamp", "event.sequence", "session.id", "conversation.id", "user.email", "organization.id", "auth_mode", "model", "request_id", "client_request_id", "vcs.repository.url.full", "cost_usd", "cost_usd_micros", "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens", "input_token_count", "output_token_count", "cached_token_count", "cache_write_token_count"])
+      - context: log
+        statements:
+          - keep_keys(log.attributes, ["event.name", "event.kind", "event.timestamp", "event.sequence", "session.id", "conversation.id", "user.email", "organization.id", "auth_mode", "model", "request_id", "client_request_id", "vcs.repository.url.full", "cost_usd", "cost_usd_micros", "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens", "input_token_count", "output_token_count", "cached_token_count", "cache_write_token_count"])
+          - set(log.body, "") where log.attributes["event.name"] != nil
+
+exporters:
+  otlphttp:
+    endpoint: ${env:LOGS_SERVER_URL}
+    encoding: json
+    compression: none
+    headers:
+      Authorization: Bearer ${env:LOGS_TELEMETRY_TOKEN}
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [filter/usage, transform/allowlist]
+      exporters: [otlphttp]
