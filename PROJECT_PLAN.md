@@ -35,7 +35,7 @@ When several developers use AI coding agents (Claude Code, Codex, etc.) on one s
 
 ### Design principles (non-negotiable)
 1. **Automatic capture, never manual export.** Read the agents' local session files directly. No Excel uploads.
-2. **The developer approves before anything is shared.** Developers see and can edit or redact summaries before they reach the team or a manager. This prevents the tool from feeling like surveillance.
+2. **The developer approves before anything is shared.** Developers see and can edit or redact summaries before they reach the team or a manager. This prevents the tool from feeling like surveillance. One disclosed exception: AI cost data (Phase 12, D106) holds no content and is visible to managers without per-summary approval.
 3. **Secrets are redacted before anything leaves the machine.**
 4. **Share summaries, not raw transcripts.** Raw transcripts stay local by default.
 5. **Distilled over dumped.** Context given to agents must be short and curated, never a growing raw log.
@@ -65,7 +65,7 @@ When several developers use AI coding agents (Claude Code, Codex, etc.) on one s
 
 ### Out of scope for v1
 - Line-level code attribution (leave that to Agent Trace and Entire).
-- Productivity metrics or leaderboards.
+- Productivity metrics or leaderboards. (Phase 12's cost tracking is after v1 and adds neither: no rankings or output scores, D106.)
 - IDE extensions.
 - Agents other than Claude Code and Codex CLI.
 
@@ -272,6 +272,54 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 - [x] PDF export of reports (from Phase 7): with the Phase 9 dashboard. (Print or save as PDF, D93.)
 - [ ] Tracker work left from Phase 6, waiting for a Jira or Linear sandbox (DECISIONS.md D47): real Jira and Linear clients, a `digest-server` command that runs refreshTracker, removing tickets a tracker no longer knows, and tracker sprint dates.
 
+### Phase 12: AI cost tracking (separate workflow, D106)
+Managers and POs can see at any time what AI development cost per developer. It is independent of summaries: developers still choose which summaries to share. Developers are told about it and see their own data. It only tracks: no plan advice, no rankings. It doesn't depend on Phase 11 and can come before it. Steps are done in order.
+
+**12.1 Trial (before any design is fixed)**
+- [ ] Capture real Claude Code telemetry on one machine, on API billing and on a subscription if both are available. Record the fields in docs/formats.md, with no real content.
+- [ ] The same for Codex: whether cost, tokens, account, session and repo are available, and whether an admin can set it centrally. (Unconfirmed.)
+- [ ] Choose how commit hashes arrive. Claude Code's `OTEL_LOG_TOOL_DETAILS` also sends full shell commands, so it stays off. First candidate: a hook that reports only session id, repo and commit hash.
+
+**12.2 Receive**
+- [ ] An OpenTelemetry Collector in Docker Compose, off by default, and an authenticated server endpoint.
+- [ ] An allowlist of stored fields (time, account, session, agent, model, tokens, estimated cost, repo classification, commit hash). Everything else is dropped, in the collector and again on the server, and a test sends prompt text and shell commands and checks that neither is stored.
+- [ ] Company accounts only: usage from any account or organisation that isn't registered is dropped, so a developer's personal subscription is never recorded.
+- [ ] Setup docs: managed settings for Claude Code, and the Codex equivalent from the trial.
+
+**12.3 Store**
+- [ ] Migration and store contract for cost records: duplicates ignored, account mapped to developer, amounts marked as estimates.
+- [ ] Price tables versioned by date for agents that report tokens but not cost.
+- [ ] Retention and delete-my-data (D98, D99) extended to cost records, after deciding what finance must keep.
+
+**12.4 Match sessions to work**
+- [ ] Each session is one of: **shared repo** (registered here, and the viewer has access), **other company repo** (a registered company repo or organisation the viewer lacks access to), **outside company repos**, or **unknown** (no git remote).
+- [ ] Repo names are kept only for company repos. For outside ones only the classification is kept, never the name, path or commit hash.
+- [ ] Commit hashes shown for shared repos, linked to the repo host. "No commit" is a normal state (research, review, debugging), not a warning.
+- [ ] Sessions linked to approved summaries and their tickets where they exist. A session without an approved summary shows its cost only.
+
+**12.5 Access and disclosure**
+- [ ] Cost access: a permission the admin grants per repo to a reader (manager or PO), off by default. It covers the developers on that repo. Update the reader role matrix (D102).
+- [ ] Developers see their own records exactly as a manager sees them, plus any flag on them.
+- [ ] A notice in the CLI, dashboard and docs stating what is collected and who sees it. Collection can't be enabled for a repo until the admin confirms developers were told.
+- [ ] Audit events for viewing per-developer cost, granting access, and flagging.
+
+**12.6 Dashboard: Cost**
+- [ ] Totals for a day, sprint or date range: by repo, developer, model and ticket.
+- [ ] Drill-down: developer, then day, then session, showing time, agent, model, estimated cost, repo classification and commit hashes.
+- [ ] On subscriptions, amounts are labelled "API-equivalent estimate, not money spent".
+- [ ] Filter for work outside the viewer's shared repos.
+- [ ] Flag a session "to discuss", with an optional note. The developer sees it and can reply, and either can mark it resolved. Wording is neutral: a flag is a question, not a finding.
+- [ ] CSV export.
+- [ ] An optional cost line (repo total only) in stakeholder digests, off by default.
+
+**12.7 Check**
+- [ ] Compare a few weeks of estimates with real bills (Claude Console, and OpenAI for Codex) and record the difference.
+- [ ] A test with a real PO and at least two developers, including how developers feel about it.
+
+**Not in this phase:** plan recommendations, budget alerts, leaderboards, cost-per-output scores, automatic detection of personal use.
+
+**Done when:** a PO can open the dashboard, see each developer's cost by day and session with commit hashes for shared repos, and flag a session outside them; the developer sees the same data and the flag; and tests show that no prompt, command, outside repo name or personal-account usage is stored.
+
 ---
 
 ## 6. LLM prompt drafts
@@ -323,7 +371,7 @@ Skip anything temporary or session-specific.
 ## 8. Risks and open questions
 - **Platform risk:** Entire, Anthropic, OpenAI or GitHub may build stakeholder digests. Stay focused on the PO/SM workflow and ticket integrations.
 - **Format drift:** agent log formats change. Keep the parsers isolated and well tested.
-- **Developer trust:** if the tool feels like surveillance, adoption fails. The approval flow is essential.
+- **Developer trust:** if the tool feels like surveillance, adoption fails. The approval flow is essential. Cost tracking (Phase 12) adds to this risk, so it must stay disclosed, and developers must see everything recorded about them.
 - **Summary accuracy:** wrong summaries sent to managers are harmful. Keep the developer preview, and always state uncertainty.
 - **Cost:** LLM cost per session. Use cheaper models for per-session work and caching.
 - **Open question:** server storage or git-branch storage? Decide in Phase 5.

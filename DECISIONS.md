@@ -1574,3 +1574,27 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 - **Evidence so far:** one non-technical reader understood the Sprint 1 digest (D104). That shows the digest is readable. It says nothing about whether anyone would use or pay for it, or how developers feel about approving summaries.
 - **What stays waiting on interview evidence** (Phase 11): the per-developer breakdown in reports, and anything else that depends on knowing what stakeholders need.
 - **Reopening:** if interviews happen later, put the findings in `research/interviews.md` and note it here.
+
+## D106. AI cost tracking: always visible to managers, always disclosed to developers
+
+- **Date:** 2026-11-24
+- **Decision:** the owner added Phase 12, a workflow separate from summaries, that shows managers and POs what AI development cost per developer, by day and session. Nothing is built yet.
+  - **Visible without asking:** cost records don't go through summary approval (an exception to design principle 2). Summaries still do.
+  - **Never hidden:** developers are told, and see their own records as a manager does. A secret version was considered and dropped.
+  - **Tracking only:** no plan advice, no rankings, no scores.
+  - **Source:** OpenTelemetry from the agents, set centrally by the organisation. Session files would depend on each developer syncing.
+  - **Work outside shared repos** is shown as such, and a PO can flag a session to discuss. It can't prove personal use: it could be a new project, a test folder or another team's repo. So "other company repo" and "unknown" are separate labels, and the developer can reply to a flag.
+- **Limits chosen when writing the roadmap** (the owner can change them):
+  - Company accounts only. A personal subscription is never recorded.
+  - Outside repos are stored as a classification only, with no name, path or commit hash. The PO can see and flag that usage without the server holding details of someone's private project.
+  - `OTEL_LOG_TOOL_DETAILS` stays off. It's how Claude Code telemetry carries commit hashes, but it also sends full shell commands, which can hold secrets. Hashes need another route, chosen in the trial.
+- **Known limits:**
+  - Claude Code's cost figures are estimates. On a subscription they're API-equivalent, not money spent.
+  - A day's total can hint that someone worked on something they didn't share. Accepted, because it's disclosed.
+  - Codex's fields are unconfirmed until the trial.
+  - "Access" to a repo means a token on this server. It isn't checked against GitHub membership.
+- **Before real use:** some places require notice of electronic monitoring (New York, Connecticut and Delaware, and GDPR countries generally). Get legal advice; this isn't it.
+- **Alternatives:**
+  - **Hidden from developers.** Rejected: legal risk, the settings are visible on their machines anyway, and it would break the trust the product depends on.
+  - **Cost from session files at sync.** Rejected as the main source: a manager would see only what a developer synced.
+  - **Anthropic's Claude Code Analytics API.** A cross-check for API billing, but it doesn't return subscription usage or Codex.
