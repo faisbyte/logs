@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { ADMIN_ACTOR, AnthropicLlmClient, normalizeRemoteUrl, SERVER_ACTOR, type AuditAction, type DigestDeps, type Effort, type RepoSettings, type SharedStore } from '@digest/core';
 import { deliveriesFor } from './delivery.js';
 import pg from 'pg';
+import { applyCostRetention, COST_COMMANDS, COST_USAGE, costCommand, startTrial, type CostArgs } from './cost-cli.js';
 import { createHandler, type HandlerOptions } from './http.js';
 import { openPGlite } from './pglite.js';
 import { migrate, poolSql, PostgresSummaryStore } from './postgres-store.js';
@@ -35,6 +36,7 @@ const USAGE = `usage: sprintdigest-server serve [--port 8787] [--data <dir>]
        sprintdigest-server context distill [--data <dir>]
        sprintdigest-server retention apply [--data <dir>]
        sprintdigest-server audit --repo <repo> [--since <date>] [--limit <n>] [--data <dir>]
+${COST_USAGE}
 Storage: DATABASE_URL (Postgres), or --data <dir> for a local PGlite database (one process at a time).`;
 
 export async function openStore({ databaseUrl, dataDir }: { databaseUrl?: string; dataDir?: string }): Promise<{ store: SharedStore; close: () => Promise<void> }> {
@@ -90,7 +92,7 @@ function repoIdFrom(value: string): string | null {
   return normalizeRemoteUrl(value) ?? (/^[a-z0-9.-]+\.[a-z]{2,}(\/[\w.-]+)+$/i.test(value) ? value.toLowerCase() : null);
 }
 
-interface Args {
+interface Args extends CostArgs {
   data?: string;
   port?: string;
   repo?: string;
@@ -213,6 +215,8 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 
 /** Retention (D99): each repo with a period loses the summaries that ended longer ago. Run from cron, like send-due. */
 async function retentionCommand(store: SharedStore, now: Date, io: ServerIo): Promise<number> {
+  const cost = await applyCostRetention(store, now);
+  if (cost) io.stdout(cost);
   const repos = await store.retentionRepos();
   if (!repos.length) return (io.stdout('No repo has a retention period.\n'), 0);
   for (const { repoId, retentionDays } of repos) {
@@ -290,6 +294,12 @@ async function auditCommand(store: SharedStore, repoId: string, values: Args, io
   return 0;
 }
 
+/** Resolves when the process is asked to stop. */
+const stopped = () =>
+  new Promise<void>((stop) => {
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => stop());
+  });
+
 export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   const fail = (message: string) => (io.stderr(`sprintdigest-server: ${message}\n`), 1);
   const [command, ...rest] = argv;
@@ -320,16 +330,45 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
         'cap-usd': { type: 'string' },
         'retention-days': { type: 'string' },
         yes: { type: 'boolean' },
+        org: { type: 'string' },
+        billing: { type: 'string' },
+        match: { type: 'string' },
+        label: { type: 'string' },
+        model: { type: 'string' },
+        input: { type: 'string' },
+        output: { type: 'string' },
+        'cache-read': { type: 'string' },
+        'cache-write': { type: 'string' },
+        days: { type: 'string' },
+        'developers-told': { type: 'boolean' },
       },
     }));
   } catch (err) {
     return fail(`${(err as Error).message}\n${USAGE}`);
   }
-  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data', 'retention', 'audit'].includes(command ?? '')) return fail(USAGE);
+  if (!['serve', 'token', 'sprint', 'repo', 'digest', 'context', 'delete-data', 'retention', 'audit', 'cost'].includes(command ?? '')) return fail(USAGE);
   const sub = { digest: 'send-due', context: 'distill', retention: 'apply' }[command as string];
-  if (sub ? positionals.join(' ') !== sub : positionals.length) return fail(USAGE);
+  if (command === 'cost' ? positionals.length !== 1 || !COST_COMMANDS.includes(positionals[0]!) : sub ? positionals.join(' ') !== sub : positionals.length) return fail(USAGE);
+  if (command === 'cost' && positionals[0] === 'trial') {
+    const port = Number(values.port ?? 4318);
+    if (!Number.isInteger(port) || port < 0) return fail('--port must be a port number.');
+    const trial = await startTrial({ port, stdout: io.stdout });
+    io.stdout(`Listening on ${trial.url} for one agent's telemetry. Nothing is stored; Ctrl-C to stop.\n`);
+    await stopped();
+    await trial.close();
+    return 0;
+  }
   const storage = { databaseUrl: io.env.DATABASE_URL, dataDir: values.data };
   if (!storage.databaseUrl && !storage.dataDir) return fail('set DATABASE_URL or pass --data <dir> for a local database.');
+
+  if (command === 'cost') {
+    const { store, close } = await openStore(storage);
+    try {
+      return await costCommand(positionals[0]!, values, values.repo ? repoIdFrom(values.repo) : null, store, io);
+    } finally {
+      await close();
+    }
+  }
 
   if (command === 'retention') {
     const { store, close } = await openStore(storage);
@@ -461,9 +500,7 @@ export async function serverCli(argv: string[], io: ServerIo): Promise<number> {
   const server = await startServer({ store, port, host: io.env.HOST ?? '127.0.0.1', log: (line) => io.stdout(`${line}\n`), digests, rateLimit });
   if (!digests.llm) io.stdout('No ANTHROPIC_API_KEY: serving digests and reports already written, but not writing new ones.\n');
   io.stdout(`sprintdigest-server listening on ${server.url}\n`);
-  await new Promise<void>((stop) => {
-    for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => stop());
-  });
+  await stopped();
   await server.close();
   await close();
   return 0;

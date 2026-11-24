@@ -112,7 +112,7 @@ export { CONTEXT_PROMPT_VERSION, CROSS_TYPE, TRACE, ContextError, contextMessage
 export { allSourcesRetracted, byNewest, checkContextChanges, ContextBlockedError, runSummaries, type ContextRun, type ContextStore, type RetireResult } from './context/store.js';
 export { BRIEF_HEADER, BRIEF_MAX_WORDS, contextBrief, selectItems, shortSource } from './context/brief.js';
 export { AGENTS_END, AGENTS_MAX_BYTES, AGENTS_START, agentsSection, withAgentsImport, withAgentsSection } from './context/agents-md.js';
-export { usageEvents, type UsageEvent } from './cost/telemetry.js';
+export { describeTelemetry, usageEvents, type UsageEvent } from './cost/telemetry.js';
 export { disableCost, enableCost, costEnabled, ingestUsage, isIngestToken, issueIngestToken, recordCommit, removeAccount, removePattern, revokeIngestToken, saveAccount, savePattern, type AccountResult, type CommitResult, type IngestResult } from './cost/ingest.js';
 export { costAccess, costCsv, costReport, grantCost, revokeCost, savePrice, type CostAccess, type CostReport, type CostReportResult, type CostSession, type ViewPlace } from './cost/report.js';
 export { flagSession, replyToFlag, settleFlag, type FlagChange, type FlagResult } from './cost/flags.js';

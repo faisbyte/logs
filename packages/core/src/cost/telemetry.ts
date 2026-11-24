@@ -129,10 +129,14 @@ function common(a: Attributes): Pick<UsageEvent, 'account' | 'organizationId' | 
   return account && model ? { account: account.toLowerCase(), organizationId: matching(a, 'organization.id', ID), model } : null;
 }
 
+function nameOf(a: Attributes, record: unknown): string {
+  const body = field(field(record, 'body'), 'stringValue');
+  return String(a.get('event.name') ?? field(record, 'eventName') ?? body ?? '').replace(/^claude_code\./, '');
+}
+
 function usageEvent(resource: unknown, record: unknown): UsageEvent | null {
   const a = read(read(new Map(), resource), field(record, 'attributes'));
-  const body = field(field(record, 'body'), 'stringValue');
-  const name = String(a.get('event.name') ?? field(record, 'eventName') ?? body ?? '').replace(/^claude_code\./, '');
+  const name = nameOf(a, record);
   const at = timeOf(a, record);
   if (!at) return null;
   if (name === 'api_request') return claudeCode(a, at);
@@ -155,4 +159,19 @@ export function usageEvents(body: unknown): { events: UsageEvent[]; ignored: num
     }
   }
   return { events, ignored };
+}
+
+/** For checking a setup: each record's event and field names, and the usage read from it. Never another field's value. */
+export function describeTelemetry(body: unknown): { name: string; fields: string[]; event: UsageEvent | null }[] | null {
+  const resources = field(body, 'resourceLogs');
+  if (!Array.isArray(resources)) return null;
+  return resources.flatMap((r) =>
+    list(field(r, 'scopeLogs'))
+      .flatMap((s) => list(field(s, 'logRecords')))
+      .map((record) => {
+        const name = nameOf(read(new Map(), field(record, 'attributes')), record);
+        const fields = list(field(record, 'attributes')).map((x) => field(x, 'key')).filter((k): k is string => typeof k === 'string');
+        return { name: /^[\w.]{1,60}$/.test(name) ? name : 'an event without a plain name', fields: fields.sort(), event: usageEvent(field(field(r, 'resource'), 'attributes'), record) };
+      }),
+  );
 }
