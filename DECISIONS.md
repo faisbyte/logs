@@ -1639,3 +1639,9 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
 - **Why the allowlist matters:** records with `prompt` and `response` fields arrive even with logging off. The documentation says they are redacted then; the trial looked at names only, so it neither confirms nor depends on that.
 - **Not tried:** API billing, Codex, the commit hook in a live session, and the dashboard fed by live data. The amounts weren't compared with a bill.
 - **Left for later:** `anthropic.plan` might tell a subscription from API billing without the admin setting `--billing`. Its values weren't seen, so it isn't read.
+
+## D109. Phase 12 is accepted as a prototype
+
+- **Date:** 2026-11-24
+- **Decision:** the owner marked Phase 12 done as a prototype, after the trial (D108), and merged it.
+- **Not covered by this:** the unticked boxes in 12.1 and 12.7 stay open: Codex, API billing, real bills, and a PO with at least two developers. They should be done before a real team relies on it.

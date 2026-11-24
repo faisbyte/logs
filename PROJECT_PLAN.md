@@ -319,7 +319,7 @@ Managers and POs can see at any time what AI development cost per developer. It 
 **Not in this phase:** plan recommendations, budget alerts, leaderboards, cost-per-output scores, automatic detection of personal use.
 
 **Done when:** a PO can open the dashboard, see each developer's cost by day and session with commit hashes for shared repos, and flag a session outside them; the developer sees the same data and the flag; and tests show that no prompt, command, outside repo name or personal-account usage is stored.
-**Status:** Built, not accepted (D107). The Claude Code trial on a subscription matched the design (D108). Outstanding: Codex and API billing (12.1), and the check with real bills and people (12.7).
+**Status:** Accepted as a prototype (D109), built as in D107. The Claude Code trial on a subscription matched the design (D108). Outstanding: Codex and API billing (12.1), and the check with real bills and people (12.7).
 
 ---
 
