@@ -21,6 +21,12 @@ import {
   UploadPayloadSchema,
   DELETED_DIGEST_TEXT,
   type AuditEvent,
+  type CostCommit,
+  type CostConfig,
+  type CostFlag,
+  type CostRecord,
+  type FlagNote,
+  type NewFlag,
   type DataDeletion,
   type Purge,
   type ContextChanges,
@@ -326,6 +332,53 @@ const MIGRATIONS: string[][] = [
     )`,
     'create index audit_events_repo_at on audit_events (repo_id, at)',
   ],
+  [
+    // AI cost tracking (DECISIONS.md D107). cost_usage holds no prompt, command or path, and a repo only when it is a
+    // company one; cost_config is the admin's settings.
+    `create table cost_usage (
+      key text primary key,
+      at timestamptz not null,
+      developer_id text not null,
+      developer_name text not null,
+      agent text not null,
+      session_id text not null,
+      model text not null,
+      input_tokens bigint not null,
+      output_tokens bigint not null,
+      cache_read_tokens bigint not null,
+      cache_write_tokens bigint not null,
+      cost_micros bigint,
+      billing text,
+      place text not null check (place in ('company', 'outside', 'unknown')),
+      repo_id text,
+      check ((place = 'company') = (repo_id is not null))
+    )`,
+    'create index cost_usage_developer_at on cost_usage (developer_id, at)',
+    `create table cost_commits (
+      repo_id text not null,
+      sha text not null,
+      agent text not null,
+      session_id text not null,
+      developer_id text not null,
+      at timestamptz not null,
+      primary key (repo_id, sha)
+    )`,
+    `create table cost_flags (
+      id uuid primary key,
+      repo_id text not null,
+      agent text not null,
+      session_id text not null,
+      developer_id text not null,
+      flagged_by text not null,
+      flagged_by_name text not null,
+      flagged_at timestamptz not null,
+      notes jsonb not null default '[]',
+      resolved_at timestamptz,
+      resolved_by text
+    )`,
+    'create unique index cost_flags_one_open on cost_flags (repo_id, agent, session_id, developer_id) where resolved_at is null',
+    'create table cost_config (kind text not null, key text not null, value jsonb not null, primary key (kind, key))',
+  ],
 ];
 
 /**
@@ -460,6 +513,48 @@ const toDigest = (r: DigestRow): StoredDigest => ({
   jargonRetried: r.jargon_retried,
 });
 
+interface UsageRow {
+  key: string; at: Date | string; developer_id: string; developer_name: string; agent: CostRecord['agent']; session_id: string; model: string;
+  input_tokens: string | number; output_tokens: string | number; cache_read_tokens: string | number; cache_write_tokens: string | number;
+  cost_micros: string | number | null; billing: CostRecord['billing']; place: CostRecord['place']; repo_id: string | null;
+}
+// bigint comes back as text from node-postgres.
+const toUsage = (r: UsageRow): CostRecord => ({
+  key: r.key,
+  at: iso(r.at),
+  developerId: r.developer_id,
+  developerName: r.developer_name,
+  agent: r.agent,
+  sessionId: r.session_id,
+  model: r.model,
+  inputTokens: Number(r.input_tokens),
+  outputTokens: Number(r.output_tokens),
+  cacheReadTokens: Number(r.cache_read_tokens),
+  cacheWriteTokens: Number(r.cache_write_tokens),
+  costMicros: r.cost_micros === null ? null : Number(r.cost_micros),
+  billing: r.billing,
+  place: r.place,
+  repoId: r.repo_id,
+});
+
+interface FlagRow {
+  id: string; repo_id: string; agent: CostFlag['agent']; session_id: string; developer_id: string; flagged_by: string; flagged_by_name: string;
+  flagged_at: Date | string; notes: FlagNote[] | string; resolved_at: Date | string | null; resolved_by: string | null;
+}
+const toFlag = (r: FlagRow): CostFlag => ({
+  repoId: r.repo_id,
+  agent: r.agent,
+  sessionId: r.session_id,
+  developerId: r.developer_id,
+  flaggedBy: r.flagged_by,
+  flaggedByName: r.flagged_by_name,
+  flaggedAt: iso(r.flagged_at),
+  id: r.id,
+  notes: json(r.notes),
+  resolvedAt: isoOrNull(r.resolved_at),
+  resolvedBy: r.resolved_by,
+});
+
 export class PostgresSummaryStore implements SharedStore, DigestStore {
   readonly #sql: Sql;
   readonly #now: () => Date;
@@ -571,6 +666,96 @@ export class PostgresSummaryStore implements SharedStore, DigestStore {
       [repoId, since ?? null, limit ?? null],
     );
     return rows.map((r) => ({ repoId, at: iso(r.at), actorId: r.actor_id, actorName: r.actor_name, actorRole: r.actor_role, action: r.action, target: r.target, detail: r.detail }));
+  }
+
+  async recordUsage(records: CostRecord[]): Promise<number> {
+    if (!records.length) return 0;
+    const rows = records.map((r) => ({
+      key: r.key, at: r.at, developer_id: r.developerId, developer_name: r.developerName, agent: r.agent, session_id: r.sessionId, model: r.model,
+      input_tokens: r.inputTokens, output_tokens: r.outputTokens, cache_read_tokens: r.cacheReadTokens, cache_write_tokens: r.cacheWriteTokens,
+      cost_micros: r.costMicros, billing: r.billing, place: r.place, repo_id: r.repoId,
+    }));
+    const inserted = await this.#sql.query('insert into cost_usage select * from jsonb_populate_recordset(null::cost_usage, $1::jsonb) on conflict do nothing returning 1', [JSON.stringify(rows)]);
+    return inserted.rows.length;
+  }
+
+  async usage({ developerIds, from, to }: { developerIds: string[]; from: string; to: string }): Promise<CostRecord[]> {
+    const { rows } = await this.#sql.query<UsageRow>('select * from cost_usage where developer_id = any($1::text[]) and at >= $2 and at < $3 order by at, key', [developerIds, from, to]);
+    return rows.map(toUsage);
+  }
+
+  async purgeUsageBefore(before: string): Promise<number> {
+    return inTransaction(this.#sql, async (tx) => {
+      await tx.query('delete from cost_commits where at < $1', [before]);
+      await tx.query('delete from cost_flags where flagged_at < $1', [before]);
+      return (await tx.query('delete from cost_usage where at < $1 returning 1', [before])).rows.length;
+    });
+  }
+
+  async deleteCostData(developerId: string): Promise<{ records: number; commits: number; flags: number }> {
+    return inTransaction(this.#sql, async (tx) => {
+      const drop = async (table: string) => (await tx.query(`delete from ${table} where developer_id = $1 returning 1`, [developerId])).rows.length;
+      return { records: await drop('cost_usage'), commits: await drop('cost_commits'), flags: await drop('cost_flags') };
+    });
+  }
+
+  async saveCommit(c: CostCommit): Promise<boolean> {
+    const { rows } = await this.#sql.query(
+      'insert into cost_commits (repo_id, sha, agent, session_id, developer_id, at) values ($1, $2, $3, $4, $5, $6) on conflict do nothing returning 1',
+      [c.repoId, c.sha, c.agent, c.sessionId, c.developerId, c.at],
+    );
+    return rows.length > 0;
+  }
+
+  async commits({ developerIds }: { developerIds: string[] }): Promise<CostCommit[]> {
+    const { rows } = await this.#sql.query<{ repo_id: string; sha: string; agent: CostCommit['agent']; session_id: string; developer_id: string; at: Date | string }>(
+      'select * from cost_commits where developer_id = any($1::text[]) order by at, repo_id, sha',
+      [developerIds],
+    );
+    return rows.map((r) => ({ repoId: r.repo_id, agent: r.agent, sessionId: r.session_id, developerId: r.developer_id, sha: r.sha, at: iso(r.at) }));
+  }
+
+  async saveFlag(f: NewFlag, note: FlagNote | null): Promise<CostFlag> {
+    const { rows } = await this.#sql.query<FlagRow>(
+      `insert into cost_flags (id, repo_id, agent, session_id, developer_id, flagged_by, flagged_by_name, flagged_at, notes)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb) on conflict do nothing returning *`,
+      [randomUUID(), f.repoId, f.agent, f.sessionId, f.developerId, f.flaggedBy, f.flaggedByName, f.flaggedAt, JSON.stringify(note ? [note] : [])],
+    );
+    if (rows[0]) return toFlag(rows[0]);
+    const open = await this.#sql.query<FlagRow>(
+      'select * from cost_flags where repo_id = $1 and agent = $2 and session_id = $3 and developer_id = $4 and resolved_at is null',
+      [f.repoId, f.agent, f.sessionId, f.developerId],
+    );
+    if (!open.rows[0]) return this.saveFlag(f, note);
+    return toFlag(open.rows[0]);
+  }
+
+  async addFlagNote(repoId: string, id: string, note: FlagNote): Promise<boolean> {
+    const { rows } = await this.#sql.query('update cost_flags set notes = notes || $3::jsonb where repo_id = $1 and id::text = $2 returning 1', [repoId, id, JSON.stringify([note])]);
+    return rows.length > 0;
+  }
+
+  async resolveFlag(repoId: string, id: string, by: string, at: string): Promise<boolean> {
+    const { rows } = await this.#sql.query('update cost_flags set resolved_at = $4, resolved_by = $3 where repo_id = $1 and id::text = $2 and resolved_at is null returning 1', [repoId, id, by, at]);
+    return rows.length > 0;
+  }
+
+  async flags(repoId: string): Promise<CostFlag[]> {
+    const { rows } = await this.#sql.query<FlagRow>('select * from cost_flags where repo_id = $1 order by flagged_at, id', [repoId]);
+    return rows.map(toFlag);
+  }
+
+  async costConfig<K extends keyof CostConfig>(kind: K): Promise<CostConfig[K][]> {
+    const { rows } = await this.#sql.query<{ value: CostConfig[K] | string }>('select value from cost_config where kind = $1 order by key collate "C"', [kind]);
+    return rows.map((r) => json<CostConfig[K]>(r.value));
+  }
+
+  async putCostConfig<K extends keyof CostConfig>(kind: K, key: string, value: CostConfig[K]): Promise<void> {
+    await this.#sql.query('insert into cost_config (kind, key, value) values ($1, $2, $3::jsonb) on conflict (kind, key) do update set value = excluded.value', [kind, key, JSON.stringify(value)]);
+  }
+
+  async removeCostConfig(kind: keyof CostConfig, key: string): Promise<boolean> {
+    return (await this.#sql.query('delete from cost_config where kind = $1 and key = $2 returning 1', [kind, key])).rows.length > 0;
   }
 
   async retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]> {

@@ -19,6 +19,7 @@ import {
 } from './tickets.js';
 
 import { randomUUID } from 'node:crypto';
+import type { CostCommit, CostConfig, CostFlag, CostRecord, FlagNote, NewFlag } from '../cost/store.js';
 import type { AuditEvent } from './audit.js';
 import type { ContextChanges } from '../context/extract.js';
 import type { ContextItem, ContextItemStatus } from '../context/item.js';
@@ -44,6 +45,10 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
   /** session hash → the token hash it came from, and when it expires */
   readonly #sessions = new Map<string, { tokenHash: string; expiresAt: string }>();
   readonly #audit: AuditEvent[] = [];
+  readonly #usage = new Map<string, CostRecord>();
+  readonly #commits: CostCommit[] = [];
+  readonly #flags: CostFlag[] = [];
+  readonly #costConfig = new Map<keyof CostConfig, Map<string, unknown>>();
   readonly #now: () => Date;
 
   constructor({ now = () => new Date() }: { now?: () => Date } = {}) {
@@ -107,6 +112,83 @@ export class InMemorySummaryStore implements SharedStore, DigestStore {
     const events = this.#audit.map((e, seq) => ({ e, seq })).filter(({ e }) => e.repoId === repoId && (!since || Date.parse(e.at) >= Date.parse(since)));
     events.sort((a, b) => Date.parse(b.e.at) - Date.parse(a.e.at) || b.seq - a.seq);
     return structuredClone(events.slice(0, limit ?? events.length).map(({ e }) => e));
+  }
+
+  async recordUsage(records: CostRecord[]): Promise<number> {
+    const before = this.#usage.size;
+    for (const r of records) if (!this.#usage.has(r.key)) this.#usage.set(r.key, structuredClone(r));
+    return this.#usage.size - before;
+  }
+
+  async usage({ developerIds, from, to }: { developerIds: string[]; from: string; to: string }): Promise<CostRecord[]> {
+    const found = [...this.#usage.values()].filter((r) => developerIds.includes(r.developerId) && r.at >= from && r.at < to);
+    return structuredClone(found.sort((a, b) => a.at.localeCompare(b.at) || a.key.localeCompare(b.key)));
+  }
+
+  async purgeUsageBefore(before: string): Promise<number> {
+    removeWhere(this.#commits, (c) => c.at < before);
+    removeWhere(this.#flags, (f) => f.flaggedAt < before);
+    return this.#dropUsage((r) => r.at < before);
+  }
+
+  async deleteCostData(developerId: string): Promise<{ records: number; commits: number; flags: number }> {
+    const mine = (x: { developerId: string }) => x.developerId === developerId;
+    return { records: this.#dropUsage(mine), commits: removeWhere(this.#commits, mine), flags: removeWhere(this.#flags, mine) };
+  }
+
+  #dropUsage(match: (r: CostRecord) => boolean): number {
+    const gone = [...this.#usage.values()].filter(match);
+    for (const r of gone) this.#usage.delete(r.key);
+    return gone.length;
+  }
+
+  async saveCommit(commit: CostCommit): Promise<boolean> {
+    if (this.#commits.some((c) => c.repoId === commit.repoId && c.sha === commit.sha)) return false;
+    this.#commits.push({ ...commit });
+    return true;
+  }
+
+  async commits({ developerIds }: { developerIds: string[] }): Promise<CostCommit[]> {
+    const found = this.#commits.filter((c) => developerIds.includes(c.developerId));
+    return structuredClone(found.sort((a, b) => a.at.localeCompare(b.at) || a.repoId.localeCompare(b.repoId) || a.sha.localeCompare(b.sha)));
+  }
+
+  async saveFlag(flag: NewFlag, note: FlagNote | null): Promise<CostFlag> {
+    const open = this.#flags.find((f) => !f.resolvedAt && f.repoId === flag.repoId && f.agent === flag.agent && f.sessionId === flag.sessionId && f.developerId === flag.developerId);
+    if (open) return structuredClone(open);
+    const made: CostFlag = { ...flag, id: randomUUID(), notes: note ? [{ ...note }] : [], resolvedAt: null, resolvedBy: null };
+    this.#flags.push(made);
+    return structuredClone(made);
+  }
+
+  async addFlagNote(repoId: string, id: string, note: FlagNote): Promise<boolean> {
+    const flag = this.#flags.find((f) => f.repoId === repoId && f.id === id);
+    flag?.notes.push({ ...note });
+    return Boolean(flag);
+  }
+
+  async resolveFlag(repoId: string, id: string, by: string, at: string): Promise<boolean> {
+    const flag = this.#flags.find((f) => f.repoId === repoId && f.id === id && !f.resolvedAt);
+    if (flag) Object.assign(flag, { resolvedAt: at, resolvedBy: by });
+    return Boolean(flag);
+  }
+
+  async flags(repoId: string): Promise<CostFlag[]> {
+    return structuredClone(this.#flags.filter((f) => f.repoId === repoId).sort((a, b) => a.flaggedAt.localeCompare(b.flaggedAt)));
+  }
+
+  async costConfig<K extends keyof CostConfig>(kind: K): Promise<CostConfig[K][]> {
+    const entries = [...(this.#costConfig.get(kind) ?? [])] as [string, CostConfig[K]][];
+    return structuredClone(entries.sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v));
+  }
+
+  async putCostConfig<K extends keyof CostConfig>(kind: K, key: string, value: CostConfig[K]): Promise<void> {
+    if (!this.#costConfig.has(kind)) this.#costConfig.set(kind, new Map());
+    this.#costConfig.get(kind)!.set(key, structuredClone(value));
+  }
+
+  async removeCostConfig(kind: keyof CostConfig, key: string): Promise<boolean> {
+    return this.#costConfig.get(kind)?.delete(key) ?? false;
   }
 
   async retentionRepos(): Promise<{ repoId: string; retentionDays: number }[]> {

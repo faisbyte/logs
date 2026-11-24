@@ -9,6 +9,7 @@ import { ticketStoreContract } from '../../core/test/shared/ticket-contract.js';
 import { contextStoreContract } from '../../core/test/shared/context-contract.js';
 import { sessionContract } from '../../core/test/shared/session-contract.js';
 import { auditContract } from '../../core/test/shared/audit-contract.js';
+import { costContract } from '../../core/test/cost/cost-contract.js';
 import { dataDeletionContract, retentionContract } from '../../core/test/shared/data-contract.js';
 import { migrate, poolSql, PostgresSummaryStore } from '../src/postgres-store.js';
 
@@ -26,7 +27,7 @@ describe.skipIf(!url)('real Postgres', () => {
   });
   afterAll(() => pool?.end());
   const fresh = async () => {
-    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items, context_runs, sessions, audit_events');
+    await pool.query('truncate summaries, tokens, ticket_links, sprints, tracker_tickets, digests, llm_spend, repo_settings, retractions, ticket_titles, context_items, context_runs, sessions, audit_events, cost_usage, cost_commits, cost_flags, cost_config');
     return new PostgresSummaryStore(poolSql(pool));
   };
   summaryStoreContract('PostgresSummaryStore (node-postgres)', fresh);
@@ -36,5 +37,6 @@ describe.skipIf(!url)('real Postgres', () => {
   dataDeletionContract('PostgresSummaryStore (node-postgres)', fresh);
   retentionContract('PostgresSummaryStore (node-postgres)', fresh);
   auditContract('PostgresSummaryStore (node-postgres)', fresh);
+  costContract('PostgresSummaryStore (node-postgres)', fresh);
   sessionContract('PostgresSummaryStore (node-postgres)', async (now) => (await fresh(), new PostgresSummaryStore(poolSql(pool), { now })));
 });
