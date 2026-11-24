@@ -6,6 +6,9 @@ import { contextStoreContract } from './context-contract.js';
 import { sessionContract } from './session-contract.js';
 import { auditContract } from './audit-contract.js';
 import { costContract } from '../cost/cost-contract.js';
+import { costIngestContract } from '../cost/ingest-contract.js';
+import { costReportContract } from '../cost/report-contract.js';
+import { costFlagsContract } from '../cost/flags-contract.js';
 import { dataDeletionContract, retentionContract } from './data-contract.js';
 
 summaryStoreContract('InMemorySummaryStore', () => new InMemorySummaryStore());
@@ -17,3 +20,6 @@ dataDeletionContract('InMemorySummaryStore', () => new InMemorySummaryStore());
 retentionContract('InMemorySummaryStore', () => new InMemorySummaryStore());
 auditContract('InMemorySummaryStore', () => new InMemorySummaryStore());
 costContract('InMemorySummaryStore', () => new InMemorySummaryStore());
+costIngestContract('InMemorySummaryStore', () => new InMemorySummaryStore());
+costReportContract('InMemorySummaryStore', () => new InMemorySummaryStore());
+costFlagsContract('InMemorySummaryStore', () => new InMemorySummaryStore());

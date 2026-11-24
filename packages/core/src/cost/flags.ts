@@ -26,7 +26,7 @@ export async function flagSession(store: SharedStore, who: Identity, input: { ag
   if ((await costAccess(store, who)) !== 'all') return { status: 'forbidden', reason: 'only someone with cost access to this repo can flag a session' };
   const { agent, sessionId, developerId } = input;
   const registered = (await store.costConfig('account')).some((a) => a.repoId === who.repoId && a.developerId === developerId);
-  const found = registered && (await store.usage({ developerIds: [developerId as string], from: '0000-01-01T00:00:00.000Z', to: '9999-01-01T00:00:00.000Z' })).find((r) => r.agent === agent && r.sessionId === sessionId);
+  const found = registered && (await store.usage({ developerIds: [developerId as string], from: '1970-01-01T00:00:00.000Z', to: '9999-01-01T00:00:00.000Z' })).find((r) => r.agent === agent && r.sessionId === sessionId);
   if (!found) return { status: 'not-found', reason: 'no such session on this repo' };
   const made = input.note === undefined || input.note === null || input.note === '' ? null : noteFrom(who, input.note, now);
   if (made && 'status' in made) return made;

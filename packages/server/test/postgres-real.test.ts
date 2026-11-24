@@ -10,6 +10,9 @@ import { contextStoreContract } from '../../core/test/shared/context-contract.js
 import { sessionContract } from '../../core/test/shared/session-contract.js';
 import { auditContract } from '../../core/test/shared/audit-contract.js';
 import { costContract } from '../../core/test/cost/cost-contract.js';
+import { costIngestContract } from '../../core/test/cost/ingest-contract.js';
+import { costReportContract } from '../../core/test/cost/report-contract.js';
+import { costFlagsContract } from '../../core/test/cost/flags-contract.js';
 import { dataDeletionContract, retentionContract } from '../../core/test/shared/data-contract.js';
 import { migrate, poolSql, PostgresSummaryStore } from '../src/postgres-store.js';
 
@@ -38,5 +41,8 @@ describe.skipIf(!url)('real Postgres', () => {
   retentionContract('PostgresSummaryStore (node-postgres)', fresh);
   auditContract('PostgresSummaryStore (node-postgres)', fresh);
   costContract('PostgresSummaryStore (node-postgres)', fresh);
+  costIngestContract('PostgresSummaryStore (node-postgres)', fresh);
+  costReportContract('PostgresSummaryStore (node-postgres)', fresh);
+  costFlagsContract('PostgresSummaryStore (node-postgres)', fresh);
   sessionContract('PostgresSummaryStore (node-postgres)', async (now) => (await fresh(), new PostgresSummaryStore(poolSql(pool), { now })));
 });

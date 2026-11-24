@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { ContextItem, RetireResult, StoredSummary as SessionRecord, TicketReport } from '@digest/core';
+import type { ContextItem, CostAccess, CostReport, RetireResult, StoredSummary as SessionRecord, TicketReport } from '@digest/core';
 import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { cache } from 'react';
@@ -15,7 +15,7 @@ export const SESSION_COOKIE = 'logs_session';
 const BASE = (process.env.DIGEST_API_URL ?? 'http://127.0.0.1:8787').replace(/\/+$/, '');
 
 export type Role = 'developer' | 'reader';
-export type Viewer = { repoId: string; developerId: string; developerName: string; role: Role };
+export type Viewer = { repoId: string; developerId: string; developerName: string; role: Role; costAccess: CostAccess };
 export type Sprint = { name: string; from: string; to: string };
 export type StoredDigest = DigestRow & { markdown: string; from: string | null; to: string | null; periodKey: string; previewUntil: string | null; warnings?: string[]; jargonRetried?: boolean };
 export type Period = { sprint: string } | { from: string; to: string };
@@ -76,11 +76,15 @@ export const api = {
   ticketSummaries: async (repoId: string, ticket: string) => (await call<{ summaries: SessionRecord[] }>(`/v1/summaries?${query({ repoId, ticket })}`)).summaries,
   contextItems: async (repoId: string) => (await call<{ items: ContextItem[] }>(`/v1/context-items?${query({ repoId })}`)).items,
   retireContextItem: (repoId: string, id: string) => call<RetireResult>('/v1/context-retirements', { method: 'POST', body: { repoId, id } }),
-  startSession: (token: string) => call<{ session: string; expiresAt: string; identity: Viewer }>('/v1/sessions', { method: 'POST', body: { token }, session: null }),
+  startSession: (token: string) => call<{ session: string; expiresAt: string; identity: Omit<Viewer, 'costAccess'> }>('/v1/sessions', { method: 'POST', body: { token }, session: null }),
   endSession: (session: string) => call<{ ended: boolean }>('/v1/sessions', { method: 'DELETE', session }),
   digests: async (repoId: string) => (await call<{ digests: DigestRow[] }>(`/v1/digests?${query({ repoId })}`)).digests,
   digest: async (repoId: string, id: string) => (await call<{ digest: StoredDigest }>(`/v1/digests/${encodeURIComponent(id)}?${query({ repoId })}`)).digest,
   sprints: async (repoId: string) => (await call<{ sprints: Sprint[] }>(`/v1/sprints?${query({ repoId })}`)).sprints,
+  cost: (repoId: string, period: Period) => call<CostReport>(`/v1/cost?${query({ repoId, ...period })}`),
+  flagSession: (repoId: string, target: { agent: string; sessionId: string; developerId: string; note: string }) => call('/v1/cost/flags', { method: 'POST', body: { repoId, ...target } }),
+  replyToFlag: (repoId: string, id: string, text: string) => call('/v1/cost/flag-replies', { method: 'POST', body: { repoId, id, text } }),
+  settleFlag: (repoId: string, id: string) => call('/v1/cost/flag-resolutions', { method: 'POST', body: { repoId, id } }),
   estimate: (repoId: string, period: Period) => call<Estimate>(`/v1/reports/estimate?${query({ repoId, ...period })}`),
   writeReport: (repoId: string, period: Period) => call<{ status: 'ok'; digest: StoredDigest; cached: boolean }>('/v1/reports', { method: 'POST', body: { repoId, ...period } }),
 };

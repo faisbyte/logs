@@ -222,7 +222,7 @@ test.describe('theme default by role', () => {
 test.describe('developer views', () => {
   test('a developer gets the overview, Tickets and Context in the nav, and starts on the overview', async ({ page }) => {
     await signIn(page, seed().developer);
-    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Overview', 'Tickets', 'Context', 'Digests', 'Reports']);
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Overview', 'Tickets', 'Context', 'Digests', 'Reports', 'Cost']);
   });
 
   test('the overview shows recent sessions, recently active tickets, the latest digests and what is in preview', async ({ page }) => {

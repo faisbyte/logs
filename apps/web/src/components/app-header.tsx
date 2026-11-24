@@ -8,7 +8,7 @@ import { signOut } from '~/lib/auth-actions';
  * The views a role can open. Readers get the digest archive and reports only (DECISIONS.md D51); the server enforces it
  * too. Developers start on the overview.
  */
-export const navFor = (role: Viewer['role']) => [
+export const navFor = (role: Viewer['role'], costAccess: Viewer['costAccess']) => [
   ...(role === 'developer'
     ? [
         { href: '/overview', label: 'Overview' },
@@ -18,6 +18,8 @@ export const navFor = (role: Viewer['role']) => [
     : []),
   { href: '/digests', label: 'Digests' },
   { href: '/reports', label: 'Reports' },
+  // Phase 12 (D107): a manager's view, or a developer's own.
+  ...(costAccess === 'all' || costAccess === 'own' ? [{ href: '/cost', label: 'Cost' }] : []),
 ];
 
 export function AppHeader({ viewer }: { viewer: Viewer | null }) {
@@ -32,7 +34,7 @@ export function AppHeader({ viewer }: { viewer: Viewer | null }) {
           <div className="order-last -mx-2 w-full pb-2 sm:order-none sm:mx-0 sm:w-auto sm:min-w-0 sm:flex-1 sm:pb-0">
           <nav aria-label="Main">
             <ul className="flex flex-wrap gap-0.5 text-sm sm:gap-1">
-              {navFor(viewer.role).map((item) => (
+              {navFor(viewer.role, viewer.costAccess).map((item) => (
                 <li key={item.href}>
                   <Link href={item.href} className="text-fg-muted hover:text-fg hover:bg-bg-subtle block rounded-md px-2 py-1.5 sm:px-2.5">
                     {item.label}

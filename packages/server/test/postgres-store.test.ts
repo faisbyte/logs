@@ -6,6 +6,9 @@ import { contextStoreContract } from '../../core/test/shared/context-contract.js
 import { sessionContract } from '../../core/test/shared/session-contract.js';
 import { auditContract } from '../../core/test/shared/audit-contract.js';
 import { costContract } from '../../core/test/cost/cost-contract.js';
+import { costIngestContract } from '../../core/test/cost/ingest-contract.js';
+import { costReportContract } from '../../core/test/cost/report-contract.js';
+import { costFlagsContract } from '../../core/test/cost/flags-contract.js';
 import { dataDeletionContract, retentionContract } from '../../core/test/shared/data-contract.js';
 import { openPGlite } from '../src/pglite.js';
 import { migrate, PostgresSummaryStore } from '../src/postgres-store.js';
@@ -29,6 +32,9 @@ dataDeletionContract('PostgresSummaryStore (PGlite)', fresh);
 retentionContract('PostgresSummaryStore (PGlite)', fresh);
 auditContract('PostgresSummaryStore (PGlite)', fresh);
 costContract('PostgresSummaryStore (PGlite)', fresh);
+costIngestContract('PostgresSummaryStore (PGlite)', fresh);
+costReportContract('PostgresSummaryStore (PGlite)', fresh);
+costFlagsContract('PostgresSummaryStore (PGlite)', fresh);
 
 describe('migrations', () => {
   it('can run again without changing anything', async () => {

@@ -95,7 +95,29 @@ const preview = await store.saveDigest({
   warnings: ['jargon: API', 'jargon: webhook'],
   jargonRetried: true,
 });
+// AI cost (Phase 12): tracking on, a manager with cost access, and sessions in every place. Sent as telemetry, as agents do.
+const manager = (await store.issueToken({ repoId: REPO, developerId: 'morgan', developerName: 'Morgan (manager)' }, 'reader')).token;
+await core.enableCost(store, REPO, new Date('2026-04-01T00:00:00.000Z'));
+await core.grantCost(store, REPO, 'morgan');
+for (const name of ['Alice', 'Bob']) await core.saveAccount(store, { repoId: REPO, email: `${name.toLowerCase()}@acme.example`, developerId: name.toLowerCase(), developerName: name, organizationId: null, billing: name === 'Alice' ? 'subscription' : 'api' });
+await core.savePattern(store, 'github.com/acme/*');
+const request = (id, who, sessionId, at, repo, usd, extra = {}) => ({
+  timeUnixNano: '0',
+  attributes: Object.entries({ 'event.name': 'api_request', 'event.timestamp': at, 'session.id': sessionId, 'user.email': `${who}@acme.example`, model: 'claude-opus-5-5', request_id: id, cost_usd_micros: usd * 1e6, input_tokens: 1000, output_tokens: 500, cache_read_tokens: 20000, cache_creation_tokens: 0, ...(repo ? { 'vcs.repository.url.full': repo } : {}), ...extra })
+    .map(([key, v]) => ({ key, value: typeof v === 'number' ? { intValue: String(v) } : { stringValue: v } })),
+});
+await core.ingestUsage(
+  store,
+  { resourceLogs: [{ scopeLogs: [{ logRecords: [
+    request('q1', 'alice', 'e2e00001-0000-4000-8000-000000000001', '2026-04-07T09:30:00.000Z', 'https://github.com/acme/webapp', 2, { prompt: 'planted prompt text' }),
+    request('q2', 'bob', 'b0b00002-0000-4000-8000-000000000002', '2026-04-08T20:00:00.000Z', 'https://github.com/bob/my-novel', 3),
+    request('q3', 'bob', 'b0b00003-0000-4000-8000-000000000003', '2026-04-09T10:00:00.000Z', 'https://github.com/acme/api', 1),
+    request('q4', 'alice', 'a11ce004-0000-4000-8000-000000000004', '2026-04-10T10:00:00.000Z', null, 0.5),
+  ] }] }] },
+  new Date('2026-04-20T00:00:00.000Z'),
+);
+await core.recordCommit(store, { repoId: REPO, developerId: 'alice', developerName: 'Alice' }, { agent: 'claude-code', sessionId: 'e2e00001-0000-4000-8000-000000000001', sha: 'a1b2c3d4'.repeat(5) }, new Date('2026-04-07T10:00:00.000Z'));
 await close();
 
-writeFileSync(join(DATA, 'seed.json'), JSON.stringify({ repoId: REPO, developer, reader, ids: { withdrawn: withdrawn.id, corrected: corrected.id, report: report.id, preview: preview.id } }, null, 2));
+writeFileSync(join(DATA, 'seed.json'), JSON.stringify({ repoId: REPO, developer, reader, manager, ids: { withdrawn: withdrawn.id, corrected: corrected.id, report: report.id, preview: preview.id } }, null, 2));
 console.log('seeded e2e data');
