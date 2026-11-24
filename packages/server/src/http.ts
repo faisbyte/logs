@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AgentSchema, onDemandReport, READER_REFUSAL, reportEstimate, receivePush, ticketReport, type AuditAction, type DigestDeps, type Identity, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
+import { AgentSchema, costAccess, costReport, flagSession, ingestUsage, isIngestToken, onDemandReport, recordCommit, replyToFlag, settleFlag, READER_REFUSAL, reportEstimate, receivePush, ticketReport, type AuditAction, type DigestDeps, type Identity, type SharedStore, type StoredDigest, type SummaryRef, type TicketReportFilter } from '@digest/core';
 import type { RateLimiter } from './rate-limit.js';
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -9,6 +9,9 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 // token and may only touch that token's repo. Logs carry method, path and status, never tokens or content.
 
 const MAX_BODY_BYTES = 256 * 1024;
+/** Agents batch hundreds of telemetry records into one request. */
+const MAX_TELEMETRY_BYTES = 4 * 1024 * 1024;
+const MAX_COST_DAYS = 400;
 
 class HttpError extends Error {
   constructor(
@@ -19,12 +22,14 @@ class HttpError extends Error {
   }
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readJson(req: IncomingMessage, limit = MAX_BODY_BYTES): Promise<unknown> {
+  // Refused before reading where the length is known, so the caller gets the answer instead of a dropped connection.
+  if (Number(req.headers['content-length'] ?? 0) > limit) throw new HttpError(413, `request body over ${limit} bytes`);
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, `request body over ${MAX_BODY_BYTES} bytes`);
+    if (size > limit) throw new HttpError(413, `request body over ${limit} bytes`);
     chunks.push(chunk as Buffer);
   }
   try {
@@ -62,6 +67,9 @@ function linkTarget(body: unknown): { repoId: string; ref: SummaryRef; ticket: u
   return { repoId: b.repoId, ref: { agent: agent.data, sessionId: b.sessionId }, ticket: b.ticket };
 }
 
+const COMMIT_STATUS = { recorded: 201, unchanged: 200, off: 404, invalid: 422 } as const;
+const FLAG_STATUS = { ok: 200, forbidden: 403, 'not-found': 404, invalid: 422 } as const;
+
 const REPORT_STATUS = { 'cap-reached': 429, unavailable: 503, failed: 502 } as const;
 
 /** from and to (dates or date-times; to is not included), or a sprint name. */
@@ -88,6 +96,8 @@ export interface HandlerOptions {
   digests?: Omit<DigestDeps, 'store'>;
   /** Requests a minute per caller (D101); none limits nothing. */
   rateLimit?: RateLimiter | null;
+  /** The same for telemetry (D107). */
+  telemetryLimit?: RateLimiter | null;
 }
 
 /** Who is asking, for rate limiting: a hash of the credential they send, or their address when they send none. */
@@ -98,7 +108,7 @@ const callerKey = (req: IncomingMessage) => {
 
 export function createHandler(
   store: SharedStore,
-  { log = (line: string) => console.log(line), digests = { llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 }, rateLimit = null }: HandlerOptions = {},
+  { log = (line: string) => console.log(line), digests = { llm: null, model: 'claude-sonnet-5-5', defaultCapUsd: 10 }, rateLimit = null, telemetryLimit = null }: HandlerOptions = {},
 ) {
   /** The token's identity, required to match the repo being read. */
   /** Whoever the request is: a token, or a dashboard session made from one. */
@@ -137,6 +147,12 @@ export function createHandler(
       '/v1/sessions': ['POST', 'DELETE'],
       '/v1/whoami': ['GET'],
       '/v1/digests': ['GET'],
+      '/v1/logs': ['POST'],
+      '/v1/cost': ['GET'],
+      '/v1/cost/commits': ['POST'],
+      '/v1/cost/flags': ['POST'],
+      '/v1/cost/flag-replies': ['POST'],
+      '/v1/cost/flag-resolutions': ['POST'],
     };
     const digestId = /^\/v1\/digests\/([^/]+)$/.exec(url.pathname)?.[1];
     const allowed = digestId ? ['GET'] : methods[url.pathname];
@@ -157,7 +173,7 @@ export function createHandler(
     if (url.pathname === '/v1/whoami') {
       const identity = await identify(req);
       if (!identity) throw new HttpError(401, 'unknown or revoked token');
-      return [200, identity];
+      return [200, { ...identity, costAccess: await costAccess(store, identity) }];
     }
     if (url.pathname === '/v1/reports/estimate') {
       const repoId = url.searchParams.get('repoId');
@@ -187,6 +203,51 @@ export function createHandler(
       if (!digest || (statuses && !statuses.includes(digest.status as 'ready'))) throw new HttpError(404, 'no such digest');
       await audit(identity, 'digest.viewed', digest.id, digest.periodLabel);
       return [200, { digest }];
+    }
+
+    // AI cost tracking (D106, D107). Agents send OTLP logs here with a telemetry token, which can do nothing else.
+    if (url.pathname === '/v1/logs') {
+      if (!(await isIngestToken(store, bearer(req)))) throw new HttpError(401, 'unknown or revoked telemetry token');
+      if (!/^application\/json\b/.test(req.headers['content-type'] ?? '') || req.headers['content-encoding']) throw new HttpError(415, 'send uncompressed OTLP as JSON (http/json)');
+      const result = await ingestUsage(store, await readJson(req, MAX_TELEMETRY_BYTES), new Date());
+      if (result.status === 'invalid') throw new HttpError(400, 'not an OTLP log batch');
+      return [200, {}];
+    }
+    if (url.pathname === '/v1/cost') {
+      const repoId = url.searchParams.get('repoId');
+      if (!repoId) throw new HttpError(400, 'repoId is required');
+      const identity = await reader(req, repoId);
+      const period = periodFrom((name) => url.searchParams.get(name) ?? undefined);
+      const range = 'sprint' in period ? (await store.sprints(repoId)).find((s) => s.name === period.sprint) : period;
+      if (!range) throw new HttpError(400, 'no such sprint');
+      const { from, to } = range;
+      const days = (Date.parse(to) - Date.parse(from)) / 86_400_000;
+      if (days <= 0 || days > MAX_COST_DAYS) throw new HttpError(400, `to must be after from, by at most ${MAX_COST_DAYS} days`);
+      const result = await costReport(store, identity, { from, to });
+      if (result.status !== 'ok') throw result.status === 'off' ? new HttpError(404, 'cost tracking is off for this repo') : new HttpError(403, 'cost access to this repo has not been granted');
+      if (result.report.scope === 'all') await audit(identity, 'cost.viewed', null, `${from.slice(0, 10)} up to ${to.slice(0, 10)}`);
+      return [200, result.report];
+    }
+    if (url.pathname.startsWith('/v1/cost/')) {
+      const body = (await readJson(req)) as Record<string, unknown> | null;
+      const repoId = body?.repoId;
+      if (typeof repoId !== 'string' || !repoId) throw new HttpError(400, 'repoId is required');
+      if (url.pathname === '/v1/cost/commits') {
+        const result = await recordCommit(store, await developer(req, repoId), body!, new Date());
+        return [COMMIT_STATUS[result.status], result];
+      }
+      const identity = await reader(req, repoId);
+      if (url.pathname === '/v1/cost/flags') {
+        const result = await flagSession(store, identity, body!, new Date());
+        if (result.status === 'ok') await audit(identity, 'cost.flagged', `${result.flag.agent}/${result.flag.sessionId}`, result.flag.developerId);
+        return [FLAG_STATUS[result.status], result];
+      }
+      const id = typeof body?.id === 'string' ? body.id : '';
+      const replying = url.pathname === '/v1/cost/flag-replies';
+      const result = replying ? await replyToFlag(store, identity, id, body?.text, new Date()) : await settleFlag(store, identity, id, new Date());
+      const flag = result.status === 'ok' ? (await store.flags(repoId)).find((f) => f.id === id) : undefined;
+      if (flag) await audit(identity, replying ? 'cost.replied' : 'cost.resolved', `${flag.agent}/${flag.sessionId}`);
+      return [FLAG_STATUS[result.status], result];
     }
 
     if (url.pathname === '/v1/ticket-titles') {
@@ -288,7 +349,8 @@ export function createHandler(
     let body: unknown;
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     // D101: counted before anything else runs, per token or session (hashed, so no credential is kept), else per address.
-    const take = rateLimit && url.pathname !== '/healthz' ? rateLimit.take(callerKey(req)) : ({ ok: true } as const);
+    const limiter = url.pathname === '/healthz' ? null : url.pathname === '/v1/logs' ? telemetryLimit : rateLimit;
+    const take = limiter ? limiter.take(callerKey(req)) : ({ ok: true } as const);
     if (!take.ok) {
       status = 429;
       body = { error: `too many requests; try again in ${take.retryAfterSeconds} seconds` };

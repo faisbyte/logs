@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { FakeLlmClient, InMemorySummaryStore } from '@digest/core';
+import { enableCost, FakeLlmClient, InMemorySummaryStore } from '@digest/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { contextItem } from '../../core/test/shared/context-contract.js';
 import { payloadFor } from '../../core/test/shared/store-contract.js';
@@ -224,8 +224,8 @@ describe('digest server HTTP API', () => {
       expect(session).toMatch(/^dgs_/);
       expect(Date.parse(expiresAt)).toBeGreaterThan(Date.now());
       expect(identity).toEqual({ ...alice, role: 'developer' });
-      expect(await (await call('/v1/whoami', { session })).json()).toEqual({ ...alice, role: 'developer' });
-      expect(await (await call('/v1/whoami', { token })).json()).toEqual({ ...alice, role: 'developer' });
+      expect(await (await call('/v1/whoami', { session })).json()).toEqual({ ...alice, role: 'developer', costAccess: 'off' });
+      expect(await (await call('/v1/whoami', { token })).json()).toEqual({ ...alice, role: 'developer', costAccess: 'off' });
       expect((await call('/v1/sessions', { method: 'DELETE', session })).status).toBe(200);
       expect((await call('/v1/whoami', { session })).status).toBe(401);
       expect((await call('/v1/sessions', { method: 'POST', body: { token: `${token}x` } })).status).toBe(401);
@@ -285,6 +285,7 @@ describe('digest server HTTP API', () => {
   it('gives a reader the digest views only: every other endpoint is refused, and nothing a reader gets holds summary content (D51, D102)', async () => {
     const { store, call, push, token } = await start();
     await push(payloadFor());
+    await enableCost(store, REPO, new Date('2026-01-01T00:00:00.000Z'));
     await store.applyContextChanges(REPO, { added: [contextItem()], merged: [], superseded: [] });
     await store.saveDigest({ repoId: REPO, kind: 'scheduled', periodKey: 'week:1', periodLabel: 'Week 1', from: null, to: null, inputHash: 'h', promptVersion: 'digest-v2', model: 'm', markdown: '# Week 1\n\nAll good.\n', summaryCount: 1, developerCount: 1, costUsd: 0, status: 'sent', previewUntil: null, createdAt: '2026-03-16T00:00:00.000Z', summaryKeys: [`claude-code/${payloadFor().sessionId}`] });
     const reader = (await store.issueToken({ repoId: REPO, developerId: 'pat', developerName: 'Pat (PO)' }, 'reader')).token;
@@ -302,6 +303,10 @@ describe('digest server HTTP API', () => {
       ['GET', `/v1/context-items?repoId=${repo}`],
       ['POST', '/v1/context-retirements', { repoId: REPO, id: 'ctx-0000000a' }],
       ['POST', '/v1/data-deletions', { repoId: REPO }],
+      // Phase 12 (D107): without cost access, a reader gets no cost either. With it: cost-http.test.ts.
+      ['GET', `/v1/cost?repoId=${repo}&from=2026-01-01&to=2027-01-01`],
+      ['POST', '/v1/cost/commits', { repoId: REPO, agent: 'claude-code', sessionId: 's1', sha: 'a'.repeat(40) }],
+      ['POST', '/v1/cost/flags', { repoId: REPO, agent: 'claude-code', sessionId: 's1', developerId: 'alice' }],
     ];
     for (const [method, path, body] of developerOnly) {
       expect(`${method} ${path} ${(await call(path, { method, token: reader, ...(body ? { body } : {}) })).status}`).toBe(`${method} ${path} 403`);

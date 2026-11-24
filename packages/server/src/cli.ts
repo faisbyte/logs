@@ -68,6 +68,9 @@ export function digestDepsFromEnv(env: Record<string, string | undefined>): Omit
   return { llm: env.ANTHROPIC_API_KEY ? AnthropicLlmClient.fromEnv(env, model, effort) : null, model, defaultCapUsd, ...(jargon ? { jargon } : {}) };
 }
 
+/** Every agent on a team sends usage with one token, so telemetry gets more requests a minute than one caller does. */
+const TELEMETRY_SHARE = 20;
+
 export async function startServer({
   store,
   port,
@@ -77,7 +80,7 @@ export async function startServer({
   rateLimit = null,
 }: { store: SharedStore; port: number; host?: string; log?: (line: string) => void; digests?: HandlerOptions['digests']; rateLimit?: number | null }) {
   const limiter = rateLimit ? new RateLimiter(rateLimit) : null;
-  const server = createServer(createHandler(store, { ...(log ? { log } : {}), ...(digests ? { digests } : {}), rateLimit: limiter }));
+  const server = createServer(createHandler(store, { ...(log ? { log } : {}), ...(digests ? { digests } : {}), rateLimit: limiter, telemetryLimit: rateLimit ? new RateLimiter(rateLimit * TELEMETRY_SHARE) : null }));
   await new Promise<void>((listening) => server.listen(port, host, listening));
   const address = server.address() as AddressInfo;
   return { url: `http://${host}:${address.port}`, close: () => new Promise<void>((closed) => server.close(() => closed())) };
@@ -261,6 +264,16 @@ const VERB: Record<AuditAction, string> = {
   'token.issued': 'issued a token',
   'token.revoked': 'revoked a token',
   'session.started': 'signed in to the dashboard',
+  'cost.enabled': 'turned cost tracking on',
+  'cost.disabled': 'turned cost tracking off',
+  'cost.account': 'changed a cost account',
+  'cost.granted': 'granted cost access',
+  'cost.revoked': 'revoked cost access',
+  'cost.viewed': 'viewed developer cost',
+  'cost.flagged': 'flagged a session',
+  'cost.replied': 'replied to a flag',
+  'cost.resolved': 'resolved a flag',
+  'cost.deleted': 'deleted cost data',
 };
 
 /** The audit log (D100), newest first, for the admin only: there is no HTTP endpoint for it. */

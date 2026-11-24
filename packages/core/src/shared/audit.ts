@@ -12,7 +12,17 @@ export type AuditAction =
   | 'retention.applied'
   | 'token.issued'
   | 'token.revoked'
-  | 'session.started';
+  | 'session.started'
+  | 'cost.enabled'
+  | 'cost.disabled'
+  | 'cost.account'
+  | 'cost.granted'
+  | 'cost.revoked'
+  | 'cost.viewed'
+  | 'cost.flagged'
+  | 'cost.replied'
+  | 'cost.resolved'
+  | 'cost.deleted';
 
 /** server: the scheduled jobs; admin: whoever runs the server's commands (D97). */
 export type AuditRole = 'developer' | 'reader' | 'admin' | 'server';
