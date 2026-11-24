@@ -58,6 +58,8 @@ export interface CostAccount {
   /** When set, only usage signed in to this organisation counts. */
   organizationId: string | null;
   billing: 'api' | 'subscription' | null;
+  /** Nothing more is recorded; what was stays in the report. */
+  removedAt: string | null;
 }
 
 /** US dollars per million tokens, from a date on, for models whose agent reports no cost. */

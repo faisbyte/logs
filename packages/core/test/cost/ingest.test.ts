@@ -69,7 +69,7 @@ describe('ingestUsage', () => {
     await disableCost(store, REPO);
     expect(await send(claudeRequest())).toEqual({ status: 'ok', recorded: 0 });
     await enableCost(store, REPO, START);
-    await removeAccount(store, REPO, 'alice@acme.example');
+    await removeAccount(store, REPO, 'alice@acme.example', NOW);
     expect(await send(claudeRequest())).toEqual({ status: 'ok', recorded: 0 });
   });
 
@@ -93,8 +93,8 @@ describe('cost accounts', () => {
     expect(await saveAccount(store, { ...alice, repoId: API, developerId: 'alicia' })).toEqual({ status: 'conflict', reason: 'that email is already registered to alice' });
     expect(await saveAccount(store, { ...alice, repoId: API, email: 'a2@acme.example', developerName: 'Alice Other' })).toEqual({ status: 'conflict', reason: 'developer id alice is already Alice; one id must mean one person on this server' });
     expect(await saveAccount(store, { ...alice, email: 'nope' })).toEqual({ status: 'conflict', reason: 'email must be an address' });
-    expect(await removeAccount(store, API, 'ALICE@acme.example')).toBe(true);
-    expect(await removeAccount(store, API, 'alice@acme.example')).toBe(false);
+    expect(await removeAccount(store, API, 'ALICE@acme.example', NOW)).toBe(true);
+    expect(await removeAccount(store, API, 'alice@acme.example', NOW)).toBe(false);
   });
 
   it('accepts only repo patterns for one repo or one whole organisation', async () => {

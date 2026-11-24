@@ -22,8 +22,8 @@ const accountKey = (repoId: string, email: string) => JSON.stringify([repoId, em
 
 export type AccountResult = { status: 'saved' } | { status: 'conflict'; reason: string };
 
-export async function saveAccount(store: CostStore, input: CostAccount): Promise<AccountResult> {
-  const account = { ...input, email: input.email.trim().toLowerCase() };
+export async function saveAccount(store: CostStore, input: Omit<CostAccount, 'removedAt'>): Promise<AccountResult> {
+  const account: CostAccount = { ...input, email: input.email.trim().toLowerCase(), removedAt: null };
   if (!EMAIL.test(account.email)) return { status: 'conflict', reason: 'email must be an address' };
   for (const held of await store.costConfig('account')) {
     if (held.repoId === account.repoId && held.email === account.email) continue;
@@ -35,7 +35,12 @@ export async function saveAccount(store: CostStore, input: CostAccount): Promise
   await store.putCostConfig('account', accountKey(account.repoId, account.email), account);
   return { status: 'saved' };
 }
-export const removeAccount = (store: CostStore, repoId: string, email: string) => store.removeCostConfig('account', accountKey(repoId, email));
+/** Stops recording an account; false when it isn't registered. Its past usage stays in the report. */
+export async function removeAccount(store: CostStore, repoId: string, email: string, now: Date): Promise<boolean> {
+  const held = (await store.costConfig('account')).find((a) => a.repoId === repoId && a.email === email.trim().toLowerCase() && !a.removedAt);
+  if (held) await store.putCostConfig('account', accountKey(repoId, email), { ...held, removedAt: now.toISOString() });
+  return Boolean(held);
+}
 
 /** "host/org/repo", or "host/org/*" for a whole organisation; false for anything wider or malformed. */
 export async function savePattern(store: CostStore, pattern: string): Promise<boolean> {
@@ -70,7 +75,7 @@ export async function ingestUsage(store: CostStore, body: unknown, now: Date): P
   for (const { account: email, organizationId, ...event } of read.events) {
     if (event.at > latest) continue;
     const account = accounts.find(
-      (a) => a.email === email && (a.organizationId === null || a.organizationId === organizationId) && (enabledAt.get(a.repoId) ?? '~') <= event.at,
+      (a) => a.email === email && !a.removedAt && (a.organizationId === null || a.organizationId === organizationId) && (enabledAt.get(a.repoId) ?? '~') <= event.at,
     );
     if (!account) continue;
     const company = event.repoId !== null && (enabledAt.has(event.repoId) || patterns.some((p) => matches(p.pattern, event.repoId!)));
