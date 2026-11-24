@@ -37,6 +37,11 @@ async function editor(file: string): Promise<void> {
 process.exitCode = await runCli(process.argv.slice(2), {
   stdout: (s) => process.stdout.write(s),
   stderr: (s) => process.stderr.write(s),
+  stdin: async () => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+    return Buffer.concat(chunks).toString('utf8');
+  },
   // Only ask when someone can answer; otherwise multi-session runs need --yes.
   ...(process.stdin.isTTY ? { confirm, ask, editor } : {}),
 });

@@ -126,4 +126,27 @@ describe('httpPushTarget', () => {
     expect(calls[0]!.init.method).toBe('POST');
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp' });
   });
+
+  it.each([
+    [200, { repoId: 'r', sessions: [] }, { status: 'ok', report: { repoId: 'r', sessions: [] } }],
+    [404, { error: 'cost tracking is off for this repo' }, { status: 'off' }],
+    [400, { error: 'no such sprint' }, { status: 'invalid', reason: 'no such sprint' }],
+    [403, { error: 'this token is for a different repo' }, { status: 'forbidden', reason: 'this token is for a different repo' }],
+  ])('maps HTTP %i on reading cost (D107)', async (status, body, expected) => {
+    const { calls, target } = stub(status, body);
+    expect(await target.cost('github.com/acme/webapp', { sprint: 'S 1' })).toEqual(expected);
+    expect(calls[0]!.url).toBe('https://digest.example.com/v1/cost?repoId=github.com%2Facme%2Fwebapp&sprint=S+1');
+  });
+
+  it.each([
+    [201, { status: 'recorded' }, { status: 'recorded' }],
+    [404, { status: 'off' }, { status: 'off' }],
+    [422, { status: 'invalid', reason: 'sha must be a full commit hash' }, { status: 'invalid', reason: 'sha must be a full commit hash' }],
+    [401, { error: 'unknown or revoked token' }, { status: 'unauthorized', reason: 'unknown or revoked token' }],
+  ])('maps HTTP %i on reporting a commit (D107)', async (status, body, expected) => {
+    const { calls, target } = stub(status, body);
+    const commit = { agent: 'claude-code' as const, sessionId: 's1', sha: 'a'.repeat(40) };
+    expect(await target.recordCommit('github.com/acme/webapp', commit)).toEqual(expected);
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ repoId: 'github.com/acme/webapp', ...commit });
+  });
 });

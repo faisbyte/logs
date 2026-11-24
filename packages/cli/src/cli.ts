@@ -10,6 +10,7 @@ import { listCommand } from './list.js';
 import { pushCommand } from './push.js';
 import { previewCommand, reportCommand } from './report.js';
 import { retractCommand } from './retract.js';
+import { commitHookCommand, costCommand } from './cost.js';
 import { deleteMyDataCommand } from './delete-my-data.js';
 import { linkCommand, ticketsCommand, ticketTitleCommand } from './tickets.js';
 import { redactCommand } from './redact.js';
@@ -37,6 +38,8 @@ export interface CliIo {
   pushTarget?: PushTarget;
   /** The clock; tests pass a fixed one. */
   now?: () => Date;
+  /** Everything on standard input, for hooks. */
+  stdin?: () => Promise<string>;
   /** Runs a program (git, gh) without a shell; tests pass a fake gh. */
   run?: (command: string, args: string[], cwd: string) => { status: number | null; stdout: string; stderr: string };
 }
@@ -53,7 +56,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     const r = spawnSync(command, args, { cwd, encoding: 'utf8' });
     return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? (r.error ? r.error.message : '') };
   };
-  const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), now: () => new Date(), run, ...io };
+  const ctx: CliContext = { cwd: process.cwd(), env: process.env, homeDir: homedir(), now: () => new Date(), run, stdin: async () => '', ...io };
   let exitCode = 0;
   // Runs a command, turning an expected failure (bad state or config file) into a message and exit code 1.
   const guarded = async (name: string, command: () => number | Promise<number>) => {
@@ -220,6 +223,19 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     .option('--out <file>', 'write the Markdown to a file in the repo instead of printing it')
     .option(...repoOption)
     .action((options: { from?: string; to?: string; sprint?: string; yes?: boolean; out?: string; repo?: string }) => guarded('report', () => reportCommand(options, ctx)));
+
+  const cost = program
+    .command('cost')
+    .description('Show your own AI cost as managers with cost access see it, any question about it, and what is recorded')
+    .option('--from <date>', 'start of a date range, e.g. 2026-03-01 (default: the last 30 days)')
+    .option('--to <date>', 'end of the date range (not included)')
+    .option('--sprint <name>', 'one sprint by name instead of a date range')
+    .option(...repoOption)
+    .action((options: { from?: string; to?: string; sprint?: string; repo?: string }) => guarded('cost', () => costCommand(options, ctx)));
+  cost
+    .command('commit-hook')
+    .description('A Claude Code PostToolUse hook: after a commit in a shared repo, report its hash and session id, nothing else')
+    .action(() => guarded('cost commit-hook', () => commitHookCommand(ctx)));
 
   program
     .command('preview')

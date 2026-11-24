@@ -1,3 +1,6 @@
+import { recordCommit, type CommitResult } from '../cost/ingest.js';
+import { costReport, type CostReport } from '../cost/report.js';
+import type { Agent } from '../schema.js';
 import type { ContextItem } from '../context/item.js';
 import type { RetireResult } from '../context/store.js';
 import type { UploadPayload } from './payload.js';
@@ -26,6 +29,9 @@ export type ContextItemsOutcome = { status: 'ok'; items: ContextItem[] } | Refus
 export type RetireOutcome = RetireResult | Refused;
 export type DeletionOutcome = ({ status: 'deleted' } & DataDeletion) | Refused;
 
+export type CostOutcome = { status: 'ok'; report: CostReport } | { status: 'off' } | { status: 'invalid'; reason: string } | Refused;
+export type CommitOutcome = CommitResult | Refused;
+
 export interface PushTarget {
   push(repoId: string, payload: UploadPayload): Promise<PushOutcome>;
   /** Manual ticket links on a pushed summary (DECISIONS.md D45). */
@@ -47,6 +53,10 @@ export interface PushTarget {
   retireContextItem(repoId: string, id: string): Promise<RetireOutcome>;
   /** Delete everything this developer pushed to the repo, and what was derived only from it (D98). */
   deleteMyData(repoId: string): Promise<DeletionOutcome>;
+  /** This developer's own AI cost (D107). */
+  cost(repoId: string, filter: TicketReportFilter): Promise<CostOutcome>;
+  /** A commit made during a session: its hash and the session, nothing else (D107). */
+  recordCommit(repoId: string, commit: { agent: Agent; sessionId: string; sha: string }): Promise<CommitOutcome>;
 }
 
 /** A PushTarget for a store in this process (tests, and local end-to-end runs). */
@@ -100,6 +110,18 @@ export function localPushTarget(store: SharedStore, token: string): PushTarget {
     async deleteMyData(repoId) {
       const identity = await as(repoId);
       return refused(identity) ? identity : { status: 'deleted', ...(await store.deleteDeveloperData(identity)) };
+    },
+    async cost(repoId, filter) {
+      const identity = await as(repoId);
+      if (refused(identity)) return identity;
+      const range = 'sprint' in filter ? (await store.sprints(repoId)).find((s) => s.name === filter.sprint) : filter;
+      if (!range) return { status: 'invalid', reason: 'no such sprint' };
+      const result = await costReport(store, { ...identity, role: 'developer' }, range);
+      return result.status === 'ok' ? result : { status: 'off' };
+    },
+    async recordCommit(repoId, commit) {
+      const identity = await as(repoId);
+      return refused(identity) ? identity : recordCommit(store, identity, commit, new Date());
     },
   };
 }
