@@ -276,41 +276,41 @@ ContextItem { id, repoId, type: "decision" | "convention" | "pitfall",
 Managers and POs can see at any time what AI development cost per developer. It is independent of summaries: developers still choose which summaries to share. Developers are told about it and see their own data. It only tracks: no plan advice, no rankings. It doesn't depend on Phase 11 and can come before it. Steps are done in order.
 
 **12.1 Trial (before any design is fixed)**
-- [ ] Capture real Claude Code telemetry on one machine, on API billing and on a subscription if both are available. Record the fields in docs/formats.md, with no real content.
+- [ ] (The listener is built: `sprintdigest-server cost trial`. It needs a live session.) Capture real Claude Code telemetry on one machine, on API billing and on a subscription if both are available. Record the fields in docs/formats.md, with no real content.
 - [ ] The same for Codex: whether cost, tokens, account, session and repo are available, and whether an admin can set it centrally. (Unconfirmed.)
-- [ ] Choose how commit hashes arrive. Claude Code's `OTEL_LOG_TOOL_DETAILS` also sends full shell commands, so it stays off. First candidate: a hook that reports only session id, repo and commit hash.
+- [x] Choose how commit hashes arrive. Claude Code's `OTEL_LOG_TOOL_DETAILS` also sends full shell commands, so it stays off. Chosen: a Claude Code hook that reports only session id, repo and commit hash (D107). Codex has none yet.
 
 **12.2 Receive**
-- [ ] An OpenTelemetry Collector in Docker Compose, off by default, and an authenticated server endpoint.
-- [ ] An allowlist of stored fields (time, account, session, agent, model, tokens, estimated cost, repo classification, commit hash). Everything else is dropped, in the collector and again on the server, and a test sends prompt text and shell commands and checks that neither is stored.
-- [ ] Company accounts only: usage from any account or organisation that isn't registered is dropped, so a developer's personal subscription is never recorded.
-- [ ] Setup docs: managed settings for Claude Code, and the Codex equivalent from the trial.
+- [x] An OpenTelemetry Collector in Docker Compose, off by default, and an authenticated server endpoint.
+- [x] An allowlist of stored fields (time, account, session, agent, model, tokens, estimated cost, repo classification, commit hash). Everything else is dropped, in the collector and again on the server, and a test sends prompt text and shell commands and checks that neither is stored.
+- [x] Company accounts only: usage from any account or organisation that isn't registered is dropped, so a developer's personal subscription is never recorded.
+- [x] Setup docs: managed settings for Claude Code, and the Codex equivalent from the trial.
 
 **12.3 Store**
-- [ ] Migration and store contract for cost records: duplicates ignored, account mapped to developer, amounts marked as estimates.
-- [ ] Price tables versioned by date for agents that report tokens but not cost.
-- [ ] Retention and delete-my-data (D98, D99) extended to cost records, after deciding what finance must keep.
+- [x] Migration and store contract for cost records: duplicates ignored, account mapped to developer, amounts marked as estimates.
+- [x] Price tables versioned by date for agents that report tokens but not cost.
+- [x] Retention and delete-my-data (D98, D99) extended to cost records, after deciding what finance must keep.
 
 **12.4 Match sessions to work**
-- [ ] Each session is one of: **shared repo** (registered here, and the viewer has access), **other company repo** (a registered company repo or organisation the viewer lacks access to), **outside company repos**, or **unknown** (no git remote).
-- [ ] Repo names are kept only for company repos. For outside ones only the classification is kept, never the name, path or commit hash.
-- [ ] Commit hashes shown for shared repos, linked to the repo host. "No commit" is a normal state (research, review, debugging), not a warning.
-- [ ] Sessions linked to approved summaries and their tickets where they exist. A session without an approved summary shows its cost only.
+- [x] Each session is one of: **shared repo** (registered here, and the viewer has access), **other company repo** (a registered company repo or organisation the viewer lacks access to), **outside company repos**, or **unknown** (no git remote).
+- [x] Repo names are kept only for company repos. For outside ones only the classification is kept, never the name, path or commit hash.
+- [x] Commit hashes shown for shared repos, linked to the repo host. "No commit" is a normal state (research, review, debugging), not a warning.
+- [x] Sessions linked to approved summaries and their tickets where they exist. A session without an approved summary shows its cost only.
 
 **12.5 Access and disclosure**
-- [ ] Cost access: a permission the admin grants per repo to a reader (manager or PO), off by default. It covers the developers on that repo. Update the reader role matrix (D102).
-- [ ] Developers see their own records exactly as a manager sees them, plus any flag on them.
-- [ ] A notice in the CLI, dashboard and docs stating what is collected and who sees it. Collection can't be enabled for a repo until the admin confirms developers were told.
-- [ ] Audit events for viewing per-developer cost, granting access, and flagging.
+- [x] Cost access: a permission the admin grants per repo to a reader (manager or PO), off by default. It covers the developers on that repo. Update the reader role matrix (D102).
+- [x] Developers see their own records exactly as a manager sees them, plus any flag on them.
+- [x] A notice in the CLI, dashboard and docs stating what is collected and who sees it. Collection can't be enabled for a repo until the admin confirms developers were told.
+- [x] Audit events for viewing per-developer cost, granting access, and flagging.
 
 **12.6 Dashboard: Cost**
-- [ ] Totals for a day, sprint or date range: by repo, developer, model and ticket.
-- [ ] Drill-down: developer, then day, then session, showing time, agent, model, estimated cost, repo classification and commit hashes.
-- [ ] On subscriptions, amounts are labelled "API-equivalent estimate, not money spent".
-- [ ] Filter for work outside the viewer's shared repos.
-- [ ] Flag a session "to discuss", with an optional note. The developer sees it and can reply, and either can mark it resolved. Wording is neutral: a flag is a question, not a finding.
-- [ ] CSV export.
-- [ ] An optional cost line (repo total only) in stakeholder digests, off by default.
+- [x] Totals for a day, sprint or date range: by repo, developer, model and ticket.
+- [x] Drill-down: developer, then day, then session, showing time, agent, model, estimated cost, repo classification and commit hashes.
+- [x] On subscriptions, amounts are labelled "API-equivalent estimate, not money spent".
+- [x] Filter for work outside the viewer's shared repos.
+- [x] Flag a session "to discuss", with an optional note. The developer sees it and can reply, and either can mark it resolved. Wording is neutral: a flag is a question, not a finding.
+- [x] CSV export.
+- [x] An optional cost line (repo total only) in stakeholder digests, off by default.
 
 **12.7 Check**
 - [ ] Compare a few weeks of estimates with real bills (Claude Console, and OpenAI for Codex) and record the difference.
@@ -319,6 +319,7 @@ Managers and POs can see at any time what AI development cost per developer. It 
 **Not in this phase:** plan recommendations, budget alerts, leaderboards, cost-per-output scores, automatic detection of personal use.
 
 **Done when:** a PO can open the dashboard, see each developer's cost by day and session with commit hashes for shared repos, and flag a session outside them; the developer sees the same data and the flag; and tests show that no prompt, command, outside repo name or personal-account usage is stored.
+**Status:** Built, not accepted (D107). Outstanding: the live trial (12.1) and the check with real bills and people (12.7). It was built from the agents' documentation and source before the trial, at the owner's request, so the trial may change it.
 
 ---
 

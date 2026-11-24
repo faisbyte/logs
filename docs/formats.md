@@ -180,3 +180,21 @@ The four 0.81 rollouts each last under 1 second and contain one user prompt and 
 
 - **Edits made through the shell aren't in `filesTouched`.** That covers `sed -i`, `cat > file`, heredocs, and `rm`. Only structured edit tools count: Claude `Write`/`Edit`/`MultiEdit`/`NotebookEdit` and Codex `apply_patch`. 2 of the 10 real Claude Code sessions edited files only through `Bash`, so they show 0 files.
 - **Newer Codex shell tool names** (for example `shell_command` or `exec_command`) haven't been seen locally. They parse as generic tool calls with their raw arguments as input.
+
+## Agent telemetry (OpenTelemetry logs), as documented
+
+Used only for AI cost tracking (DECISIONS.md D107). **From documentation and source, not yet observed on a live session**
+(PROJECT_PLAN.md 12.1). Every field read is in `TELEMETRY_FIELDS` (`packages/core/src/cost/telemetry.ts`).
+
+| | Claude Code `api_request` (its monitoring docs, 2026-11-24) | Codex `codex.sse_event`, kind `response.completed` (its source, 2026-11-24) |
+|---|---|---|
+| Account | `user.email`, `organization.id` | `user.email`; no organisation |
+| Session | `session.id` | `conversation.id` |
+| Cost | `cost_usd_micros`, `cost_usd`: an estimate | none |
+| Tokens | `input_tokens` (without cache), `output_tokens`, `cache_read_tokens`, `cache_creation_tokens` | `input_token_count` (with cache), `output_token_count`, `cached_token_count`, `cache_write_token_count` |
+| Repo | `vcs.repository.url.full`, when `OTEL_METRICS_INCLUDE_REPOSITORY=true` (2.1.269 or later) | none |
+| Billing | none | `auth_mode` |
+| Request id | `request_id` | none |
+| Commit | only with `OTEL_LOG_TOOL_DETAILS`, which also sends full commands, so not used | none |
+
+Other Codex log events carry tool arguments and output. Other Claude Code events carry content only when it's turned on.

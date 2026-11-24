@@ -26,9 +26,11 @@ Settings come from your shell or from a `.env` file next to `compose.yaml`. All 
 | `ANTHROPIC_API_KEY` | unset | Writing digests, reports and context. Without it the server serves what it has already written. |
 | `DIGEST_MONTHLY_CAP_USD` | `10` | The default monthly LLM cost cap per repo |
 | `DIGEST_MODEL` | Sonnet 5.5 | The digest model |
-| `RATE_LIMIT_PER_MINUTE` | `300` | Requests a minute per token or dashboard session (per address without one); `0` turns it off |
+| `RATE_LIMIT_PER_MINUTE` | `300` | Requests a minute per token or dashboard session (per address without one); `0` turns it off. AI cost telemetry gets 20 times as many |
 | `SMTP_URL`, `DIGEST_EMAIL_FROM` | unset | Email delivery |
 | `SLACK_WEBHOOK_URL` | unset | Slack delivery; name it in the repo's settings with `--slack-env SLACK_WEBHOOK_URL` |
+| `LOGS_TELEMETRY_TOKEN` | unset | For the optional AI cost collector: `docker compose --profile cost up -d` ([cost-tracking.md](cost-tracking.md)) |
+| `LOGS_OTLP_PORT`, `LOGS_OTLP_BIND` | `4318`, `127.0.0.1` | Where that collector listens |
 | `LOGS_API_PORT`, `LOGS_WEB_PORT` | `8787`, `3000` | Host ports |
 | `LOGS_API_BIND`, `LOGS_WEB_BIND` | `127.0.0.1` | Host addresses; both listen on this machine only by default |
 

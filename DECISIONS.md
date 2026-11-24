@@ -1598,3 +1598,34 @@ Option B. Logout that really revokes and a 12-hour blast radius are worth one sm
   - **Hidden from developers.** Rejected: legal risk, the settings are visible on their machines anyway, and it would break the trust the product depends on.
   - **Cost from session files at sync.** Rejected as the main source: a manager would see only what a developer synced.
   - **Anthropic's Claude Code Analytics API.** A cross-check for API billing, but it doesn't return subscription usage or Codex.
+
+## D107. How AI cost tracking is built
+
+- **Date:** 2026-11-24
+- **Decision:** Phase 12 is built as follows, off by default. The owner asked for all of it before the trial the roadmap put first. So it follows Claude Code's monitoring docs and Codex's source, and no live session has been captured yet.
+  - **Source:** OTLP logs as JSON at `POST /v1/logs`. One Claude Code `api_request` or Codex completed response is one record. Logs, not metrics: each carries a request id, so a retry counts once.
+  - **Allowlist:** only the fields in `TELEMETRY_FIELDS` are read, each only in its expected shape, so free text in a session id or model name is dropped. The optional collector drops the rest earlier; a test keeps its list the same.
+  - **Who is recorded:** accounts the admin registers (email, and organisation id when set) on a repo with tracking on, from the time it was turned on. The email isn't kept with the records.
+  - **Repos:** a repo is stored only when it's a company one (tracking on, or `cost company`). The database refuses a repo name on any other record.
+  - **Commits:** a Claude Code `PostToolUse` hook sends the hash and session id for a repo set up to share, when HEAD is under two minutes old. It prints nothing and always succeeds.
+  - **Access:** a per-repo grant to a reader id. A reader without one is refused every cost endpoint (the role matrix, D102). Developers see their own rows, produced by the same code. A grant on several repos makes each a shared repo.
+  - **Telemetry tokens** can send usage and read nothing.
+  - **What a session was about** comes only from approved, unretracted summaries. A session on several tickets is split evenly between them.
+  - **No ranking:** developers are listed by name.
+  - **Audit:** enabling, accounts, grants, each look at everyone's cost, flags and deletions. Flag text isn't in the log.
+  - **Retention:** 365 days by default, unlike summaries, because it is data about people.
+  - **delete-my-data leaves cost records.** They're the company's spending record; the admin deletes them with `cost delete`.
+  - **Rate limit:** telemetry has its own, 20 times the API's, because every agent shares a token.
+- **Found on the way:**
+  - **Codex's log telemetry includes tool output whatever its settings**, so it's only documented with the collector on the developer's machine.
+  - Codex reports no repo, so an unshared Codex session is "Repo not reported", never "outside".
+  - The flag lookup worked in memory and failed on Postgres (a year-0 date). The cost rules now run as contracts on every store.
+- **Known limits:**
+  - Machines report their own account under a shared token, so usage could be forged. It's a spending record, not evidence.
+  - Without `--org`, a personal plan under a registered email would count. The command warns, and the disclosure says "an account your admin has not registered" rather than promising more.
+  - A repo registered after its sessions were recorded doesn't relabel them.
+- **Alternatives:**
+  - **OTLP metrics.** No request id, and totals are harder to de-duplicate.
+  - **Protobuf on the server.** A new dependency; the collector converts it.
+  - **A new manager role.** A grant on a reader is smaller, and covers POs and managers alike.
+  - **Reading commits from `OTEL_LOG_TOOL_DETAILS`** (D106). It sends full commands.

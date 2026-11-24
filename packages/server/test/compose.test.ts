@@ -56,6 +56,8 @@ describe.skipIf(!process.env.DIGEST_DOCKER_TESTS)('self-host with Docker Compose
     const reader = tokenFrom(admin('token', '--repo', REPO, '--reader', 'morgan', '--name', 'Morgan'));
     const telemetry = /\b(dgi_[A-Za-z0-9_-]+)/.exec(admin('cost', 'telemetry-token', '--label', 'smoke'))![1]!;
     composeWith({ LOGS_TELEMETRY_TOKEN: telemetry }, 'up', '-d', 'collector');
+    // The pull blocks this process, so the server may have closed our idle connection.
+    await untilUp(`${API}/healthz`);
     const at = new Date(Date.now() + 1000).toISOString();
     const planted = 'planted prompt text';
     const record = (values: Record<string, string | number>) => ({ timeUnixNano: String(Date.now() * 1e6), body: { stringValue: planted }, attributes: attributes(values) });

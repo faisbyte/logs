@@ -49,6 +49,8 @@ Run these inside the repo you want to inspect, or pass `--repo <path>`.
 | `sprintdigest tickets --from <date> --to <date>` / `--sprint <name>` | Show the team's pushed summaries grouped by sprint, then ticket |
 | `sprintdigest report --from <date> --to <date>` / `--sprint <name>` | Write a plain-language report of the team's shared AI work with your own API key (cost estimate first; `--out` to save it) |
 | `sprintdigest preview` | Show scheduled digests waiting in developer preview before they are sent |
+| `sprintdigest cost` | Show your own AI cost as managers with cost access see it, any question about it, and what is recorded |
+| `sprintdigest cost commit-hook` | A Claude Code hook: after a commit in a shared repo, report its hash and session id, nothing else |
 | `sprintdigest --version` | Print the CLI version |
 
 ### Shared store (sprintdigest-server)
@@ -64,6 +66,8 @@ node packages/server/dist/main.js digest send-due --data ./server-data   # run f
 node packages/server/dist/main.js context distill --data ./server-data   # run from cron; turns new approved summaries into context items, under the cost cap
 node packages/server/dist/main.js retention apply --data ./server-data   # run from cron; deletes summaries older than a repo's --retention-days
 node packages/server/dist/main.js audit --data ./server-data --repo github.com/org/repo --since 2026-03-01   # who viewed or sent what, newest first
+node packages/server/dist/main.js cost status --data ./server-data   # AI cost tracking (off by default): see docs/cost-tracking.md for the other cost commands
+node packages/server/dist/main.js cost trial   # shows what an agent's telemetry holds, locally; stores nothing
 node packages/server/dist/main.js serve --data ./server-data   # or set DATABASE_URL for Postgres; PORT defaults to 8787
 ```
 
@@ -94,6 +98,7 @@ Apache License 2.0; see [LICENSE](LICENSE).
 - [DECISIONS.md](DECISIONS.md): architectural decisions and why they were made
 - [docs/digests.md](docs/digests.md): the digest server's environment, scheduling with cron, and the report API
 - [docs/self-hosting.md](docs/self-hosting.md): the server, its jobs and the dashboard with Docker Compose (`docker compose up -d --build`)
+- [docs/cost-tracking.md](docs/cost-tracking.md): AI cost tracking: telling developers, setup, labels and limits
 - [docs/po-feedback-checklist.md](docs/po-feedback-checklist.md): how to test a digest with a product owner or scrum master
 - [docs/development.md](docs/development.md): package layout, tests, and how to run the real-Postgres test
 - [docs/formats.md](docs/formats.md): Claude Code and Codex session file formats, as observed
